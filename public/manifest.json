@@ -1,0 +1,10 @@
+{
+  "name": "Eats",
+  "short_name": "Eats",
+  "description": "AI-first food log",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": []
+}
