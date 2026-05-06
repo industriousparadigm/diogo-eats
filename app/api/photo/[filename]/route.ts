@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import path from "path";
-import fs from "fs/promises";
+import { signedPhotoUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -9,21 +8,16 @@ export async function GET(
   { params }: { params: Promise<{ filename: string }> }
 ) {
   const { filename } = await params;
-  const safe = path.basename(filename);
-  if (!/^[a-f0-9]{16}\.(jpg|png|webp)$/.test(safe)) {
+  // Same regex guard as the on-disk version: 16-hex id + supported extension.
+  // Stops anyone hitting the route with arbitrary paths into the bucket.
+  if (!/^[a-f0-9]{16}\.(jpg|png|webp)$/.test(filename)) {
     return NextResponse.json({ error: "bad filename" }, { status: 400 });
   }
   try {
-    const buf = await fs.readFile(path.join(process.cwd(), "data", "photos", safe));
-    const type = safe.endsWith(".png")
-      ? "image/png"
-      : safe.endsWith(".webp")
-      ? "image/webp"
-      : "image/jpeg";
-    return new NextResponse(buf, {
-      headers: { "Content-Type": type, "Cache-Control": "public, max-age=31536000" },
-    });
-  } catch {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    const url = await signedPhotoUrl(filename, 300);
+    // 302 redirect — the client follows to the short-lived signed URL.
+    return NextResponse.redirect(url, 302);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message ?? "not found" }, { status: 404 });
   }
 }

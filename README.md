@@ -1,67 +1,69 @@
 # Eats
 
-AI-first food log. Single user, single screen. Snap a meal → Claude Vision parses it → today's pulse updates.
+AI-first food log. Single user, single screen. Snap or describe a meal → Claude Vision parses → today's pulse updates.
 
-## v1 scope
+Anchored to: lowering LDL by the Sept 2026 cardio retest with Sergio Machado Leite. The 4 nutrients tracked (saturated fat, soluble fiber, calories, protein) plus a graded plant % are the ones that move that needle.
 
-- Big snap button (fires the iPhone camera via `<input capture>`)
-- Today's grid of meal cards (photo + parsed items + 4 nutrient totals)
-- Today's pulse: sat fat, soluble fiber, plant %, calories, protein
-- Local SQLite, photos on disk, no auth
+## Live
 
-Anchored to: lowering LDL by Sept 2026 cardio retest. The 4 nutrients tracked are the ones that move that needle.
+- **Production:** https://diogo-eats.vercel.app (Vercel)
+- **Backend:** Supabase project `DiogoEats` (region eu-west-1)
+  - Postgres for `meals` and `food_memory`
+  - Storage bucket `photos` (private, signed URLs from `/api/photo/[filename]`)
+- **Repo:** https://github.com/industriousparadigm/diogo-eats
 
-## Run on your laptop
+## Capabilities
+
+- **Snap or pick a photo** → Claude Vision parses items + per-item nutrition
+- **Type instead** ("two slices of peanut butter cake at home") — same parser, no photo
+- **Optional caption** — free-text hints (size, restaurant, low-sugar, vegan version) shape the parse
+- **Auto-include implicit ingredients** — cooking oils, dressings, hidden butter/cream
+- **Composite-food decomposition** — cakes/breads/sandwiches split into plant base + non-plant components so plant_pct is honest
+- **Restaurant-aware** — captions like "at restaurant" / "takeout" trigger larger portions + heavier hidden fats
+- **Quick fix in plain English** — tap a meal, tell Claude "it's vegan" / "smaller portion" / "add olive oil", items update
+- **Manual edit** — gram-level tweaks, add/remove items with auto nutrition lookup
+- **Food memory** — every PATCH save upserts items into `food_memory`; future parses prefer your corrections
+
+## Run locally
 
 ```
 cp .env.example .env
-# put your ANTHROPIC_API_KEY in .env
+# fill in ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 npm install
-npm run dev
+npm run dev   # binds 0.0.0.0:3000 (or pass -- -p 3030 if 3000 is busy)
 ```
 
-The dev server binds to `0.0.0.0:3000`. To open it from your iPhone on the same wifi:
-
-1. On your laptop: `ipconfig getifaddr en0` (or whatever your wifi interface is) → e.g. `192.168.1.42`
-2. On your iPhone Safari: `http://192.168.1.42:3000`
-3. Add to home screen → it installs as a PWA, launches fullscreen.
-
-The camera button uses `capture="environment"`, which on iOS Safari opens the rear camera directly.
-
-## Deploying later
-
-When you want a real URL on your phone (no laptop needed):
-
-1. Push to a new GitHub repo
-2. Connect to Vercel
-3. Set `ANTHROPIC_API_KEY` in Vercel env vars
-4. Swap `better-sqlite3` for Vercel Postgres (or Neon) — SQLite doesn't work on Vercel's filesystem
-5. Swap on-disk photos for Vercel Blob
-
-Until then, local + iPhone over wifi is the fastest path.
+To use from your iPhone on the same wifi: visit `http://<laptop-ip>:3030`. Add to Home Screen for PWA.
 
 ## Architecture
 
 ```
 app/
-  page.tsx               # single screen: pulse + meal grid + FAB
-  layout.tsx             # PWA manifest + viewport
+  page.tsx                          # single screen: pulse + meal grid + FAB + sheets
+  layout.tsx                        # PWA manifest + viewport
   api/
-    parse/route.ts       # POST photo → Claude Vision → save → return meal
-    meals/route.ts       # GET today's meals, DELETE by id
-    photo/[filename]/    # serve stored photos
+    parse/route.ts                  # POST photo (multipart) → Vision → save
+    parse-text/route.ts             # POST { text } → Vision → save
+    meals/route.ts                  # GET today / DELETE { id }
+    meals/[id]/route.ts             # PATCH { items } → recompute totals + upsert food memory
+    meals/[id]/talk/route.ts        # POST { message } → conversational item correction
+    lookup/route.ts                 # POST { name } → per_100g + is_plant
+    photo/[filename]/route.ts       # 302 → short-lived signed URL from Storage
 lib/
-  db.ts                  # SQLite schema + queries
-  vision.ts              # Claude Vision call (Opus 4.7, structured output)
-data/
-  eats.db                # SQLite file (gitignored)
-  photos/                # raw photos (gitignored)
+  db.ts                             # supabase-js admin client + table helpers
+  storage.ts                        # photo upload + signed URL
+  vision.ts                         # Claude Opus 4.7 calls (parse photo / text / edit)
+supabase/
+  config.toml                       # CLI link
+  migrations/                       # SQL migrations (init schema, storage bucket, RPC fn)
+scripts/
+  migrate-from-sqlite.mjs           # one-shot port of local SQLite data → Supabase
 ```
 
 ## What's deferred
 
-- Telegram bot / SMS input — defer until v1 is in daily use
-- Manual edit/correct after parse — for now, delete + retake
-- Weekly summary cron
+- Telegram / SMS input
+- Weekly Sunday summary cron
 - Pre-consult dossier (mid-Sep 2026)
-- Auth (single user, single device)
+- Auth (currently relies on the URL being unguessed; revisit when sharing or after first sketchy event)
+- A "Memory" view to browse / delete entries directly

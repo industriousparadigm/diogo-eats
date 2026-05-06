@@ -2,6 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+type Per100g = {
+  sat_fat_g: number;
+  soluble_fiber_g: number;
+  calories: number;
+  protein_g: number;
+};
+
+type Item = {
+  name: string;
+  grams: number;
+  confidence: "low" | "medium" | "high";
+  is_plant: boolean;
+  per_100g: Per100g;
+};
+
 type Meal = {
   id: string;
   created_at: number;
@@ -11,12 +26,11 @@ type Meal = {
   soluble_fiber_g: number;
   calories: number;
   protein_g: number;
-  is_plant_based: number;
+  plant_pct: number;
   notes: string | null;
   caption: string | null;
+  meal_vibe: string | null;
 };
-
-type Item = { name: string; estimated_grams: number; confidence: string };
 
 const TARGETS = {
   sat_fat_g: 13,
@@ -31,6 +45,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [textMode, setTextMode] = useState(false);
+  const [textInput, setTextInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadMeals() {
@@ -79,7 +96,35 @@ export default function Home() {
     }
   }
 
-  async function deleteMeal(id: string) {
+  async function submitText() {
+    const text = textInput.trim();
+    if (!text) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/parse-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "parse-text failed");
+      await loadMeals();
+      setTextInput("");
+      setTextMode(false);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancelText() {
+    setTextMode(false);
+    setTextInput("");
+  }
+
+  async function deleteMealById(id: string) {
     await fetch("/api/meals", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -88,26 +133,51 @@ export default function Home() {
     await loadMeals();
   }
 
+  async function saveEdit(items: Item[]) {
+    if (!editingMeal) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/meals/${editingMeal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "save failed");
+      await loadMeals();
+      setEditingMeal(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const totals = meals.reduce(
     (t, m) => ({
       sat_fat_g: t.sat_fat_g + m.sat_fat_g,
       soluble_fiber_g: t.soluble_fiber_g + m.soluble_fiber_g,
       calories: t.calories + m.calories,
       protein_g: t.protein_g + m.protein_g,
-      plant_count: t.plant_count + (m.is_plant_based ? 1 : 0),
+      plant_pct_sum: t.plant_pct_sum + m.plant_pct,
     }),
-    { sat_fat_g: 0, soluble_fiber_g: 0, calories: 0, protein_g: 0, plant_count: 0 }
+    { sat_fat_g: 0, soluble_fiber_g: 0, calories: 0, protein_g: 0, plant_pct_sum: 0 }
   );
 
-  const plantPct = meals.length ? Math.round((totals.plant_count / meals.length) * 100) : 0;
+  const plantPct = meals.length ? Math.round(totals.plant_pct_sum / meals.length) : 0;
 
   return (
     <main style={{ padding: "20px 16px 120px", maxWidth: 540, margin: "0 auto" }}>
       <header style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 14, fontWeight: 500, color: "#71717a", letterSpacing: 1 }}>
+        <h1
+          suppressHydrationWarning
+          style={{ fontSize: 14, fontWeight: 500, color: "#71717a", letterSpacing: 1 }}
+        >
           EATS · {new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
         </h1>
       </header>
+
+      <DailyHeadline meals={meals} totals={totals} plantPct={plantPct} />
 
       <Pulse totals={totals} plantPct={plantPct} mealCount={meals.length} />
 
@@ -126,19 +196,54 @@ export default function Home() {
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {meals.map((m) => (
-            <MealCard key={m.id} meal={m} onDelete={() => deleteMeal(m.id)} />
+            <MealCard
+              key={m.id}
+              meal={m}
+              onDelete={() => deleteMealById(m.id)}
+              onEdit={() => setEditingMeal(m)}
+            />
           ))}
         </div>
+
+        <button
+          onClick={() => setTextMode(true)}
+          disabled={busy}
+          style={{
+            background: "transparent",
+            color: "#71717a",
+            fontSize: 13,
+            padding: "20px 8px 8px",
+            margin: "12px auto 0",
+            display: "block",
+            textAlign: "center",
+            width: "100%",
+            border: "none",
+            cursor: "pointer",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          or type what you ate →
+        </button>
       </section>
 
-      <FAB busy={busy} onClick={() => fileInputRef.current?.click()} />
+      <FAB busy={busy} inputId="photo-input" />
       <input
         ref={fileInputRef}
+        id="photo-input"
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={onPhoto}
-        style={{ display: "none" }}
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: "hidden",
+          clip: "rect(0,0,0,0)",
+          whiteSpace: "nowrap",
+          border: 0,
+        }}
       />
 
       {pendingFile && (
@@ -151,125 +256,126 @@ export default function Home() {
           onSubmit={submitPending}
         />
       )}
+
+      {editingMeal && (
+        <EditSheet
+          meal={editingMeal}
+          busy={busy}
+          onCancel={() => setEditingMeal(null)}
+          onSave={saveEdit}
+        />
+      )}
+
+      {textMode && (
+        <TextSheet
+          value={textInput}
+          setValue={setTextInput}
+          busy={busy}
+          onCancel={cancelText}
+          onSubmit={submitText}
+        />
+      )}
     </main>
   );
 }
 
-function ConfirmSheet({
-  file,
-  caption,
-  setCaption,
+function TextSheet({
+  value,
+  setValue,
   busy,
   onCancel,
   onSubmit,
 }: {
-  file: File;
-  caption: string;
-  setCaption: (v: string) => void;
+  value: string;
+  setValue: (v: string) => void;
   busy: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+  return (
+    <SheetShell onScrimClick={busy ? undefined : onCancel}>
+      <div style={{ fontSize: 12, color: "#71717a", letterSpacing: 0.5 }}>
+        TYPE WHAT YOU ATE
+      </div>
+      <textarea
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="e.g. two slices of peanut butter cake / a small bowl of oats with banana / takeout pasta with cream sauce"
+        maxLength={1000}
+        disabled={busy}
+        rows={5}
+        style={{
+          ...inputStyle,
+          padding: "12px 14px",
+          fontSize: 16,
+          lineHeight: 1.4,
+          resize: "vertical",
+          minHeight: 120,
+        }}
+      />
+      <div style={{ fontSize: 11, color: "#52525b" }}>
+        Mention size if it matters (e.g. “two slices”, “a small bowl”). Add “at restaurant” if eating out.
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <SecondaryButton onClick={onCancel} disabled={busy}>
+          cancel
+        </SecondaryButton>
+        <PrimaryButton onClick={onSubmit} disabled={busy || !value.trim()} flex>
+          {busy ? "thinking…" : "log it"}
+        </PrimaryButton>
+      </div>
+    </SheetShell>
+  );
+}
+
+function DailyHeadline({
+  meals,
+  totals,
+  plantPct,
+}: {
+  meals: Meal[];
+  totals: { sat_fat_g: number };
+  plantPct: number;
+}) {
+  if (meals.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "14px 16px",
+          marginBottom: 8,
+          fontSize: 16,
+          color: "#a1a1aa",
+        }}
+      >
+        Nothing yet today.
+      </div>
+    );
+  }
+
+  const plantWord = plantPct >= 70 ? "mostly plant" : plantPct >= 40 ? "mixed" : "animal-led";
+  const satRatio = totals.sat_fat_g / TARGETS.sat_fat_g;
+  const fatNote =
+    satRatio >= 0.9 ? "fat-heavy day" : satRatio >= 0.6 ? "watch the fat" : null;
+
+  const mealLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
+
+  // Capitalize first letter of plantWord for the lead.
+  const lead = plantWord.charAt(0).toUpperCase() + plantWord.slice(1);
+  const headline = fatNote ? `${lead}. ${fatNote}.` : `${lead}.`;
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
       style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.7)",
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center",
-        zIndex: 50,
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel();
+        padding: "14px 16px",
+        marginBottom: 8,
+        background: "#0f0f10",
+        border: "1px solid #1f1f22",
+        borderRadius: 12,
       }}
     >
-      <div
-        style={{
-          background: "#0a0a0a",
-          width: "100%",
-          maxWidth: 540,
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          padding: 16,
-          paddingBottom: "max(16px, env(safe-area-inset-bottom))",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
-        <img
-          src={previewUrl}
-          alt="meal preview"
-          style={{
-            width: "100%",
-            maxHeight: 280,
-            objectFit: "cover",
-            borderRadius: 8,
-            background: "#18181b",
-          }}
-        />
-        <input
-          autoFocus
-          type="text"
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          placeholder="describe (optional) — e.g. low-sugar, homemade"
-          maxLength={500}
-          disabled={busy}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onSubmit();
-          }}
-          style={{
-            width: "100%",
-            background: "#18181b",
-            color: "#f4f4f5",
-            border: "1px solid #27272a",
-            borderRadius: 8,
-            padding: "12px 14px",
-            fontSize: 16,
-            outline: "none",
-          }}
-        />
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={onCancel}
-            disabled={busy}
-            style={{
-              flex: "0 0 auto",
-              background: "transparent",
-              color: "#a1a1aa",
-              padding: "12px 16px",
-              fontSize: 14,
-              border: "1px solid #27272a",
-              borderRadius: 8,
-            }}
-          >
-            cancel
-          </button>
-          <button
-            onClick={onSubmit}
-            disabled={busy}
-            style={{
-              flex: 1,
-              background: busy ? "#3f3f46" : "#65a30d",
-              color: "#fff",
-              padding: "12px 16px",
-              fontSize: 14,
-              fontWeight: 500,
-              borderRadius: 8,
-            }}
-          >
-            {busy ? "reading the plate…" : "log it"}
-          </button>
-        </div>
-      </div>
+      <div style={{ fontSize: 18, color: "#f4f4f5", lineHeight: 1.3 }}>{headline}</div>
+      <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>{mealLabel} · today</div>
     </div>
   );
 }
@@ -360,43 +466,108 @@ function Stat({
   );
 }
 
-function MealCard({ meal, onDelete }: { meal: Meal; onDelete: () => void }) {
-  const items: Item[] = JSON.parse(meal.items_json);
+function safeParseItems(raw: string): Item[] {
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr;
+  } catch {
+    return [];
+  }
+}
+
+function MealCard({
+  meal,
+  onDelete,
+  onEdit,
+}: {
+  meal: Meal;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  const items = safeParseItems(meal.items_json);
   const time = new Date(meal.created_at).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
+  const lowOrMed = items.some((i) => i.confidence !== "high");
+  const isLegacy = items.length > 0 && items[0].per_100g === undefined;
 
   return (
     <div
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("[data-stop-card-click]")) return;
+        if (!isLegacy) onEdit();
+      }}
       style={{
         background: "#18181b",
         borderRadius: 12,
         overflow: "hidden",
         display: "flex",
         gap: 12,
+        cursor: isLegacy ? "default" : "pointer",
       }}
     >
-      {meal.photo_filename && (
+      {meal.photo_filename ? (
         <img
           src={`/api/photo/${meal.photo_filename}`}
           alt=""
           style={{ width: 96, height: 96, objectFit: "cover", flexShrink: 0 }}
         />
+      ) : (
+        <div
+          aria-hidden
+          style={{
+            width: 8,
+            background: "#27272a",
+            flexShrink: 0,
+          }}
+        />
       )}
-      <div style={{ flex: 1, padding: "10px 12px 10px 0", minWidth: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          padding: meal.photo_filename ? "10px 12px 10px 0" : "10px 12px",
+          minWidth: 0,
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div style={{ fontSize: 11, color: "#71717a", letterSpacing: 0.5 }}>
-            {time} {meal.is_plant_based ? "· 🌱" : ""}
+            {time}
+            {meal.plant_pct >= 100 ? " · 🌱" : ""}
+            {lowOrMed && (
+              <span style={{ marginLeft: 6, color: "#a16207" }} title="some portions are estimates">
+                ≈
+              </span>
+            )}
           </div>
           <button
-            onClick={onDelete}
+            data-stop-card-click
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
             style={{ fontSize: 11, color: "#52525b", padding: "2px 6px" }}
             aria-label="delete"
           >
             ✕
           </button>
         </div>
+        {meal.meal_vibe && (
+          <div
+            style={{
+              display: "inline-block",
+              fontSize: 11,
+              color: "#a3e635",
+              background: "rgba(101,163,13,0.12)",
+              padding: "2px 8px",
+              borderRadius: 999,
+              marginTop: 6,
+            }}
+          >
+            {meal.meal_vibe}
+          </div>
+        )}
         <div style={{ fontSize: 14, marginTop: 4, lineHeight: 1.3 }}>
           {items.map((i) => i.name).join(", ")}
         </div>
@@ -405,11 +576,12 @@ function MealCard({ meal, onDelete }: { meal: Meal; onDelete: () => void }) {
             “{meal.caption}”
           </div>
         )}
-        <div style={{ fontSize: 11, color: "#71717a", marginTop: 6, display: "flex", gap: 12 }}>
+        <div style={{ fontSize: 11, color: "#71717a", marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
           <span>{Math.round(meal.calories)} kcal</span>
           <span>{meal.sat_fat_g.toFixed(1)}g sat</span>
           <span>{meal.soluble_fiber_g.toFixed(1)}g fib</span>
           <span>{meal.protein_g.toFixed(0)}g pro</span>
+          <span>{Math.round(meal.plant_pct)}% plant</span>
         </div>
         {meal.notes && (
           <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 6, fontStyle: "italic" }}>
@@ -421,29 +593,616 @@ function MealCard({ meal, onDelete }: { meal: Meal; onDelete: () => void }) {
   );
 }
 
-function FAB({ busy, onClick }: { busy: boolean; onClick: () => void }) {
+function FAB({ busy, inputId }: { busy: boolean; inputId: string }) {
+  const sharedStyle: React.CSSProperties = {
+    position: "fixed",
+    bottom: "max(32px, env(safe-area-inset-bottom))",
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    background: busy ? "#3f3f46" : "#65a30d",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+    fontSize: 28,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: busy ? "default" : "pointer",
+    WebkitTapHighlightColor: "transparent",
+    userSelect: "none",
+    zIndex: 40,
+  };
+
+  if (busy) {
+    return (
+      <div role="status" aria-label="processing" style={sharedStyle}>
+        …
+      </div>
+    );
+  }
+  return (
+    <label htmlFor={inputId} aria-label="snap meal" style={sharedStyle}>
+      📷
+    </label>
+  );
+}
+
+function ConfirmSheet({
+  file,
+  caption,
+  setCaption,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  file: File;
+  caption: string;
+  setCaption: (v: string) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+
+  return (
+    <SheetShell onScrimClick={busy ? undefined : onCancel}>
+      <img
+        src={previewUrl}
+        alt="meal preview"
+        style={{
+          width: "100%",
+          maxHeight: 280,
+          objectFit: "cover",
+          borderRadius: 8,
+          background: "#18181b",
+        }}
+      />
+      <input
+        autoFocus
+        type="text"
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
+        placeholder="describe (optional) — e.g. at restaurant, small plate, low-sugar"
+        maxLength={500}
+        disabled={busy}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onSubmit();
+        }}
+        style={inputStyle}
+      />
+      <div style={{ display: "flex", gap: 8 }}>
+        <SecondaryButton onClick={onCancel} disabled={busy}>
+          cancel
+        </SecondaryButton>
+        <PrimaryButton onClick={onSubmit} disabled={busy} flex>
+          {busy ? "reading the plate…" : "log it"}
+        </PrimaryButton>
+      </div>
+    </SheetShell>
+  );
+}
+
+function EditSheet({
+  meal,
+  busy,
+  onCancel,
+  onSave,
+}: {
+  meal: Meal;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (items: Item[]) => Promise<void> | void;
+}) {
+  const original = useMemo(() => safeParseItems(meal.items_json) as Item[], [meal.items_json]);
+  const [items, setItems] = useState<Item[]>(() => original);
+  const [adding, setAdding] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addGrams, setAddGrams] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [talkMsg, setTalkMsg] = useState("");
+  const [talkBusy, setTalkBusy] = useState(false);
+  const [talkError, setTalkError] = useState<string | null>(null);
+  const [talkHint, setTalkHint] = useState<string | null>(null);
+
+  async function talkFix() {
+    const message = talkMsg.trim();
+    if (!message) return;
+    setTalkBusy(true);
+    setTalkError(null);
+    setTalkHint(null);
+    try {
+      const r = await fetch(`/api/meals/${meal.id}/talk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "fix failed");
+      if (!Array.isArray(j.items) || j.items.length === 0) {
+        throw new Error("got empty items back");
+      }
+      setItems(j.items);
+      setTalkMsg("");
+      setTalkHint("updated — review, then save");
+    } catch (err: any) {
+      setTalkError(err.message);
+    } finally {
+      setTalkBusy(false);
+    }
+  }
+
+  const live = useMemo(() => computeTotals(items), [items]);
+
+  function patchGrams(idx: number, value: string) {
+    const grams = Math.max(0, Math.min(5000, parseFloat(value) || 0));
+    setItems((arr) => arr.map((it, i) => (i === idx ? { ...it, grams } : it)));
+  }
+
+  function patchName(idx: number, value: string) {
+    setItems((arr) => arr.map((it, i) => (i === idx ? { ...it, name: value } : it)));
+  }
+
+  function removeItem(idx: number) {
+    setItems((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  async function addItem() {
+    setAddError(null);
+    const name = addName.trim();
+    const grams = parseFloat(addGrams);
+    if (!name) return setAddError("name required");
+    if (!grams || grams <= 0) return setAddError("grams required");
+    setAddBusy(true);
+    try {
+      const r = await fetch("/api/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "lookup failed");
+      const newItem: Item = {
+        name,
+        grams,
+        confidence: "medium",
+        is_plant: !!j.is_plant,
+        per_100g: j.per_100g,
+      };
+      setItems((arr) => [...arr, newItem]);
+      setAddName("");
+      setAddGrams("");
+      setAdding(false);
+    } catch (err: any) {
+      setAddError(err.message ?? "lookup failed");
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
+  const dirty = JSON.stringify(items) !== JSON.stringify(original);
+  const canSave = !busy && !addBusy && items.length > 0 && dirty;
+
+  return (
+    <SheetShell onScrimClick={busy ? undefined : onCancel} maxHeightVh={92}>
+      {meal.photo_filename && (
+        <img
+          src={`/api/photo/${meal.photo_filename}`}
+          alt=""
+          style={{
+            width: "100%",
+            maxHeight: 200,
+            objectFit: "cover",
+            borderRadius: 8,
+            background: "#18181b",
+          }}
+        />
+      )}
+      {meal.caption && (
+        <div style={{ fontSize: 12, color: "#a1a1aa", fontStyle: "italic" }}>
+          “{meal.caption}”
+        </div>
+      )}
+
+      <div
+        style={{
+          background: "#0f0f10",
+          border: "1px solid #1f1f22",
+          borderRadius: 8,
+          padding: 10,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        <div style={{ fontSize: 11, color: "#71717a", letterSpacing: 0.5 }}>
+          QUICK FIX — TELL CLAUDE
+        </div>
+        <input
+          type="text"
+          value={talkMsg}
+          onChange={(e) => setTalkMsg(e.target.value)}
+          placeholder="e.g. it's all plant / smaller portion / add olive oil"
+          maxLength={500}
+          disabled={talkBusy || busy}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") talkFix();
+          }}
+          style={{ ...inputStyle, padding: "10px 12px", fontSize: 14 }}
+        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            onClick={talkFix}
+            disabled={talkBusy || busy || !talkMsg.trim()}
+            style={{
+              background: talkBusy || !talkMsg.trim() ? "#3f3f46" : "#0c4a6e",
+              color: "#fff",
+              padding: "8px 12px",
+              fontSize: 13,
+              borderRadius: 6,
+            }}
+          >
+            {talkBusy ? "thinking…" : "fix it"}
+          </button>
+          {talkError && (
+            <span style={{ fontSize: 11, color: "#fca5a5" }}>{talkError}</span>
+          )}
+          {talkHint && !talkError && (
+            <span style={{ fontSize: 11, color: "#a3e635" }}>{talkHint}</span>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", flex: 1, minHeight: 0 }}>
+        {items.map((it, idx) => (
+          <ItemRow
+            key={idx}
+            item={it}
+            onName={(v) => patchName(idx, v)}
+            onGrams={(v) => patchGrams(idx, v)}
+            onRemove={() => removeItem(idx)}
+            disabled={busy}
+          />
+        ))}
+        {adding ? (
+          <div style={{ background: "#0f0f10", border: "1px dashed #3f3f46", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <input
+              autoFocus
+              type="text"
+              value={addName}
+              placeholder="e.g. olive oil, avocado, salmon"
+              onChange={(e) => setAddName(e.target.value)}
+              disabled={addBusy}
+              style={inputStyle}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="number"
+                value={addGrams}
+                placeholder="grams"
+                onChange={(e) => setAddGrams(e.target.value)}
+                disabled={addBusy}
+                style={{ ...inputStyle, flex: 1 }}
+                min={0}
+                max={5000}
+                inputMode="numeric"
+              />
+              <SecondaryButton
+                onClick={() => {
+                  setAdding(false);
+                  setAddName("");
+                  setAddGrams("");
+                  setAddError(null);
+                }}
+                disabled={addBusy}
+              >
+                cancel
+              </SecondaryButton>
+              <PrimaryButton onClick={addItem} disabled={addBusy}>
+                {addBusy ? "looking up…" : "add"}
+              </PrimaryButton>
+            </div>
+            {addError && (
+              <div style={{ fontSize: 11, color: "#fca5a5" }}>{addError}</div>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            disabled={busy}
+            style={{
+              background: "transparent",
+              color: "#a1a1aa",
+              border: "1px dashed #3f3f46",
+              borderRadius: 8,
+              padding: "10px 12px",
+              fontSize: 13,
+              textAlign: "left",
+            }}
+          >
+            + add item
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
+          gap: 6,
+          fontSize: 11,
+          color: "#a1a1aa",
+          padding: "8px 0 4px",
+          borderTop: "1px solid #27272a",
+        }}
+      >
+        <LiveStat label="kcal" value={Math.round(live.calories).toString()} />
+        <LiveStat label="sat" value={`${live.sat_fat_g.toFixed(1)}g`} />
+        <LiveStat label="fib" value={`${live.soluble_fiber_g.toFixed(1)}g`} />
+        <LiveStat label="pro" value={`${live.protein_g.toFixed(0)}g`} />
+        <LiveStat label="plant" value={`${live.plant_pct}%`} />
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <SecondaryButton onClick={onCancel} disabled={busy}>
+          cancel
+        </SecondaryButton>
+        <PrimaryButton onClick={() => onSave(items)} disabled={!canSave} flex>
+          {busy ? "saving…" : "save"}
+        </PrimaryButton>
+      </div>
+    </SheetShell>
+  );
+}
+
+function ItemRow({
+  item,
+  onName,
+  onGrams,
+  onRemove,
+  disabled,
+}: {
+  item: Item;
+  onName: (v: string) => void;
+  onGrams: (v: string) => void;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
+  const dot =
+    item.confidence === "low"
+      ? { color: "#f97316", title: "low confidence — Vision was guessing" }
+      : item.confidence === "medium"
+      ? { color: "#a16207", title: "medium confidence — reasonable estimate" }
+      : null;
+  return (
+    <div
+      style={{
+        background: "#0f0f10",
+        border: "1px solid #27272a",
+        borderRadius: 8,
+        padding: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {dot && (
+          <span
+            title={dot.title}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: dot.color,
+              flexShrink: 0,
+            }}
+          />
+        )}
+        <input
+          type="text"
+          value={item.name}
+          onChange={(e) => onName(e.target.value)}
+          disabled={disabled}
+          style={{
+            ...inputStyle,
+            padding: "8px 10px",
+            fontSize: 14,
+            flex: 1,
+          }}
+        />
+        <button
+          onClick={onRemove}
+          disabled={disabled}
+          aria-label="remove item"
+          style={{
+            color: "#71717a",
+            padding: "4px 8px",
+            fontSize: 16,
+            background: "transparent",
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          type="number"
+          value={item.grams}
+          onChange={(e) => onGrams(e.target.value)}
+          disabled={disabled}
+          inputMode="numeric"
+          min={0}
+          max={5000}
+          style={{
+            ...inputStyle,
+            padding: "8px 10px",
+            fontSize: 14,
+            width: 90,
+          }}
+        />
+        <span style={{ fontSize: 12, color: "#71717a" }}>g</span>
+        <span style={{ fontSize: 11, color: "#52525b", marginLeft: "auto" }}>
+          {Math.round((item.grams * item.per_100g.calories) / 100)} kcal · {(
+            (item.grams * item.per_100g.sat_fat_g) /
+            100
+          ).toFixed(1)}g sat
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LiveStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9, color: "#52525b", letterSpacing: 0.5, textTransform: "uppercase" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 14, color: "#f4f4f5", fontWeight: 500 }}>{value}</div>
+    </div>
+  );
+}
+
+function SheetShell({
+  children,
+  onScrimClick,
+  maxHeightVh,
+}: {
+  children: React.ReactNode;
+  onScrimClick?: () => void;
+  maxHeightVh?: number;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        zIndex: 50,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onScrimClick) onScrimClick();
+      }}
+    >
+      <div
+        style={{
+          background: "#0a0a0a",
+          width: "100%",
+          maxWidth: 540,
+          maxHeight: `${maxHeightVh ?? 80}vh`,
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          padding: 16,
+          paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "#18181b",
+  color: "#f4f4f5",
+  border: "1px solid #27272a",
+  borderRadius: 8,
+  padding: "12px 14px",
+  fontSize: 16,
+  outline: "none",
+};
+
+function PrimaryButton({
+  children,
+  onClick,
+  disabled,
+  flex,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  flex?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      disabled={busy}
+      disabled={disabled}
       style={{
-        position: "fixed",
-        bottom: 32,
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: 72,
-        height: 72,
-        borderRadius: "50%",
-        background: busy ? "#3f3f46" : "#65a30d",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-        fontSize: 28,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        flex: flex ? 1 : undefined,
+        background: disabled ? "#3f3f46" : "#65a30d",
+        color: "#fff",
+        padding: "12px 16px",
+        fontSize: 14,
+        fontWeight: 500,
+        borderRadius: 8,
       }}
-      aria-label="snap meal"
     >
-      {busy ? "…" : "📷"}
+      {children}
     </button>
   );
+}
+
+function SecondaryButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: "transparent",
+        color: "#a1a1aa",
+        padding: "12px 16px",
+        fontSize: 14,
+        border: "1px solid #27272a",
+        borderRadius: 8,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function computeTotals(items: Item[]) {
+  let sat_fat_g = 0;
+  let soluble_fiber_g = 0;
+  let calories = 0;
+  let protein_g = 0;
+  let plant_grams = 0;
+  let total_grams = 0;
+  for (const i of items) {
+    if (!i.per_100g) continue;
+    const f = i.grams / 100;
+    sat_fat_g += i.per_100g.sat_fat_g * f;
+    soluble_fiber_g += i.per_100g.soluble_fiber_g * f;
+    calories += i.per_100g.calories * f;
+    protein_g += i.per_100g.protein_g * f;
+    total_grams += i.grams;
+    if (i.is_plant) plant_grams += i.grams;
+  }
+  return {
+    sat_fat_g,
+    soluble_fiber_g,
+    calories,
+    protein_g,
+    plant_pct: total_grams > 0 ? Math.round((plant_grams / total_grams) * 100) : 0,
+  };
 }

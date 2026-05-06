@@ -1,12 +1,34 @@
 import { NextResponse } from "next/server";
-import { parseMealPhoto } from "@/lib/vision";
-import { insertMeal } from "@/lib/db";
-import path from "path";
-import fs from "fs/promises";
+import { parseMealPhoto, totalsFromItems, KnownFood } from "@/lib/vision";
+import { insertMeal, topFoodMemory } from "@/lib/db";
+import { uploadPhoto } from "@/lib/storage";
 import crypto from "crypto";
+import sharp from "sharp";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// Claude Vision caps base64 images at 5 MB. iPhone HEIC/JPG conversions
+// routinely produce 8-15 MB files. We always resize + re-encode to JPEG so
+// (a) the API call doesn't reject big originals, (b) stored photos stay
+// reasonable. 2048px max dim is well above what Vision needs (~1568 sweet
+// spot per Anthropic), so we're not losing useful detail.
+async function normalizePhoto(buf: Buffer): Promise<Buffer> {
+  return sharp(buf)
+    .rotate() // honor EXIF orientation
+    .resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+}
+
+async function knownFoodsFromMemory(): Promise<KnownFood[]> {
+  const rows = await topFoodMemory(30);
+  return rows.map((m) => ({
+    name: m.display_name,
+    is_plant: m.is_plant === 1,
+    per_100g: JSON.parse(m.per_100g_json),
+  }));
+}
 
 export async function POST(req: Request) {
   try {
@@ -24,40 +46,48 @@ export async function POST(req: Request) {
 
     const rawCaption = form.get("caption");
     const caption =
-      typeof rawCaption === "string" && rawCaption.trim() ? rawCaption.trim().slice(0, 500) : null;
+      typeof rawCaption === "string" && rawCaption.trim()
+        ? rawCaption.trim().slice(0, 500)
+        : null;
 
-    const buf = Buffer.from(await file.arrayBuffer());
+    const rawBuf = Buffer.from(await file.arrayBuffer());
+    let buf: Buffer;
+    try {
+      buf = await normalizePhoto(rawBuf);
+    } catch (err: any) {
+      console.error("photo normalize failed", err);
+      return NextResponse.json(
+        { error: "couldn't read that image — try a different format" },
+        { status: 400 }
+      );
+    }
+
     const id = crypto.randomBytes(8).toString("hex");
-    const ext =
-      file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-    const filename = `${id}.${ext}`;
-    await fs.writeFile(path.join(process.cwd(), "data", "photos", filename), buf);
+    const filename = `${id}.jpg`;
+    await uploadPhoto(filename, buf, "image/jpeg");
 
-    const mediaType =
-      file.type === "image/png"
-        ? "image/png"
-        : file.type === "image/webp"
-        ? "image/webp"
-        : "image/jpeg";
-
-    const parsed = await parseMealPhoto(buf.toString("base64"), mediaType, caption ?? undefined);
+    const known = await knownFoodsFromMemory();
+    const parsed = await parseMealPhoto(
+      buf.toString("base64"),
+      "image/jpeg",
+      caption ?? undefined,
+      known
+    );
+    const totals = totalsFromItems(parsed.items);
 
     const meal = {
       id,
       created_at: Date.now(),
       photo_filename: filename,
       items_json: JSON.stringify(parsed.items),
-      sat_fat_g: parsed.totals.sat_fat_g,
-      soluble_fiber_g: parsed.totals.soluble_fiber_g,
-      calories: parsed.totals.calories,
-      protein_g: parsed.totals.protein_g,
-      is_plant_based: parsed.is_plant_based ? 1 : 0,
+      ...totals,
       notes: parsed.notes,
       caption,
+      meal_vibe: parsed.meal_vibe,
     };
-    insertMeal(meal);
+    await insertMeal(meal);
 
-    return NextResponse.json({ meal, parsed });
+    return NextResponse.json({ meal });
   } catch (err: any) {
     console.error(err);
     return NextResponse.json({ error: err.message ?? "parse failed" }, { status: 500 });

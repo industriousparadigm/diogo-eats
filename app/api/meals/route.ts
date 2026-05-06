@@ -13,13 +13,13 @@ function dayBoundsFromQuery(req: Request): [number, number] {
 
 export async function GET(req: Request) {
   const [start, end] = dayBoundsFromQuery(req);
-  const meals = getMealsBetween(start, end);
+  const meals = await getMealsBetween(start, end);
   return NextResponse.json({ meals });
 }
 
 export async function DELETE(req: Request) {
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "no id" }, { status: 400 });
-  deleteMeal(id);
+  await deleteMeal(id);
   return NextResponse.json({ ok: true });
 }
