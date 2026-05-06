@@ -39,7 +39,38 @@ const TARGETS = {
   protein_g: 90,
 };
 
+function todayStart(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function dayLabel(d: Date): string {
+  const today = todayStart();
+  const diffDays = Math.round((today.getTime() - d.getTime()) / (24 * 3600 * 1000));
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  // Older than 1 day: show weekday + short date.
+  return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+}
+
 export default function Home() {
+  const [viewDate, setViewDate] = useState<Date>(() => todayStart());
   const [meals, setMeals] = useState<Meal[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,17 +79,28 @@ export default function Home() {
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState("");
+  const isToday = isSameDay(viewDate, todayStart());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function loadMeals() {
-    const r = await fetch("/api/meals");
+  async function loadMeals(d: Date = viewDate) {
+    const r = await fetch(`/api/meals?day=${ymd(d)}`);
     const j = await r.json();
     setMeals(j.meals ?? []);
   }
 
   useEffect(() => {
-    loadMeals();
-  }, []);
+    loadMeals(viewDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewDate]);
+
+  function shiftDay(deltaDays: number) {
+    const next = new Date(viewDate);
+    next.setDate(next.getDate() + deltaDays);
+    next.setHours(0, 0, 0, 0);
+    // Don't allow stepping into the future.
+    if (next.getTime() > todayStart().getTime()) return;
+    setViewDate(next);
+  }
 
   function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -85,7 +127,10 @@ export default function Home() {
       const r = await fetch("/api/parse", { method: "POST", body: fd });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "parse failed");
-      await loadMeals();
+      // Jump to today since the new meal is timestamped now.
+      const today = todayStart();
+      setViewDate(today);
+      await loadMeals(today);
       setPendingFile(null);
       setCaption("");
     } catch (err: any) {
@@ -109,7 +154,9 @@ export default function Home() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "parse-text failed");
-      await loadMeals();
+      const today = todayStart();
+      setViewDate(today);
+      await loadMeals(today);
       setTextInput("");
       setTextMode(false);
     } catch (err: any) {
@@ -168,16 +215,56 @@ export default function Home() {
 
   return (
     <main style={{ padding: "20px 16px 120px", maxWidth: 540, margin: "0 auto" }}>
-      <header style={{ marginBottom: 24 }}>
+      <header
+        style={{
+          marginBottom: 24,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <button
+          onClick={() => shiftDay(-1)}
+          aria-label="previous day"
+          style={dayNavBtnStyle}
+        >
+          ‹
+        </button>
         <h1
           suppressHydrationWarning
-          style={{ fontSize: 14, fontWeight: 500, color: "#71717a", letterSpacing: 1 }}
+          onClick={() => setViewDate(todayStart())}
+          title={isToday ? undefined : "tap to jump to today"}
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            color: "#71717a",
+            letterSpacing: 1,
+            textAlign: "center",
+            cursor: isToday ? "default" : "pointer",
+            flex: 1,
+            margin: 0,
+          }}
         >
-          EATS · {new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+          EATS · {dayLabel(viewDate).toUpperCase()}
         </h1>
+        <button
+          onClick={() => shiftDay(1)}
+          aria-label="next day"
+          disabled={isToday}
+          style={{ ...dayNavBtnStyle, opacity: isToday ? 0.3 : 1, cursor: isToday ? "default" : "pointer" }}
+        >
+          ›
+        </button>
       </header>
 
-      <DailyHeadline meals={meals} totals={totals} plantPct={plantPct} />
+      <DailyHeadline
+        meals={meals}
+        totals={totals}
+        plantPct={plantPct}
+        isToday={isToday}
+        viewDate={viewDate}
+      />
 
       <Pulse totals={totals} plantPct={plantPct} mealCount={meals.length} />
 
@@ -188,10 +275,14 @@ export default function Home() {
       )}
 
       <section style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 12, color: "#71717a", letterSpacing: 1, marginBottom: 12 }}>TODAY</h2>
+        <h2 style={{ fontSize: 12, color: "#71717a", letterSpacing: 1, marginBottom: 12 }}>
+          {isToday ? "TODAY" : dayLabel(viewDate).toUpperCase()}
+        </h2>
         {meals.length === 0 && !busy && (
           <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
-            Nothing yet. Snap your first meal.
+            {isToday
+              ? "Nothing yet. Snap your first meal."
+              : "Nothing logged that day."}
           </p>
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -205,28 +296,30 @@ export default function Home() {
           ))}
         </div>
 
-        <button
-          onClick={() => setTextMode(true)}
-          disabled={busy}
-          style={{
-            background: "transparent",
-            color: "#71717a",
-            fontSize: 13,
-            padding: "20px 8px 8px",
-            margin: "12px auto 0",
-            display: "block",
-            textAlign: "center",
-            width: "100%",
-            border: "none",
-            cursor: "pointer",
-            WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          or type what you ate →
-        </button>
+        {isToday && (
+          <button
+            onClick={() => setTextMode(true)}
+            disabled={busy}
+            style={{
+              background: "transparent",
+              color: "#71717a",
+              fontSize: 13,
+              padding: "20px 8px 8px",
+              margin: "12px auto 0",
+              display: "block",
+              textAlign: "center",
+              width: "100%",
+              border: "none",
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            or type what you ate →
+          </button>
+        )}
       </section>
 
-      <FAB busy={busy} inputId="photo-input" />
+      {isToday && <FAB busy={busy} inputId="photo-input" />}
       <input
         ref={fileInputRef}
         id="photo-input"
@@ -333,10 +426,14 @@ function DailyHeadline({
   meals,
   totals,
   plantPct,
+  isToday,
+  viewDate,
 }: {
   meals: Meal[];
   totals: { sat_fat_g: number };
   plantPct: number;
+  isToday: boolean;
+  viewDate: Date;
 }) {
   if (meals.length === 0) {
     return (
@@ -348,7 +445,7 @@ function DailyHeadline({
           color: "#a1a1aa",
         }}
       >
-        Nothing yet today.
+        {isToday ? "Nothing yet today." : "Nothing logged that day."}
       </div>
     );
   }
@@ -359,8 +456,10 @@ function DailyHeadline({
     satRatio >= 0.9 ? "fat-heavy day" : satRatio >= 0.6 ? "watch the fat" : null;
 
   const mealLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
+  const dayPart = isToday
+    ? "today"
+    : viewDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
-  // Capitalize first letter of plantWord for the lead.
   const lead = plantWord.charAt(0).toUpperCase() + plantWord.slice(1);
   const headline = fatNote ? `${lead}. ${fatNote}.` : `${lead}.`;
 
@@ -375,7 +474,7 @@ function DailyHeadline({
       }}
     >
       <div style={{ fontSize: 18, color: "#f4f4f5", lineHeight: 1.3 }}>{headline}</div>
-      <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>{mealLabel} · today</div>
+      <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>{mealLabel} · {dayPart}</div>
     </div>
   );
 }
@@ -1112,6 +1211,20 @@ function SheetShell({
     </div>
   );
 }
+
+const dayNavBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  color: "#71717a",
+  fontSize: 22,
+  width: 36,
+  height: 36,
+  border: "none",
+  borderRadius: 6,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  WebkitTapHighlightColor: "transparent",
+};
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
