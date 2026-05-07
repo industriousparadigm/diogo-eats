@@ -274,9 +274,21 @@ export default function Home() {
         </div>
       )}
 
-      <section style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: 12, color: "#71717a", letterSpacing: 1, marginBottom: 12 }}>
-          {isToday ? "TODAY" : dayLabel(viewDate).toUpperCase()}
+      <section style={{ marginTop: 28 }}>
+        <h2
+          style={{
+            fontSize: 11,
+            color: "#71717a",
+            letterSpacing: 1.2,
+            marginBottom: 14,
+            fontWeight: 500,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span>{isToday ? "TODAY" : dayLabel(viewDate).toUpperCase()}</span>
+          <span style={{ flex: 1, height: 1, background: "#1f1f22" }} />
         </h2>
         {meals.length === 0 && !busy && (
           <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
@@ -439,10 +451,13 @@ function DailyHeadline({
     return (
       <div
         style={{
-          padding: "14px 16px",
-          marginBottom: 8,
+          padding: "18px 18px",
+          marginBottom: 12,
           fontSize: 16,
           color: "#a1a1aa",
+          background: "#0f0f10",
+          border: "1px solid #1f1f22",
+          borderRadius: 14,
         }}
       >
         {isToday ? "Nothing yet today." : "Nothing logged that day."}
@@ -450,7 +465,7 @@ function DailyHeadline({
     );
   }
 
-  const plantWord = plantPct >= 70 ? "mostly plant" : plantPct >= 40 ? "mixed" : "animal-led";
+  const plantWord = plantPct >= 70 ? "Mostly plant" : plantPct >= 40 ? "Mixed plate" : "Animal-led";
   const satRatio = totals.sat_fat_g / TARGETS.sat_fat_g;
   const fatNote =
     satRatio >= 0.9 ? "fat-heavy day" : satRatio >= 0.6 ? "watch the fat" : null;
@@ -460,21 +475,38 @@ function DailyHeadline({
     ? "today"
     : viewDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
-  const lead = plantWord.charAt(0).toUpperCase() + plantWord.slice(1);
-  const headline = fatNote ? `${lead}. ${fatNote}.` : `${lead}.`;
+  // Color the lead by plant signal so the visual carries the read.
+  const leadColor = plantPct >= 70 ? "#a3e635" : plantPct >= 40 ? "#fcd34d" : "#fca5a5";
 
   return (
     <div
       style={{
-        padding: "14px 16px",
-        marginBottom: 8,
+        padding: "18px 18px",
+        marginBottom: 12,
         background: "#0f0f10",
         border: "1px solid #1f1f22",
-        borderRadius: 12,
+        borderRadius: 14,
       }}
     >
-      <div style={{ fontSize: 18, color: "#f4f4f5", lineHeight: 1.3 }}>{headline}</div>
-      <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>{mealLabel} · {dayPart}</div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 600,
+          color: leadColor,
+          lineHeight: 1.2,
+          letterSpacing: -0.3,
+        }}
+      >
+        {plantWord}.
+      </div>
+      {fatNote && (
+        <div style={{ fontSize: 14, color: "#a1a1aa", marginTop: 6, fontWeight: 500 }}>
+          {fatNote}
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: "#52525b", marginTop: 8, letterSpacing: 0.3 }}>
+        {mealLabel.toUpperCase()} · {dayPart.toUpperCase()}
+      </div>
     </div>
   );
 }
@@ -493,10 +525,10 @@ function Pulse({
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
-        gap: 8,
-        background: "#18181b",
-        padding: 16,
-        borderRadius: 12,
+        gap: 10,
+        background: "#161618",
+        padding: 18,
+        borderRadius: 14,
       }}
     >
       <Stat label="sat fat" value={totals.sat_fat_g.toFixed(1)} unit="g" target={TARGETS.sat_fat_g} invert />
@@ -506,7 +538,7 @@ function Pulse({
         unit="g"
         target={TARGETS.soluble_fiber_g}
       />
-      <Stat label="plant" value={String(plantPct)} unit="%" target={100} subtle={`${mealCount} meals`} />
+      <Stat label="plant" value={String(plantPct)} unit="%" target={100} />
       <Stat label="calories" value={Math.round(totals.calories).toString()} unit="" target={TARGETS.calories} />
       <Stat label="protein" value={totals.protein_g.toFixed(0)} unit="g" target={TARGETS.protein_g} fullSpan />
     </div>
@@ -535,19 +567,38 @@ function Stat({
   const over = invert ? num > target : false;
   return (
     <div style={{ gridColumn: fullSpan ? "span 2" : undefined }}>
-      <div style={{ fontSize: 11, color: "#71717a", letterSpacing: 0.5, marginBottom: 4 }}>
+      <div
+        style={{
+          fontSize: 10,
+          color: "#71717a",
+          letterSpacing: 0.8,
+          marginBottom: 6,
+          fontWeight: 500,
+        }}
+      >
         {label.toUpperCase()}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 500, color: over ? "#fca5a5" : "#f4f4f5" }}>
-        {value}
-        <span style={{ fontSize: 13, color: "#71717a", marginLeft: 2 }}>{unit}</span>
       </div>
       <div
         style={{
-          height: 2,
+          fontSize: 24,
+          fontWeight: 600,
+          color: over ? "#fca5a5" : "#f4f4f5",
+          letterSpacing: -0.5,
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1.1,
+        }}
+      >
+        {value}
+        <span style={{ fontSize: 13, color: "#71717a", marginLeft: 3, fontWeight: 400, letterSpacing: 0 }}>
+          {unit}
+        </span>
+      </div>
+      <div
+        style={{
+          height: 3,
           background: "#27272a",
-          marginTop: 6,
-          borderRadius: 1,
+          marginTop: 8,
+          borderRadius: 2,
           overflow: "hidden",
         }}
       >
@@ -556,7 +607,7 @@ function Stat({
             width: `${pct}%`,
             height: "100%",
             background: over ? "#dc2626" : "#65a30d",
-            transition: "width 0.3s",
+            transition: "width 400ms cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         />
       </div>
@@ -594,31 +645,34 @@ function MealCard({
 
   return (
     <div
+      data-pressable={!isLegacy ? "true" : undefined}
+      className="fade-in"
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("[data-stop-card-click]")) return;
         if (!isLegacy) onEdit();
       }}
       style={{
-        background: "#18181b",
-        borderRadius: 12,
+        background: "#161618",
+        borderRadius: 14,
         overflow: "hidden",
         display: "flex",
-        gap: 12,
+        gap: 0,
         cursor: isLegacy ? "default" : "pointer",
+        transition: "background 120ms ease",
       }}
     >
       {meal.photo_filename ? (
         <img
           src={`/api/photo/${meal.photo_filename}`}
           alt=""
-          style={{ width: 96, height: 96, objectFit: "cover", flexShrink: 0 }}
+          style={{ width: 120, height: 120, objectFit: "cover", flexShrink: 0 }}
         />
       ) : (
         <div
           aria-hidden
           style={{
-            width: 8,
-            background: "#27272a",
+            width: 4,
+            background: "linear-gradient(180deg, #27272a, #18181b)",
             flexShrink: 0,
           }}
         />
@@ -626,7 +680,7 @@ function MealCard({
       <div
         style={{
           flex: 1,
-          padding: meal.photo_filename ? "10px 12px 10px 0" : "10px 12px",
+          padding: meal.photo_filename ? "12px 14px 12px 4px" : "12px 14px",
           minWidth: 0,
         }}
       >
@@ -657,25 +711,53 @@ function MealCard({
             style={{
               display: "inline-block",
               fontSize: 11,
-              color: "#a3e635",
-              background: "rgba(101,163,13,0.12)",
-              padding: "2px 8px",
+              fontWeight: 500,
+              color: "#bef264",
+              background: "rgba(132,204,22,0.10)",
+              border: "1px solid rgba(132,204,22,0.20)",
+              padding: "3px 10px",
               borderRadius: 999,
               marginTop: 6,
+              letterSpacing: 0.1,
             }}
           >
             {meal.meal_vibe}
           </div>
         )}
-        <div style={{ fontSize: 14, marginTop: 4, lineHeight: 1.3 }}>
+        <div
+          style={{
+            fontSize: 14,
+            marginTop: 6,
+            lineHeight: 1.4,
+            color: "#e4e4e7",
+          }}
+        >
           {items.map((i) => i.name).join(", ")}
         </div>
         {meal.caption && (
-          <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#a1a1aa",
+              marginTop: 6,
+              lineHeight: 1.4,
+              fontStyle: "italic",
+            }}
+          >
             “{meal.caption}”
           </div>
         )}
-        <div style={{ fontSize: 11, color: "#71717a", marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#71717a",
+            marginTop: 8,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
           <span>{Math.round(meal.calories)} kcal</span>
           <span>{meal.sat_fat_g.toFixed(1)}g sat</span>
           <span>{meal.soluble_fiber_g.toFixed(1)}g fib</span>
@@ -754,22 +836,19 @@ function ConfirmSheet({
           width: "100%",
           maxHeight: 280,
           objectFit: "cover",
-          borderRadius: 8,
+          borderRadius: 12,
           background: "#18181b",
         }}
       />
-      <input
+      <textarea
         autoFocus
-        type="text"
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
         placeholder="describe (optional) — e.g. at restaurant, small plate, low-sugar"
         maxLength={500}
         disabled={busy}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSubmit();
-        }}
-        style={inputStyle}
+        rows={2}
+        style={textareaStyle}
       />
       <div style={{ display: "flex", gap: 8 }}>
         <SecondaryButton onClick={onCancel} disabled={busy}>
@@ -919,17 +998,21 @@ function EditSheet({
         <div style={{ fontSize: 11, color: "#71717a", letterSpacing: 0.5 }}>
           QUICK FIX — TELL CLAUDE
         </div>
-        <input
-          type="text"
+        <textarea
           value={talkMsg}
           onChange={(e) => setTalkMsg(e.target.value)}
           placeholder="e.g. it's all plant / smaller portion / add olive oil"
           maxLength={500}
           disabled={talkBusy || busy}
           onKeyDown={(e) => {
-            if (e.key === "Enter") talkFix();
+            // Enter submits, Shift+Enter inserts a newline.
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              talkFix();
+            }
           }}
-          style={{ ...inputStyle, padding: "10px 12px", fontSize: 14 }}
+          rows={2}
+          style={{ ...textareaStyle, padding: "10px 12px", fontSize: 14 }}
         />
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
@@ -967,14 +1050,14 @@ function EditSheet({
         ))}
         {adding ? (
           <div style={{ background: "#0f0f10", border: "1px dashed #3f3f46", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-            <input
+            <textarea
               autoFocus
-              type="text"
               value={addName}
               placeholder="e.g. olive oil, avocado, salmon"
               onChange={(e) => setAddName(e.target.value)}
               disabled={addBusy}
-              style={inputStyle}
+              rows={1}
+              style={textareaStyle}
             />
             <div style={{ display: "flex", gap: 8 }}>
               <input
@@ -1100,16 +1183,17 @@ function ItemRow({
             }}
           />
         )}
-        <input
-          type="text"
+        <textarea
           value={item.name}
           onChange={(e) => onName(e.target.value)}
           disabled={disabled}
+          rows={1}
           style={{
-            ...inputStyle,
+            ...textareaStyle,
             padding: "8px 10px",
             fontSize: 14,
             flex: 1,
+            minHeight: 36,
           }}
         />
         <button
@@ -1235,6 +1319,23 @@ const inputStyle: React.CSSProperties = {
   padding: "12px 14px",
   fontSize: 16,
   outline: "none",
+};
+
+// Same look as inputStyle but for <textarea>: wraps long text so the
+// caret stays visible on mobile (single-line <input> scrolls horizontally
+// and hides what you're typing).
+const textareaStyle: React.CSSProperties = {
+  width: "100%",
+  background: "#18181b",
+  color: "#f4f4f5",
+  border: "1px solid #27272a",
+  borderRadius: 8,
+  padding: "12px 14px",
+  fontSize: 16,
+  outline: "none",
+  lineHeight: 1.4,
+  minHeight: 44,
+  resize: "none",
 };
 
 function PrimaryButton({

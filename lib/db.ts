@@ -143,3 +143,45 @@ export async function topFoodMemory(limit: number = 30): Promise<FoodMemory[]> {
   if (error) throw new Error(`topFoodMemory: ${error.message}`);
   return (data as FoodMemory[]) ?? [];
 }
+
+// ---- recent meals as parse context ----
+
+export type MealSummary = {
+  created_at: number;
+  caption: string | null;
+  meal_vibe: string | null;
+  items: { name: string; grams: number }[];
+};
+
+export async function getRecentMealsForContext(
+  daysBack: number = 7,
+  limit: number = 30
+): Promise<MealSummary[]> {
+  const since = Date.now() - daysBack * 24 * 3600 * 1000;
+  const { data, error } = await supabase
+    .from("meals")
+    .select("created_at, caption, meal_vibe, items_json")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`getRecentMealsForContext: ${error.message}`);
+  return (data ?? []).map((m: any) => {
+    let items: { name: string; grams: number }[] = [];
+    try {
+      const arr = JSON.parse(m.items_json);
+      if (Array.isArray(arr)) {
+        items = arr
+          .filter((i: any) => i && typeof i.name === "string")
+          .map((i: any) => ({ name: i.name, grams: typeof i.grams === "number" ? i.grams : 0 }));
+      }
+    } catch {
+      // ignore — old meals may not have items
+    }
+    return {
+      created_at: m.created_at,
+      caption: m.caption,
+      meal_vibe: m.meal_vibe,
+      items,
+    };
+  });
+}

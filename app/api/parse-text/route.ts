@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { parseMealText, totalsFromItems, KnownFood } from "@/lib/vision";
-import { insertMeal, topFoodMemory } from "@/lib/db";
+import { parseMealText, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
+import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -13,6 +13,10 @@ async function knownFoodsFromMemory(): Promise<KnownFood[]> {
     is_plant: m.is_plant === 1,
     per_100g: JSON.parse(m.per_100g_json),
   }));
+}
+
+async function recentMealsForContext(): Promise<RecentMeal[]> {
+  return getRecentMealsForContext(7, 30);
 }
 
 export async function POST(req: Request) {
@@ -28,8 +32,11 @@ export async function POST(req: Request) {
       typeof rawText === "string" && rawText.trim() ? rawText.trim().slice(0, 1000) : "";
     if (!text) return NextResponse.json({ error: "text required" }, { status: 400 });
 
-    const known = await knownFoodsFromMemory();
-    const parsed = await parseMealText(text, known);
+    const [known, recent] = await Promise.all([
+      knownFoodsFromMemory(),
+      recentMealsForContext(),
+    ]);
+    const parsed = await parseMealText(text, known, recent);
     const totals = totalsFromItems(parsed.items);
     const id = crypto.randomBytes(8).toString("hex");
 

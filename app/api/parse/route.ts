@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { parseMealPhoto, totalsFromItems, KnownFood } from "@/lib/vision";
-import { insertMeal, topFoodMemory } from "@/lib/db";
+import { parseMealPhoto, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
+import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { uploadPhoto } from "@/lib/storage";
 import crypto from "crypto";
 import sharp from "sharp";
@@ -28,6 +28,10 @@ async function knownFoodsFromMemory(): Promise<KnownFood[]> {
     is_plant: m.is_plant === 1,
     per_100g: JSON.parse(m.per_100g_json),
   }));
+}
+
+async function recentMealsForContext(): Promise<RecentMeal[]> {
+  return getRecentMealsForContext(7, 30);
 }
 
 export async function POST(req: Request) {
@@ -66,12 +70,16 @@ export async function POST(req: Request) {
     const filename = `${id}.jpg`;
     await uploadPhoto(filename, buf, "image/jpeg");
 
-    const known = await knownFoodsFromMemory();
+    const [known, recent] = await Promise.all([
+      knownFoodsFromMemory(),
+      recentMealsForContext(),
+    ]);
     const parsed = await parseMealPhoto(
       buf.toString("base64"),
       "image/jpeg",
       caption ?? undefined,
-      known
+      known,
+      recent
     );
     const totals = totalsFromItems(parsed.items);
 

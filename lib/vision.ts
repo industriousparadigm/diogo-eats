@@ -119,6 +119,13 @@ export type KnownFood = {
   per_100g: Per100g;
 };
 
+export type RecentMeal = {
+  created_at: number;
+  caption: string | null;
+  meal_vibe: string | null;
+  items: { name: string; grams: number }[];
+};
+
 function knownFoodsBlock(foods: KnownFood[]): string {
   if (!foods || foods.length === 0) return "";
   const lines = foods.map((f) => {
@@ -126,6 +133,31 @@ function knownFoodsBlock(foods: KnownFood[]): string {
     return `- "${f.name}" — plant=${f.is_plant} — per_100g: kcal=${p.calories}, sat_fat=${p.sat_fat_g}, fiber=${p.soluble_fiber_g}, protein=${p.protein_g}`;
   });
   return `\n\n**User's food memory** — items the user has previously logged and confirmed via correction. When something here matches what you see (fuzzy match: small variations in wording, prep, or quantity should still map), use the memory entry's name, is_plant, and per_100g verbatim — these are authoritative. The user has already corrected them. Quantities (grams) are still your call from the photo/text.\n\n${lines.join("\n")}\n\nIf nothing in the memory matches, fall back to standard knowledge.`;
+}
+
+function recentMealsBlock(meals: RecentMeal[]): string {
+  if (!meals || meals.length === 0) return "";
+  const tz = "Europe/Lisbon";
+  const lines = meals.map((m) => {
+    const d = new Date(m.created_at);
+    const when = d.toLocaleString("en-GB", {
+      timeZone: tz,
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const itemsStr = m.items
+      .slice(0, 8)
+      .map((i) => `${i.name}${i.grams ? ` ${Math.round(i.grams)}g` : ""}`)
+      .join(", ");
+    const vibe = m.meal_vibe ? ` [${m.meal_vibe}]` : "";
+    const cap = m.caption ? ` — "${m.caption.slice(0, 120)}"` : "";
+    return `- ${when}${vibe} ${itemsStr}${cap}`;
+  });
+  return `\n\n**User's recent meals (last 7 days)** — for context. The user often references previous meals ("same as yesterday", "the usual", "like that other smoothie", "leftover from last night"). Use this list to resolve those references. Match by time of day, item names, or caption similarity.\n\n${lines.join("\n")}\n\nIf the user references a past meal that isn't in this list, say so in notes rather than inventing one.`;
 }
 
 const LOOKUP_SYSTEM = `Return standard nutrition per 100 grams (as eaten) for the food the user names, and whether it's wholly from plants. Be a normal, accurate reference — not pessimistic, not generous. If the name is ambiguous, pick the most common interpretation and reflect that in your numbers.`;
@@ -157,7 +189,8 @@ export async function parseMealPhoto(
   imageBase64: string,
   mediaType: "image/jpeg" | "image/png" | "image/webp",
   caption?: string,
-  knownFoods?: KnownFood[]
+  knownFoods?: KnownFood[],
+  recentMeals?: RecentMeal[]
 ): Promise<ParsedMeal> {
   const cleanCaption = caption?.trim();
   const userText = cleanCaption
@@ -172,7 +205,8 @@ export async function parseMealPhoto(
       effort: "high",
       format: { type: "json_schema", schema: PARSE_SCHEMA },
     },
-    system: PARSE_SYSTEM + knownFoodsBlock(knownFoods ?? []),
+    system:
+      PARSE_SYSTEM + knownFoodsBlock(knownFoods ?? []) + recentMealsBlock(recentMeals ?? []),
     messages: [
       {
         role: "user",
@@ -222,7 +256,8 @@ Rules:
 export async function editMealItems(
   currentItems: Item[],
   message: string,
-  knownFoods?: KnownFood[]
+  knownFoods?: KnownFood[],
+  recentMeals?: RecentMeal[]
 ): Promise<Item[]> {
   const response = await client.messages.create({
     model: "claude-opus-4-7",
@@ -230,7 +265,8 @@ export async function editMealItems(
     output_config: {
       format: { type: "json_schema", schema: EDIT_SCHEMA },
     },
-    system: EDIT_SYSTEM + knownFoodsBlock(knownFoods ?? []),
+    system:
+      EDIT_SYSTEM + knownFoodsBlock(knownFoods ?? []) + recentMealsBlock(recentMeals ?? []),
     messages: [
       {
         role: "user",
@@ -254,7 +290,8 @@ export async function editMealItems(
 
 export async function parseMealText(
   text: string,
-  knownFoods?: KnownFood[]
+  knownFoods?: KnownFood[],
+  recentMeals?: RecentMeal[]
 ): Promise<ParsedMeal> {
   const response = await client.messages.create({
     model: "claude-opus-4-7",
@@ -264,7 +301,8 @@ export async function parseMealText(
       effort: "high",
       format: { type: "json_schema", schema: PARSE_SCHEMA },
     },
-    system: TEXT_SYSTEM + knownFoodsBlock(knownFoods ?? []),
+    system:
+      TEXT_SYSTEM + knownFoodsBlock(knownFoods ?? []) + recentMealsBlock(recentMeals ?? []),
     messages: [
       {
         role: "user",

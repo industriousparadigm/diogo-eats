@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getMeal, topFoodMemory } from "@/lib/db";
-import { editMealItems, Item, KnownFood } from "@/lib/vision";
+import { getMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
+import { editMealItems, Item, KnownFood, RecentMeal } from "@/lib/vision";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -12,6 +12,10 @@ async function knownFoodsFromMemory(): Promise<KnownFood[]> {
     is_plant: m.is_plant === 1,
     per_100g: JSON.parse(m.per_100g_json),
   }));
+}
+
+async function recentMealsForContext(): Promise<RecentMeal[]> {
+  return getRecentMealsForContext(7, 30);
 }
 
 export async function POST(
@@ -50,8 +54,11 @@ export async function POST(
       );
     }
 
-    const known = await knownFoodsFromMemory();
-    const items = await editMealItems(currentItems, message, known);
+    const [known, recent] = await Promise.all([
+      knownFoodsFromMemory(),
+      recentMealsForContext(),
+    ]);
+    const items = await editMealItems(currentItems, message, known, recent);
     return NextResponse.json({ items });
   } catch (err: any) {
     console.error(err);
