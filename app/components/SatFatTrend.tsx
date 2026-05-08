@@ -3,35 +3,40 @@
 import { useMemo } from "react";
 import { colors, radii } from "@/lib/styles";
 import type { DayAggregate } from "@/lib/types";
-import { TARGETS } from "@/lib/types";
+import { useTargets } from "@/lib/targets";
+import { visibleAggregates } from "@/lib/window";
 
 // Slow-moving line: 7-day rolling average of saturated fat over the visible
 // window. Sat fat is the actual LDL mechanism — this shows trajectory
 // without inviting daily verdicts. The target line is a soft reference, not
 // a pass/fail gate.
 //
-// Rendered as inline SVG so it scales cleanly to whatever container width
-// it's placed in.
+// Renders only over the visible-window range (matches the calendar), so
+// the path doesn't waste 80% of the canvas on pre-log empty days.
 export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
+  const targets = useTargets();
+  const window = useMemo(() => visibleAggregates(aggregates), [aggregates]);
   const { points, max, hasData } = useMemo(() => {
     const smoothed: number[] = [];
-    for (let i = 0; i < aggregates.length; i++) {
-      // 7-day window centered to right (looking back). Skips zeros from
-      // empty days so a missed log doesn't pull the average to 0.
-      const window: number[] = [];
+    for (let i = 0; i < window.length; i++) {
+      // 7-day rolling window looking back. Skips zeros from empty days so
+      // a missed log doesn't pull the average to 0.
+      const win: number[] = [];
       for (let j = Math.max(0, i - 6); j <= i; j++) {
-        if (aggregates[j].meal_count > 0) {
-          window.push(aggregates[j].sat_fat_g);
+        if (window[j].meal_count > 0) {
+          win.push(window[j].sat_fat_g);
         }
       }
-      smoothed.push(window.length ? avg(window) : NaN);
+      smoothed.push(win.length ? avg(win) : NaN);
     }
     const validVals = smoothed.filter((v) => !isNaN(v));
-    const max = Math.max(TARGETS.sat_fat_g * 1.5, ...validVals, 1);
+    const max = Math.max(targets.sat_fat_g * 1.5, ...validVals, 1);
     return { points: smoothed, max, hasData: validVals.length > 0 };
-  }, [aggregates]);
+  }, [window, targets.sat_fat_g]);
 
-  if (!hasData) return null;
+  // Need at least 2 logged days for a line to be meaningful.
+  const validCount = points.filter((p) => !isNaN(p)).length;
+  if (!hasData || validCount < 2) return null;
 
   const W = 100; // viewBox width in arbitrary units; scales with parent
   const H = 28;
@@ -50,11 +55,11 @@ export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
     return acc + cmd;
   }, "");
 
-  const targetY = H - (TARGETS.sat_fat_g / max) * H;
+  const targetY = H - (targets.sat_fat_g / max) * H;
 
   // Latest non-NaN value for the readout
   const latest = [...points].reverse().find((v) => !isNaN(v)) ?? 0;
-  const overTarget = latest > TARGETS.sat_fat_g;
+  const overTarget = latest > targets.sat_fat_g;
 
   return (
     <div
@@ -82,7 +87,7 @@ export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
         >
           {latest.toFixed(1)}g
           <span style={{ color: colors.textFaint, marginLeft: 4, fontWeight: 400 }}>
-            / {TARGETS.sat_fat_g}g target
+            / {targets.sat_fat_g}g target
           </span>
         </div>
       </div>

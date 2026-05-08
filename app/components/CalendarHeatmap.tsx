@@ -1,14 +1,35 @@
 "use client";
 
 import { useMemo } from "react";
-import { colors, plantColor, radii } from "@/lib/styles";
+import { colors, plantColor } from "@/lib/styles";
 import type { DayAggregate } from "@/lib/types";
+import { visibleAggregates } from "@/lib/window";
 
-// 12-week heatmap, GitHub-contributions-shape: weeks as columns, days as rows.
-// Color = plant %, semantic single-hue. Empty days show as a dim cell, not
-// missing — so the user sees "didn't log" without it feeling like a verdict.
+const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+// Heatmap of recent days, GitHub-contributions-shape: weeks as columns,
+// days as rows. Color = plant %, semantic single-hue (cream → deep green).
 //
-// Tap a cell to navigate to that day's meals.
+// The visible window grows with usage:
+//   - Always shows the current week.
+//   - If you've logged meals, starts ~1 week before your earliest log.
+//   - Caps at 12 weeks back so the grid doesn't sprawl long-term.
+//
+// Tap a cell to navigate to that day.
 export function CalendarHeatmap({
   aggregates,
   onPickDate,
@@ -18,44 +39,87 @@ export function CalendarHeatmap({
   onPickDate: (ymd: string) => void;
   selectedDate?: string;
 }) {
-  // Build a Sunday-aligned week grid. The end of the data is "today"; we
-  // pad the trailing Sunday-Saturday week with disabled cells so the
-  // most recent column has a consistent height even mid-week.
   const grid = useMemo(() => buildWeekGrid(aggregates), [aggregates]);
 
+  if (grid.weeks.length === 0) return null;
+
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* Month labels above the columns. One label per month, positioned
+          on the column where that month begins. */}
+      <div
+        aria-hidden
+        style={{
+          display: "flex",
+          gap: 4,
+          fontSize: 10,
+          color: colors.textSubtle,
+          letterSpacing: 0.4,
+          height: 14,
+          paddingLeft: 18, // align past the day-of-week label column
+        }}
+      >
+        {grid.weeks.map((week, wi) => {
+          const firstDay = week.find((d) => d !== null);
+          if (!firstDay) return <div key={wi} style={{ flex: 1 }} />;
+          const date = new Date(firstDay.date + "T00:00:00");
+          const showLabel =
+            wi === 0 ||
+            date.getDate() <= 7 ||
+            (wi > 0 && shouldStartMonthLabel(grid.weeks[wi - 1], date.getMonth()));
+          return (
+            <div
+              key={wi}
+              style={{
+                flex: 1,
+                textAlign: "left",
+                whiteSpace: "nowrap",
+                overflow: "visible",
+              }}
+            >
+              {showLabel ? MONTH_NAMES[date.getMonth()] : ""}
+            </div>
+          );
+        })}
+      </div>
+
       <div
         role="grid"
-        aria-label="12-week food log calendar"
+        aria-label="Daily plant-percentage heatmap"
         style={{
           display: "flex",
           gap: 4,
           alignItems: "stretch",
         }}
       >
-        {/* Weekday labels (M, W, F) on the left for orientation */}
+        {/* Day-of-week labels column. All seven, dim, aligned to rows. */}
         <div
           aria-hidden
           style={{
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-around",
+            gap: 4,
             paddingRight: 4,
             fontSize: 9,
             color: colors.textFaint,
-            letterSpacing: 0.5,
+            letterSpacing: 0.4,
           }}
         >
-          <span>M</span>
-          <span>W</span>
-          <span>F</span>
+          {DAY_LABELS.map((d, i) => (
+            <div
+              key={i}
+              style={{
+                aspectRatio: "1",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-start",
+                width: 12,
+                opacity: i % 2 === 1 ? 1 : 0.45, // brighter on M/W/F for rhythm
+              }}
+            >
+              {d}
+            </div>
+          ))}
         </div>
         {grid.weeks.map((week, wi) => (
           <div
@@ -86,6 +150,7 @@ export function CalendarHeatmap({
           </div>
         ))}
       </div>
+
       <Legend />
     </div>
   );
@@ -102,9 +167,15 @@ function Cell({
 }) {
   const hasMeals = agg.meal_count > 0;
   const bg = plantColor(agg.plant_pct, hasMeals);
-  const label = `${agg.date}: ${
-    hasMeals ? `${agg.meal_count} meal${agg.meal_count === 1 ? "" : "s"}, ${agg.plant_pct}% plant` : "no meals"
-  }`;
+  const date = new Date(agg.date + "T00:00:00");
+  const friendly = date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const label = hasMeals
+    ? `${friendly}: ${agg.meal_count} meal${agg.meal_count === 1 ? "" : "s"}, ${agg.plant_pct}% plant`
+    : `${friendly}: no meals`;
   return (
     <button
       role="gridcell"
@@ -158,24 +229,22 @@ function Legend() {
   );
 }
 
-// Shape the linear day list into 7-row columns where each column is a
-// Sunday-Saturday week. The first column may have leading nulls (days
-// before the data start), and the last column may have trailing nulls
-// (days after today). We draw the nulls as transparent placeholders so
-// the rectangle stays clean.
+// Build the week-column grid for the visible window. Uses the same
+// window-derivation logic as the trend line so the calendar and trend
+// always show the same horizon. Pads to Sunday-Saturday boundaries so
+// each column is a full week visually.
 function buildWeekGrid(aggs: DayAggregate[]): {
   weeks: Array<Array<DayAggregate | null>>;
 } {
-  if (aggs.length === 0) return { weeks: [] };
+  const visible = visibleAggregates(aggs);
+  if (visible.length === 0) return { weeks: [] };
 
-  // Index by date for fast lookup. Map preserves insertion order.
-  const byDate = new Map(aggs.map((a) => [a.date, a]));
+  const byDate = new Map(visible.map((a) => [a.date, a]));
+  const start = new Date(visible[0].date + "T00:00:00");
+  const end = new Date(visible[visible.length - 1].date + "T00:00:00");
 
-  const start = new Date(aggs[0].date + "T00:00:00");
-  const end = new Date(aggs[aggs.length - 1].date + "T00:00:00");
-
-  // Walk back to Sunday of the first week and forward to Saturday of the
-  // last week, building 7-day columns.
+  // Snap start back to its Sunday and end forward to its Saturday so each
+  // column is a complete 7-cell week.
   const firstSunday = new Date(start);
   firstSunday.setDate(start.getDate() - start.getDay());
   const lastSaturday = new Date(end);
@@ -185,11 +254,22 @@ function buildWeekGrid(aggs: DayAggregate[]): {
   for (let d = new Date(firstSunday); d <= lastSaturday; ) {
     const week: Array<DayAggregate | null> = [];
     for (let i = 0; i < 7; i++) {
-      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const ymd = ymdOf(d);
       week.push(byDate.get(ymd) ?? null);
       d.setDate(d.getDate() + 1);
     }
     weeks.push(week);
   }
   return { weeks };
+}
+
+function ymdOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function shouldStartMonthLabel(prevWeek: Array<DayAggregate | null>, currMonth: number): boolean {
+  const prevDay = prevWeek.find((d) => d !== null);
+  if (!prevDay) return true;
+  const prevMonth = new Date(prevDay.date + "T00:00:00").getMonth();
+  return prevMonth !== currMonth;
 }

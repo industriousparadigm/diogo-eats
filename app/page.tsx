@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { History } from "./components/History";
+import { SettingsSheet } from "./components/SettingsSheet";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
+import { useTargets } from "@/lib/targets";
 
 type Per100g = {
   sat_fat_g: number;
@@ -33,12 +36,6 @@ type Meal = {
   meal_vibe: string | null;
 };
 
-const TARGETS = {
-  sat_fat_g: 13,
-  soluble_fiber_g: 10,
-  calories: 2000,
-  protein_g: 90,
-};
 
 function todayStart(): Date {
   const d = new Date();
@@ -80,6 +77,7 @@ export default function Home() {
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Bumped after any DB-changing action so the History calendar refetches
   // without us threading state through it.
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -264,6 +262,21 @@ export default function Home() {
         >
           ›
         </button>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          aria-label="settings"
+          title="Settings"
+          style={{
+            ...dayNavBtnStyle,
+            fontSize: 16,
+            color: "#52525b",
+            position: "absolute",
+            right: 16,
+            top: 20,
+          }}
+        >
+          ⋯
+        </button>
       </header>
 
       {error && (
@@ -445,6 +458,8 @@ export default function Home() {
           onSubmit={submitText}
         />
       )}
+
+      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
     </main>
   );
 }
@@ -512,6 +527,7 @@ function DailyHeadline({
   isToday: boolean;
   viewDate: Date;
 }) {
+  const targets = useTargets();
   if (meals.length === 0) {
     return (
       <div
@@ -531,7 +547,7 @@ function DailyHeadline({
   }
 
   const plantWord = plantPct >= 70 ? "Mostly plant" : plantPct >= 40 ? "Mixed plate" : "Animal-led";
-  const satRatio = totals.sat_fat_g / TARGETS.sat_fat_g;
+  const satRatio = totals.sat_fat_g / targets.sat_fat_g;
   const fatNote =
     satRatio >= 0.9 ? "fat-heavy day" : satRatio >= 0.6 ? "watch the fat" : null;
 
@@ -585,6 +601,7 @@ function Pulse({
   plantPct: number;
   mealCount: number;
 }) {
+  const targets = useTargets();
   return (
     <div
       style={{
@@ -596,16 +613,16 @@ function Pulse({
         borderRadius: 14,
       }}
     >
-      <Stat label="sat fat" value={totals.sat_fat_g.toFixed(1)} unit="g" target={TARGETS.sat_fat_g} invert />
+      <Stat label="sat fat" value={totals.sat_fat_g.toFixed(1)} unit="g" target={targets.sat_fat_g} invert />
       <Stat
         label="soluble fiber"
         value={totals.soluble_fiber_g.toFixed(1)}
         unit="g"
-        target={TARGETS.soluble_fiber_g}
+        target={targets.soluble_fiber_g}
       />
       <Stat label="plant" value={String(plantPct)} unit="%" target={100} />
-      <Stat label="calories" value={Math.round(totals.calories).toString()} unit="" target={TARGETS.calories} />
-      <Stat label="protein" value={totals.protein_g.toFixed(0)} unit="g" target={TARGETS.protein_g} fullSpan />
+      <Stat label="calories" value={Math.round(totals.calories).toString()} unit="" target={targets.calories} />
+      <Stat label="protein" value={totals.protein_g.toFixed(0)} unit="g" target={targets.protein_g} fullSpan />
     </div>
   );
 }
@@ -1323,6 +1340,10 @@ function SheetShell({
   onScrimClick?: () => void;
   maxHeightVh?: number;
 }) {
+  // Lock body scroll while the sheet is mounted. Without this, iOS Safari
+  // scrolls the underlying page when the user drags inside the sheet —
+  // background goes first, sheet content second. Disorienting.
+  useBodyScrollLock(true);
   return (
     <div
       role="dialog"
@@ -1341,6 +1362,8 @@ function SheetShell({
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
         style={{
           background: "#0a0a0a",
           width: "100%",
@@ -1353,6 +1376,9 @@ function SheetShell({
           display: "flex",
           flexDirection: "column",
           gap: 12,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
         }}
       >
         {children}

@@ -3,13 +3,14 @@
 import { useMemo } from "react";
 import { colors, radii } from "@/lib/styles";
 import type { DayAggregate } from "@/lib/types";
-import { TARGETS } from "@/lib/types";
+import { useTargets } from "@/lib/targets";
 
 // Plain-English shape of the recent past. Rule-based, no LLM call —
 // fast, free, and predictable. Speaks in identity-language ("you've been
 // eating like X") not pass/fail ("you hit Y of your goals").
 export function RollingHeadline({ aggregates }: { aggregates: DayAggregate[] }) {
-  const sentence = useMemo(() => buildHeadline(aggregates), [aggregates]);
+  const targets = useTargets();
+  const sentence = useMemo(() => buildHeadline(aggregates, targets.sat_fat_g), [aggregates, targets.sat_fat_g]);
 
   if (!sentence) return null;
 
@@ -31,7 +32,7 @@ export function RollingHeadline({ aggregates }: { aggregates: DayAggregate[] }) 
   );
 }
 
-function buildHeadline(aggs: DayAggregate[]): string | null {
+function buildHeadline(aggs: DayAggregate[], satFatTarget: number): string | null {
   // Need a meaningful sample. <3 logged days → return nothing; the empty
   // state copy elsewhere handles it.
   const logged = aggs.filter((a) => a.meal_count > 0);
@@ -66,9 +67,9 @@ function buildHeadline(aggs: DayAggregate[]): string | null {
     }
   } else {
     // Compare to target if no prior window
-    if (satFatAvg < TARGETS.sat_fat_g * 0.7) {
+    if (satFatAvg < satFatTarget * 0.7) {
       satPhrase = "Sat fat comfortably under target.";
-    } else if (satFatAvg < TARGETS.sat_fat_g) {
+    } else if (satFatAvg < satFatTarget) {
       satPhrase = "Sat fat near target.";
     } else {
       satPhrase = "Sat fat above target.";
