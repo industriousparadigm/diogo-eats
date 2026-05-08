@@ -7,6 +7,13 @@ export type Per100g = {
   soluble_fiber_g: number;
   calories: number;
   protein_g: number;
+  // Silent-capture nutrients: stored but not currently surfaced in the UI.
+  // Vision returns them so future surfaces (carb-aware suggestions, salt
+  // tracking, etc.) can light up without re-parsing existing meals.
+  fat_g?: number;
+  carbs_g?: number;
+  sugar_g?: number;
+  salt_g?: number;
 };
 
 export type Item = {
@@ -30,8 +37,21 @@ const PER_100G_SCHEMA = {
     soluble_fiber_g: { type: "number" },
     calories: { type: "number" },
     protein_g: { type: "number" },
+    fat_g: { type: "number" },
+    carbs_g: { type: "number" },
+    sugar_g: { type: "number" },
+    salt_g: { type: "number" },
   },
-  required: ["sat_fat_g", "soluble_fiber_g", "calories", "protein_g"],
+  required: [
+    "sat_fat_g",
+    "soluble_fiber_g",
+    "calories",
+    "protein_g",
+    "fat_g",
+    "carbs_g",
+    "sugar_g",
+    "salt_g",
+  ],
   additionalProperties: false,
 };
 
@@ -349,14 +369,24 @@ export function totalsFromItems(items: Item[]) {
   let soluble_fiber_g = 0;
   let calories = 0;
   let protein_g = 0;
+  let fat_g = 0;
+  let carbs_g = 0;
+  let sugar_g = 0;
+  let salt_g = 0;
   let plant_grams = 0;
   let total_grams = 0;
   for (const i of items) {
     const f = i.grams / 100;
-    sat_fat_g += i.per_100g.sat_fat_g * f;
-    soluble_fiber_g += i.per_100g.soluble_fiber_g * f;
-    calories += i.per_100g.calories * f;
-    protein_g += i.per_100g.protein_g * f;
+    const p = i.per_100g;
+    sat_fat_g += p.sat_fat_g * f;
+    soluble_fiber_g += p.soluble_fiber_g * f;
+    calories += p.calories * f;
+    protein_g += p.protein_g * f;
+    // Silent-capture totals: skip if missing (older items pre-schema bump).
+    if (typeof p.fat_g === "number") fat_g += p.fat_g * f;
+    if (typeof p.carbs_g === "number") carbs_g += p.carbs_g * f;
+    if (typeof p.sugar_g === "number") sugar_g += p.sugar_g * f;
+    if (typeof p.salt_g === "number") salt_g += p.salt_g * f;
     total_grams += i.grams;
     if (i.is_plant) plant_grams += i.grams;
   }
@@ -366,6 +396,10 @@ export function totalsFromItems(items: Item[]) {
     soluble_fiber_g: round1(soluble_fiber_g),
     calories: Math.round(calories),
     protein_g: round1(protein_g),
+    fat_g: round1(fat_g),
+    carbs_g: round1(carbs_g),
+    sugar_g: round1(sugar_g),
+    salt_g: round1(salt_g),
     plant_pct,
   };
 }

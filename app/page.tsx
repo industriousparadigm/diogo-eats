@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { History } from "./components/History";
 
 type Per100g = {
   sat_fat_g: number;
@@ -79,6 +80,9 @@ export default function Home() {
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState("");
+  // Bumped after any DB-changing action so the History calendar refetches
+  // without us threading state through it.
+  const [historyVersion, setHistoryVersion] = useState(0);
   const isToday = isSameDay(viewDate, todayStart());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,6 +135,7 @@ export default function Home() {
       const today = todayStart();
       setViewDate(today);
       await loadMeals(today);
+      setHistoryVersion((v) => v + 1);
       setPendingFile(null);
       setCaption("");
     } catch (err: any) {
@@ -157,6 +162,7 @@ export default function Home() {
       const today = todayStart();
       setViewDate(today);
       await loadMeals(today);
+      setHistoryVersion((v) => v + 1);
       setTextInput("");
       setTextMode(false);
     } catch (err: any) {
@@ -178,6 +184,7 @@ export default function Home() {
       body: JSON.stringify({ id }),
     });
     await loadMeals();
+    setHistoryVersion((v) => v + 1);
   }
 
   async function saveEdit(items: Item[]) {
@@ -192,6 +199,7 @@ export default function Home() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "save failed");
       await loadMeals();
+      setHistoryVersion((v) => v + 1);
       setEditingMeal(null);
     } catch (err: any) {
       setError(err.message);
@@ -258,23 +266,67 @@ export default function Home() {
         </button>
       </header>
 
-      <DailyHeadline
-        meals={meals}
-        totals={totals}
-        plantPct={plantPct}
-        isToday={isToday}
-        viewDate={viewDate}
-      />
-
-      <Pulse totals={totals} plantPct={plantPct} mealCount={meals.length} />
-
       {error && (
         <div style={{ background: "#7f1d1d", padding: 12, borderRadius: 8, margin: "16px 0", fontSize: 14 }}>
           {error}
         </div>
       )}
 
-      <section style={{ marginTop: 28 }}>
+      {/* Smart switch: if today has zero meals, the looking-back surface
+          leads — opening the app should feel satisfying, not empty. The
+          today section becomes a small prompt below History. Once a meal
+          exists for today, today is the action surface again and History
+          drops to the supplementary scroll-down position. */}
+      {isToday && meals.length === 0 ? (
+        <>
+          <History
+            version={historyVersion}
+            selectedDate={ymd(viewDate)}
+            onPickDate={(d) => setViewDate(new Date(d + "T00:00:00"))}
+          />
+          <div
+            style={{
+              marginTop: 28,
+              padding: "20px 16px",
+              textAlign: "center",
+              color: "#71717a",
+              fontSize: 14,
+              lineHeight: 1.5,
+            }}
+          >
+            Nothing yet today.
+            <button
+              onClick={() => setTextMode(true)}
+              disabled={busy}
+              style={{
+                display: "block",
+                margin: "12px auto 0",
+                background: "transparent",
+                color: "#a1a1aa",
+                fontSize: 13,
+                border: "none",
+                padding: 6,
+                cursor: "pointer",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              or type what you ate →
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <DailyHeadline
+            meals={meals}
+            totals={totals}
+            plantPct={plantPct}
+            isToday={isToday}
+            viewDate={viewDate}
+          />
+
+          <Pulse totals={totals} plantPct={plantPct} mealCount={meals.length} />
+
+          <section style={{ marginTop: 28 }}>
         <h2
           style={{
             fontSize: 11,
@@ -330,6 +382,19 @@ export default function Home() {
           </button>
         )}
       </section>
+
+      {/* Looking-back lives below today when today has meals (or you're
+          viewing a past day). Smart switch promotes it above when today
+          is empty — see top of render. */}
+      <div style={{ marginTop: 36 }}>
+        <History
+          version={historyVersion}
+          selectedDate={ymd(viewDate)}
+          onPickDate={(d) => setViewDate(new Date(d + "T00:00:00"))}
+        />
+      </div>
+        </>
+      )}
 
       {isToday && <FAB busy={busy} inputId="photo-input" />}
       <input

@@ -24,6 +24,11 @@ export type Meal = {
   calories: number;
   protein_g: number;
   plant_pct: number;
+  // Silent-capture nutrients (added 2026-05-08). Stored, not yet surfaced.
+  fat_g: number;
+  carbs_g: number;
+  sugar_g: number;
+  salt_g: number;
   notes: string | null;
   caption: string | null;
   meal_vibe: string | null;
@@ -72,16 +77,22 @@ export async function getMealsBetween(startMs: number, endMs: number): Promise<M
   return (data as Meal[]) ?? [];
 }
 
+export type MealTotals = {
+  sat_fat_g: number;
+  soluble_fiber_g: number;
+  calories: number;
+  protein_g: number;
+  plant_pct: number;
+  fat_g: number;
+  carbs_g: number;
+  sugar_g: number;
+  salt_g: number;
+};
+
 export async function updateMealItems(
   id: string,
   itemsJson: string,
-  totals: {
-    sat_fat_g: number;
-    soluble_fiber_g: number;
-    calories: number;
-    protein_g: number;
-    plant_pct: number;
-  }
+  totals: MealTotals
 ) {
   const { error } = await supabase
     .from("meals")
@@ -152,6 +163,123 @@ export type MealSummary = {
   meal_vibe: string | null;
   items: { name: string; grams: number }[];
 };
+
+// ---- daily aggregates for the looking-back surface ----
+
+export type DayAggregate = {
+  date: string; // YYYY-MM-DD in user's local time (Europe/Lisbon)
+  meal_count: number;
+  plant_pct: number; // 0-100, mass-weighted across the day
+  sat_fat_g: number;
+  soluble_fiber_g: number;
+  calories: number;
+  protein_g: number;
+};
+
+// Build local-day buckets for the requested range, then aggregate meals into
+// them. Inclusive of today. Days with no meals come back with meal_count=0
+// so the UI can render empty cells without holes.
+export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggregate[]> {
+  const now = new Date();
+  // Start from local-midnight of (daysBack-1) days ago so we get exactly
+  // `daysBack` cells including today.
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (daysBack - 1));
+
+  const { data, error } = await supabase
+    .from("meals")
+    .select(
+      "created_at, items_json, plant_pct, sat_fat_g, soluble_fiber_g, calories, protein_g"
+    )
+    .gte("created_at", start.getTime())
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`getDailyAggregates: ${error.message}`);
+
+  // Initialize every day in the range with zeros.
+  const days = new Map<
+    string,
+    {
+      meal_count: number;
+      // For mass-weighted plant_pct: sum of plant_grams and total_grams.
+      plant_grams: number;
+      total_grams: number;
+      sat_fat_g: number;
+      soluble_fiber_g: number;
+      calories: number;
+      protein_g: number;
+    }
+  >();
+  for (let i = 0; i < daysBack; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.set(localYmd(d), {
+      meal_count: 0,
+      plant_grams: 0,
+      total_grams: 0,
+      sat_fat_g: 0,
+      soluble_fiber_g: 0,
+      calories: 0,
+      protein_g: 0,
+    });
+  }
+
+  for (const m of data ?? []) {
+    const key = localYmd(new Date((m as any).created_at));
+    const bucket = days.get(key);
+    if (!bucket) continue; // shouldn't happen given the gte filter
+    bucket.meal_count += 1;
+    bucket.sat_fat_g += (m as any).sat_fat_g || 0;
+    bucket.soluble_fiber_g += (m as any).soluble_fiber_g || 0;
+    bucket.calories += (m as any).calories || 0;
+    bucket.protein_g += (m as any).protein_g || 0;
+
+    // Rebuild grams-weighted plant share from items_json — simple sum is wrong
+    // for combining meals with different masses.
+    try {
+      const items = JSON.parse((m as any).items_json);
+      if (Array.isArray(items)) {
+        for (const i of items) {
+          if (typeof i?.grams === "number") {
+            bucket.total_grams += i.grams;
+            if (i.is_plant) bucket.plant_grams += i.grams;
+          }
+        }
+      }
+    } catch {
+      // Skip malformed; very-old rows may not parse.
+    }
+  }
+
+  const out: DayAggregate[] = [];
+  for (const [date, b] of days.entries()) {
+    out.push({
+      date,
+      meal_count: b.meal_count,
+      plant_pct:
+        b.total_grams > 0 ? Math.round((b.plant_grams / b.total_grams) * 100) : 0,
+      sat_fat_g: round1(b.sat_fat_g),
+      soluble_fiber_g: round1(b.soluble_fiber_g),
+      calories: Math.round(b.calories),
+      protein_g: round1(b.protein_g),
+    });
+  }
+  // Map iteration is insertion order, so chronological ascending.
+  return out;
+}
+
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
+function localYmd(d: Date): string {
+  // We use the device's local time. Fine for a single user in one timezone;
+  // would need TZ-aware bucketing for travel-heavy use cases later.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export async function getRecentMealsForContext(
   daysBack: number = 7,
