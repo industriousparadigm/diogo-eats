@@ -21,6 +21,13 @@ const MONTH_NAMES = [
   "Dec",
 ];
 
+// Fixed cell size in pixels. Without this, cells with `flex: 1` expand
+// to fill the row when there are few weeks of data — a 2-week calendar
+// became a wall of giant squares. 22px reads cleanly even on small
+// screens and lets the calendar take its natural width.
+const CELL = 22;
+const CELL_GAP = 4;
+
 // Heatmap of recent days, GitHub-contributions-shape: weeks as columns,
 // days as rows. Color = plant %, semantic single-hue (cream → deep green).
 //
@@ -43,35 +50,39 @@ export function CalendarHeatmap({
 
   if (grid.weeks.length === 0) return null;
 
+  const numWeeks = grid.weeks.length;
+  // Total grid width: day label column + week columns + their gaps.
+  const gridWidth = 14 + 4 + numWeeks * CELL + (numWeeks - 1) * CELL_GAP;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {/* Month labels above the columns. One label per month, positioned
-          on the column where that month begins. */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+      {/* Month labels above the columns. One per column where the month
+          either starts or where the previous week was a different month. */}
       <div
         aria-hidden
         style={{
           display: "flex",
-          gap: 4,
+          gap: CELL_GAP,
           fontSize: 10,
           color: colors.textSubtle,
           letterSpacing: 0.4,
           height: 14,
-          paddingLeft: 18, // align past the day-of-week label column
+          paddingLeft: 14 + 4, // align past the day-of-week label column
+          width: gridWidth,
         }}
       >
         {grid.weeks.map((week, wi) => {
           const firstDay = week.find((d) => d !== null);
-          if (!firstDay) return <div key={wi} style={{ flex: 1 }} />;
+          if (!firstDay) return <div key={wi} style={{ width: CELL }} />;
           const date = new Date(firstDay.date + "T00:00:00");
           const showLabel =
             wi === 0 ||
-            date.getDate() <= 7 ||
             (wi > 0 && shouldStartMonthLabel(grid.weeks[wi - 1], date.getMonth()));
           return (
             <div
               key={wi}
               style={{
-                flex: 1,
+                width: CELL,
                 textAlign: "left",
                 whiteSpace: "nowrap",
                 overflow: "visible",
@@ -88,7 +99,7 @@ export function CalendarHeatmap({
         aria-label="Daily plant-percentage heatmap"
         style={{
           display: "flex",
-          gap: 4,
+          gap: CELL_GAP,
           alignItems: "stretch",
         }}
       >
@@ -98,7 +109,7 @@ export function CalendarHeatmap({
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 4,
+            gap: CELL_GAP,
             paddingRight: 4,
             fontSize: 9,
             color: colors.textFaint,
@@ -109,11 +120,11 @@ export function CalendarHeatmap({
             <div
               key={i}
               style={{
-                aspectRatio: "1",
+                width: 14,
+                height: CELL,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "flex-start",
-                width: 12,
                 opacity: i % 2 === 1 ? 1 : 0.45, // brighter on M/W/F for rhythm
               }}
             >
@@ -125,7 +136,7 @@ export function CalendarHeatmap({
           <div
             key={wi}
             role="row"
-            style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}
+            style={{ display: "flex", flexDirection: "column", gap: CELL_GAP }}
           >
             {week.map((cell, di) =>
               cell ? (
@@ -140,7 +151,8 @@ export function CalendarHeatmap({
                   key={`empty-${wi}-${di}`}
                   aria-hidden
                   style={{
-                    aspectRatio: "1",
+                    width: CELL,
+                    height: CELL,
                     borderRadius: 3,
                     background: "transparent",
                   }}
@@ -183,7 +195,8 @@ function Cell({
       title={label}
       aria-label={label}
       style={{
-        aspectRatio: "1",
+        width: CELL,
+        height: CELL,
         borderRadius: 3,
         background: bg,
         border: selected

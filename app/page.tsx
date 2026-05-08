@@ -522,7 +522,12 @@ function DailyHeadline({
   viewDate,
 }: {
   meals: Meal[];
-  totals: { sat_fat_g: number };
+  totals: {
+    sat_fat_g: number;
+    soluble_fiber_g: number;
+    calories: number;
+    protein_g: number;
+  };
   plantPct: number;
   isToday: boolean;
   viewDate: Date;
@@ -546,18 +551,34 @@ function DailyHeadline({
     );
   }
 
-  const plantWord = plantPct >= 70 ? "Mostly plant" : plantPct >= 40 ? "Mixed plate" : "Animal-led";
+  // Lead with what's HELPING LDL today: plant share + soluble fiber.
+  // Sat fat only earns a callout if it's truly above target across the
+  // whole day — single-bite alarms were the previous failure mode.
+  const wins: string[] = [];
+  if (plantPct >= 80) wins.push("Plant-led day");
+  else if (plantPct >= 60) wins.push("Plant-leaning");
+  else if (plantPct >= 40) wins.push("Mixed plate");
+  else wins.push("Animal-led day");
+
+  const fiber = totals.soluble_fiber_g;
+  if (fiber >= targets.soluble_fiber_g)
+    wins.push(`${fiber.toFixed(0)}g soluble fiber`);
+  else if (fiber >= targets.soluble_fiber_g * 0.5)
+    wins.push(`${fiber.toFixed(0)}g fiber so far`);
+
+  // Only a "watch" call when sat fat is meaningfully over.
   const satRatio = totals.sat_fat_g / targets.sat_fat_g;
-  const fatNote =
-    satRatio >= 0.9 ? "fat-heavy day" : satRatio >= 0.6 ? "watch the fat" : null;
+  const fatNote = satRatio >= 1.2 ? "Sat fat well over target" : null;
 
   const mealLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
   const dayPart = isToday
     ? "today"
     : viewDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
-  // Color the lead by plant signal so the visual carries the read.
-  const leadColor = plantPct >= 70 ? "#a3e635" : plantPct >= 40 ? "#fcd34d" : "#fca5a5";
+  // Lead color reflects plant signal. We only shift away from green when
+  // the day is really animal-led; mixed plates stay neutral, not yellow.
+  const leadColor =
+    plantPct >= 60 ? "#a3e635" : plantPct >= 40 ? "#e4e4e7" : "#fca5a5";
 
   return (
     <div
@@ -574,18 +595,19 @@ function DailyHeadline({
           fontSize: 22,
           fontWeight: 600,
           color: leadColor,
-          lineHeight: 1.2,
+          lineHeight: 1.25,
           letterSpacing: -0.3,
         }}
       >
-        {plantWord}.
+        {wins.join(". ")}
+        {wins.length ? "." : ""}
       </div>
       {fatNote && (
-        <div style={{ fontSize: 14, color: "#a1a1aa", marginTop: 6, fontWeight: 500 }}>
+        <div style={{ fontSize: 13, color: "#fcd34d", marginTop: 6 }}>
           {fatNote}
         </div>
       )}
-      <div style={{ fontSize: 12, color: "#52525b", marginTop: 8, letterSpacing: 0.3 }}>
+      <div style={{ fontSize: 12, color: "#52525b", marginTop: 10, letterSpacing: 0.3 }}>
         {mealLabel.toUpperCase()} · {dayPart.toUpperCase()}
       </div>
     </div>
@@ -602,6 +624,9 @@ function Pulse({
   mealCount: number;
 }) {
   const targets = useTargets();
+  // Pulse order matters — leads with what's HELPING LDL (plant + fiber)
+  // and only then surfaces sat fat. Counters the previous "every meal a
+  // negotiation about saturated fat" framing.
   return (
     <div
       style={{
@@ -613,14 +638,14 @@ function Pulse({
         borderRadius: 14,
       }}
     >
-      <Stat label="sat fat" value={totals.sat_fat_g.toFixed(1)} unit="g" target={targets.sat_fat_g} invert />
+      <Stat label="plant" value={String(plantPct)} unit="%" target={100} />
       <Stat
         label="soluble fiber"
         value={totals.soluble_fiber_g.toFixed(1)}
         unit="g"
         target={targets.soluble_fiber_g}
       />
-      <Stat label="plant" value={String(plantPct)} unit="%" target={100} />
+      <Stat label="sat fat" value={totals.sat_fat_g.toFixed(1)} unit="g" target={targets.sat_fat_g} invert />
       <Stat label="calories" value={Math.round(totals.calories).toString()} unit="" target={targets.calories} />
       <Stat label="protein" value={totals.protein_g.toFixed(0)} unit="g" target={targets.protein_g} fullSpan />
     </div>

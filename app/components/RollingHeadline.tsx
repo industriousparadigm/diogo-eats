@@ -6,11 +6,18 @@ import type { DayAggregate } from "@/lib/types";
 import { useTargets } from "@/lib/targets";
 
 // Plain-English shape of the recent past. Rule-based, no LLM call —
-// fast, free, and predictable. Speaks in identity-language ("you've been
-// eating like X") not pass/fail ("you hit Y of your goals").
+// fast, free, and predictable.
+//
+// Tone: lead with what's WORKING for LDL (plant share, fiber consistency),
+// then sat fat as an add-on phrase. Earlier versions buried wins under
+// fat-target framing; the user's correction was that the app shamed bad
+// and never celebrated good. This rebalance tries to celebrate first.
 export function RollingHeadline({ aggregates }: { aggregates: DayAggregate[] }) {
   const targets = useTargets();
-  const sentence = useMemo(() => buildHeadline(aggregates, targets.sat_fat_g), [aggregates, targets.sat_fat_g]);
+  const sentence = useMemo(
+    () => buildHeadline(aggregates, targets),
+    [aggregates, targets]
+  );
 
   if (!sentence) return null;
 
@@ -22,7 +29,7 @@ export function RollingHeadline({ aggregates }: { aggregates: DayAggregate[] }) 
         border: `1px solid ${colors.border}`,
         borderRadius: radii.lg,
         fontSize: 16,
-        lineHeight: 1.45,
+        lineHeight: 1.5,
         color: colors.text,
         letterSpacing: -0.1,
       }}
@@ -32,9 +39,9 @@ export function RollingHeadline({ aggregates }: { aggregates: DayAggregate[] }) 
   );
 }
 
-function buildHeadline(aggs: DayAggregate[], satFatTarget: number): string | null {
-  // Need a meaningful sample. <3 logged days → return nothing; the empty
-  // state copy elsewhere handles it.
+type T = { sat_fat_g: number; soluble_fiber_g: number };
+
+function buildHeadline(aggs: DayAggregate[], targets: T): string | null {
   const logged = aggs.filter((a) => a.meal_count > 0);
   if (logged.length < 3) return null;
 
@@ -42,42 +49,50 @@ function buildHeadline(aggs: DayAggregate[], satFatTarget: number): string | nul
   const prev14 = logged.slice(-28, -14);
 
   const plantAvg = avg(last14.map((a) => a.plant_pct));
+  const fiberAvg = avg(last14.map((a) => a.soluble_fiber_g));
+  const fiberDays = last14.filter((a) => a.soluble_fiber_g >= targets.soluble_fiber_g).length;
   const satFatAvg = avg(last14.map((a) => a.sat_fat_g));
   const prevSatFatAvg = prev14.length >= 3 ? avg(prev14.map((a) => a.sat_fat_g)) : null;
 
-  const plantWord = plantAvg >= 75
-    ? "Mostly plants"
-    : plantAvg >= 55
-    ? "Plant-leaning"
-    : plantAvg >= 35
-    ? "Mixed plates"
-    : "Mostly animal-based";
+  // ---- lead: identity phrase about plant share ----
+  const plantWord =
+    plantAvg >= 80
+      ? "Mostly plant-based"
+      : plantAvg >= 60
+      ? "Plant-leaning"
+      : plantAvg >= 40
+      ? "Mixed plates"
+      : "Mostly animal-based";
 
-  // Sat fat trend phrase — only if we have enough history to compare.
-  let satPhrase = "";
-  if (prevSatFatAvg !== null) {
-    const diff = satFatAvg - prevSatFatAvg;
-    const pctDiff = prevSatFatAvg > 0.5 ? Math.abs(diff / prevSatFatAvg) : 0;
-    if (pctDiff < 0.08) {
-      satPhrase = "Sat fat holding steady.";
-    } else if (diff < 0) {
-      satPhrase = "Sat fat trending down.";
-    } else {
-      satPhrase = "Sat fat ticking up.";
-    }
+  // ---- fiber win — celebrate when consistent ----
+  let fiberPhrase: string | null = null;
+  if (fiberDays >= last14.length * 0.7) {
+    fiberPhrase = `fiber on track most days`;
+  } else if (fiberAvg >= targets.soluble_fiber_g * 0.7) {
+    fiberPhrase = `fiber close to target`;
+  } else if (fiberAvg >= targets.soluble_fiber_g * 0.4) {
+    fiberPhrase = `room for more soluble fiber`;
   } else {
-    // Compare to target if no prior window
-    if (satFatAvg < satFatTarget * 0.7) {
-      satPhrase = "Sat fat comfortably under target.";
-    } else if (satFatAvg < satFatTarget) {
-      satPhrase = "Sat fat near target.";
-    } else {
-      satPhrase = "Sat fat above target.";
-    }
+    fiberPhrase = `fiber low — oats, beans, psyllium help`;
   }
 
-  const range = last14.length === 1 ? "Yesterday" : `Last ${last14.length} logged days`;
-  return `${range}: ${plantWord.toLowerCase()}. ${satPhrase}`;
+  // ---- sat fat trend — only mention when noteworthy ----
+  let satPhrase: string | null = null;
+  if (prevSatFatAvg !== null && prevSatFatAvg > 0.5) {
+    const diff = satFatAvg - prevSatFatAvg;
+    const pctDiff = Math.abs(diff / prevSatFatAvg);
+    if (pctDiff >= 0.15) {
+      satPhrase = diff < 0 ? "sat fat trending down" : "sat fat ticking up";
+    }
+  } else if (satFatAvg >= targets.sat_fat_g * 1.3) {
+    // Without a prior window, only mention if clearly over target.
+    satPhrase = "sat fat above target";
+  }
+
+  const range = `Last ${last14.length} logged days`;
+  const parts = [plantWord.toLowerCase(), fiberPhrase];
+  if (satPhrase) parts.push(satPhrase);
+  return `${range}: ${parts.filter(Boolean).join("; ")}.`;
 }
 
 function avg(arr: number[]): number {

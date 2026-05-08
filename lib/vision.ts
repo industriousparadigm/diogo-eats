@@ -121,17 +121,27 @@ User caption rules (when present):
 - **Home-cooking reinforcers** ("homemade", "I made", "at home"): keep home defaults — modest cooking fat, no hidden cream/butter unless visible.
 - If caption clearly contradicts photo, trust the photo and call it out in notes.
 
-meal_vibe: a short phrase (≤ 6 words) characterizing this meal *as a choice on the user's protocol*. Examples:
-- "plant-led, light"
+meal_vibe: a short phrase (≤ 6 words) characterizing this meal *as a choice on the user's protocol*. **Lean toward celebrating what's working** when the meal has plant-forward components, soluble fiber sources, or LDL-helping ingredients. Examples:
+- "plant-led, fiber-rich" (oats with berries; beans-and-greens bowl)
+- "soluble-fiber breakfast" (oatmeal, lentils, chia, psyllium-anything)
 - "balanced mixed plate"
 - "veg-heavy with some meat"
-- "fat-heavy treat"
 - "small snack"
-- "indulgence"
-- "lean protein + veg"
-Be honest but non-judgmental. Don't say "non-vegan" — that's noise. The vibe should help the user feel where on the spectrum this meal sits.
+- "fat-heavy treat" (only when butter/cheese/cream genuinely dominates)
+- "indulgence" (sweets, fried, very rich)
+Be honest but non-judgmental. Don't say "non-vegan" — that's noise. The user is on a *vegan-leaning* plan, not strict vegan. The vibe should help them feel where on the spectrum this meal sits, with a slight bias toward recognizing wins.
 
-notes: ONE short sentence — useful, not preachy. Pick ONE of: dominant saturated-fat / calorie driver, an inferred-ingredient flag worth knowing, or a portion uncertainty. Skip if the meal is unremarkable. Never editorialize about plant-based status; never lecture.`;
+notes: ONE short sentence — useful, not preachy. **Prioritize celebrating LDL-helping choices** when present:
+- Soluble fiber sources (oats, beans, lentils, chia, psyllium, fruit pectin) — "Good soluble-fiber start to the day."
+- Plant sterols (nuts, seeds, fortified spreads) — "Walnuts and olive oil add plant sterols."
+- Plant protein (legumes, tofu, tempeh) — "Beans give protein without the saturated fat hit."
+
+Only flag concerns when truly meaningful (don't alarm on a single bite of cheese):
+- A truly fat-heavy meal where butter/cheese/cream is the dominant mass
+- Hidden ingredient worth knowing (restaurant cream sauce, mayo)
+- Portion uncertainty when it actually matters
+
+When neither side is notable, skip notes entirely. Never editorialize about plant-based status; never lecture; never warn about a small bit of saturated fat in an otherwise good meal — the user already feels enough scarcity.`;
 
 export type KnownFood = {
   name: string;
@@ -201,9 +211,9 @@ Restaurant / eating-out signals in the user's text ("at restaurant", "takeout", 
 
 Home-cooking reinforcers ("homemade", "I made", "at home"): keep home defaults.
 
-meal_vibe: short phrase (≤ 6 words) characterizing this meal as a choice — e.g. "balanced plate", "plant-led, light", "fat-heavy treat", "indulgence", "small snack", "lean protein + veg". Honest but non-judgmental.
+meal_vibe: short phrase (≤ 6 words). **Lean toward celebrating what's working** when plant-forward / fiber-rich. Examples: "soluble-fiber breakfast", "plant-led, fiber-rich", "balanced plate", "veg-heavy with some meat", "small snack", "fat-heavy treat" (only when truly fat-dominant), "indulgence". The user is *vegan-leaning*, not strict vegan — don't say "non-vegan" as a flag.
 
-notes: ONE short sentence — useful, not preachy. Pick ONE of: dominant nutrient driver, key inferred ingredient, or a portion uncertainty. Skip if unremarkable. Never editorialize about plant-based status.`;
+notes: ONE short sentence — useful, not preachy. **Prioritize celebrating LDL-helping choices** when present (soluble-fiber sources like oats/beans/lentils/chia, plant sterols, plant protein). Only flag concerns when truly meaningful — single bites of cheese or a normal pat of butter don't warrant a callout. Skip notes when the meal is unremarkable. Never editorialize about plant-based status; never lecture.`;
 
 export async function parseMealPhoto(
   imageBase64: string,

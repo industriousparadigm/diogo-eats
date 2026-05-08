@@ -67,3 +67,5 @@ scripts/
 - Pre-consult dossier (mid-Sep 2026)
 - Auth (currently relies on the URL being unguessed; revisit when sharing or after first sketchy event)
 - A "Memory" view to browse / delete entries directly
+- **WHOOP integration** — pull activity / strain / recovery via the WHOOP OAuth API so the daily picture is energy-in vs energy-out, not just food. Requires a separate auth setup session.
+- **Food library / "capture once, reuse"** — a saved-foods bank where photographed nutrition labels become deterministic per-100g entries, no LLM call needed for repeats. Saves money + makes repeat logging instant.

@@ -6,6 +6,7 @@ import type { DayAggregate } from "@/lib/types";
 import { CalendarHeatmap } from "./CalendarHeatmap";
 import { RollingHeadline } from "./RollingHeadline";
 import { SatFatTrend } from "./SatFatTrend";
+import { FiberTrend } from "./FiberTrend";
 import { RetestAnchor } from "./RetestAnchor";
 
 // The "looking back" surface. Fetches its own aggregates so the home page
@@ -84,7 +85,15 @@ export function History({
         selectedDate={selectedDate}
       />
 
-      {totalLogged >= 3 && <SatFatTrend aggregates={aggs} />}
+      {totalLogged >= 3 && (
+        <>
+          {/* Fiber first — it's the lever to KEEP UP. Sat fat second —
+              the lever to keep down. Order reflects "what's helping"
+              before "what to watch". */}
+          <FiberTrend aggregates={aggs} />
+          <SatFatTrend aggregates={aggs} />
+        </>
+      )}
 
       <RetestAnchor />
     </section>

@@ -6,62 +6,49 @@ import type { DayAggregate } from "@/lib/types";
 import { useTargets } from "@/lib/targets";
 import { visibleAggregates } from "@/lib/window";
 
-// Slow-moving line: 7-day rolling average of saturated fat over the visible
-// window. Sat fat is the actual LDL mechanism — this shows trajectory
-// without inviting daily verdicts. The target line is a soft reference, not
-// a pass/fail gate.
+// Mirror of SatFatTrend, but for soluble fiber — the underrated lever for
+// LDL reduction. Where sat fat is "the thing to keep below," fiber is
+// "the thing to keep above" — visualizing both together makes the user
+// feel both sides of the equation, not just the warning side.
 //
-// Renders only over the visible-window range (matches the calendar), so
-// the path doesn't waste 80% of the canvas on pre-log empty days.
-export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
+// Same rendering pattern as SatFatTrend: 7-day rolling avg over the
+// visible window, soft target line, latest value readout.
+export function FiberTrend({ aggregates }: { aggregates: DayAggregate[] }) {
   const targets = useTargets();
   const window = useMemo(() => visibleAggregates(aggregates), [aggregates]);
   const { points, max, hasData } = useMemo(() => {
     const smoothed: number[] = [];
     for (let i = 0; i < window.length; i++) {
-      // 7-day rolling window looking back. Skips zeros from empty days so
-      // a missed log doesn't pull the average to 0.
       const win: number[] = [];
       for (let j = Math.max(0, i - 6); j <= i; j++) {
-        if (window[j].meal_count > 0) {
-          win.push(window[j].sat_fat_g);
-        }
+        if (window[j].meal_count > 0) win.push(window[j].soluble_fiber_g);
       }
       smoothed.push(win.length ? avg(win) : NaN);
     }
     const validVals = smoothed.filter((v) => !isNaN(v));
-    const max = Math.max(targets.sat_fat_g * 1.5, ...validVals, 1);
+    const max = Math.max(targets.soluble_fiber_g * 1.5, ...validVals, 1);
     return { points: smoothed, max, hasData: validVals.length > 0 };
-  }, [window, targets.sat_fat_g]);
+  }, [window, targets.soluble_fiber_g]);
 
-  // Need at least 2 logged days for a line to be meaningful.
   const validCount = points.filter((p) => !isNaN(p)).length;
   if (!hasData || validCount < 2) return null;
 
-  const W = 100; // viewBox width in arbitrary units; scales with parent
-  // Taller viewBox so the slope reads clearly. The container caps the
-  // rendered height at ~110px on screen.
+  const W = 100;
   const H = 50;
   const xStep = W / Math.max(1, points.length - 1);
 
-  // Build path skipping NaN gaps cleanly (move-to instead of line-to).
   const path = points.reduce((acc, v, i) => {
     if (isNaN(v)) return acc;
     const x = (i * xStep).toFixed(2);
     const y = (H - (v / max) * H).toFixed(2);
-    const cmd = acc.endsWith("M") || acc === "" || acc.endsWith("Z")
-      ? `M${x},${y}`
-      : ` L${x},${y}`;
-    // Special case: previous point was NaN — start a new sub-path.
     if (i > 0 && isNaN(points[i - 1])) return acc + ` M${x},${y}`;
-    return acc + cmd;
+    return acc === "" ? `M${x},${y}` : acc + ` L${x},${y}`;
   }, "");
 
-  const targetY = H - (targets.sat_fat_g / max) * H;
-
-  // Latest non-NaN value for the readout
+  const targetY = H - (targets.soluble_fiber_g / max) * H;
   const latest = [...points].reverse().find((v) => !isNaN(v)) ?? 0;
-  const overTarget = latest > targets.sat_fat_g;
+  // For fiber, ABOVE target is the win — color logic is inverted vs sat fat.
+  const aboveTarget = latest >= targets.soluble_fiber_g;
 
   return (
     <div
@@ -77,19 +64,19 @@ export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
     >
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <div style={{ fontSize: 11, color: colors.textSubtle, letterSpacing: 0.5, fontWeight: 500 }}>
-          SAT FAT · 7-DAY AVERAGE
+          SOLUBLE FIBER · 7-DAY AVERAGE
         </div>
         <div
           style={{
             fontSize: 13,
-            color: overTarget ? colors.warn : colors.accentLight,
+            color: aboveTarget ? colors.accentLight : colors.textMuted,
             fontVariantNumeric: "tabular-nums",
             fontWeight: 500,
           }}
         >
           {latest.toFixed(1)}g
           <span style={{ color: colors.textFaint, marginLeft: 4, fontWeight: 400 }}>
-            / {targets.sat_fat_g}g target
+            / {targets.soluble_fiber_g}g target
           </span>
         </div>
       </div>
@@ -97,9 +84,8 @@ export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         style={{ width: "100%", height: 110, display: "block" }}
-        aria-label="Saturated fat 7-day rolling average over the visible window"
+        aria-label="Soluble fiber 7-day rolling average"
       >
-        {/* Soft target line */}
         <line
           x1={0}
           x2={W}
@@ -109,7 +95,6 @@ export function SatFatTrend({ aggregates }: { aggregates: DayAggregate[] }) {
           strokeWidth={0.4}
           strokeDasharray="1,1"
         />
-        {/* The trend line itself */}
         <path
           d={path}
           fill="none"

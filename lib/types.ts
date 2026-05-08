@@ -49,11 +49,15 @@ export type DayAggregate = {
   protein_g: number;
 };
 
-// Daily targets — the dashboard's only "should" numbers. Tuned to Diogo's
-// stated lifestyle plan: ESC suggests <13g sat fat for moderate-risk men;
-// soluble fiber 10g+ helps LDL; protein for the strength-training goal.
+// Daily targets — reference numbers, not gates. Calibrated to Diogo's
+// specific phenotype (HDL 75, trigs 71, A1c 5.5 — metabolically clean
+// but with a strong genetic LDL signal from family history). 18g sat fat
+// is more livable than the 13g textbook cap and respects that for him,
+// dietary sat fat is one lever among several, not the whole game.
+// Soluble fiber is arguably the more important lever — directly binds
+// bile acids, forces hepatic cholesterol turnover.
 export const TARGETS = {
-  sat_fat_g: 13,
+  sat_fat_g: 18,
   soluble_fiber_g: 10,
   calories: 2000,
   protein_g: 90,
