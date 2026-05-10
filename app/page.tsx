@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { History } from "./components/History";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import { useTargets } from "@/lib/targets";
+import { todayStart, ymd, isSameDay, dayLabel, parseYmd } from "@/lib/date";
+import { inputStyle, textareaStyle } from "@/lib/styles";
 
 type Per100g = {
   sat_fat_g: number;
@@ -37,37 +40,8 @@ type Meal = {
 };
 
 
-function todayStart(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function ymd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function dayLabel(d: Date): string {
-  const today = todayStart();
-  const diffDays = Math.round((today.getTime() - d.getTime()) / (24 * 3600 * 1000));
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  // Older than 1 day: show weekday + short date.
-  return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-}
-
 export default function Home() {
+  const router = useRouter();
   const [viewDate, setViewDate] = useState<Date>(() => todayStart());
   const [meals, setMeals] = useState<Meal[]>([]);
   const [busy, setBusy] = useState(false);
@@ -77,7 +51,6 @@ export default function Home() {
   // composite before sending to Vision, so it's still one Vision call.
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
-  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -196,26 +169,20 @@ export default function Home() {
     setHistoryVersion((v) => v + 1);
   }
 
-  async function saveEdit(items: Item[]) {
-    if (!editingMeal) return;
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/meals/${editingMeal.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "save failed");
-      await loadMeals();
-      setHistoryVersion((v) => v + 1);
-      setEditingMeal(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Refresh on tab visibility — covers the case where the user came back
+  // from /meal/[id] after a save and we need today's row to reflect the
+  // new totals. Cheap (single GETs) and only fires on actual focus.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        loadMeals();
+        setHistoryVersion((v) => v + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewDate]);
 
   const totals = meals.reduce(
     (t, m) => ({
@@ -347,7 +314,7 @@ export default function Home() {
               key={m.id}
               meal={m}
               onDelete={() => deleteMealById(m.id)}
-              onEdit={() => setEditingMeal(m)}
+              onEdit={() => router.push(`/meal/${m.id}`)}
             />
           ))}
         </div>
@@ -404,15 +371,6 @@ export default function Home() {
           busy={busy}
           onCancel={cancelPending}
           onSubmit={submitPending}
-        />
-      )}
-
-      {editingMeal && (
-        <EditSheet
-          meal={editingMeal}
-          busy={busy}
-          onCancel={() => setEditingMeal(null)}
-          onSave={saveEdit}
         />
       )}
 
@@ -1039,392 +997,6 @@ function ConfirmSheet({
   );
 }
 
-function EditSheet({
-  meal,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  meal: Meal;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (items: Item[]) => Promise<void> | void;
-}) {
-  const original = useMemo(() => safeParseItems(meal.items_json) as Item[], [meal.items_json]);
-  const [items, setItems] = useState<Item[]>(() => original);
-  const [adding, setAdding] = useState(false);
-  const [addName, setAddName] = useState("");
-  const [addGrams, setAddGrams] = useState("");
-  const [addBusy, setAddBusy] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [talkMsg, setTalkMsg] = useState("");
-  const [talkBusy, setTalkBusy] = useState(false);
-  const [talkError, setTalkError] = useState<string | null>(null);
-  const [talkHint, setTalkHint] = useState<string | null>(null);
-
-  async function talkFix() {
-    const message = talkMsg.trim();
-    if (!message) return;
-    setTalkBusy(true);
-    setTalkError(null);
-    setTalkHint(null);
-    try {
-      const r = await fetch(`/api/meals/${meal.id}/talk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "fix failed");
-      if (!Array.isArray(j.items) || j.items.length === 0) {
-        throw new Error("got empty items back");
-      }
-      setItems(j.items);
-      setTalkMsg("");
-      setTalkHint("updated — review, then save");
-    } catch (err: any) {
-      setTalkError(err.message);
-    } finally {
-      setTalkBusy(false);
-    }
-  }
-
-  const live = useMemo(() => computeTotals(items), [items]);
-
-  function patchGrams(idx: number, value: string) {
-    const grams = Math.max(0, Math.min(5000, parseFloat(value) || 0));
-    setItems((arr) => arr.map((it, i) => (i === idx ? { ...it, grams } : it)));
-  }
-
-  function patchName(idx: number, value: string) {
-    setItems((arr) => arr.map((it, i) => (i === idx ? { ...it, name: value } : it)));
-  }
-
-  function removeItem(idx: number) {
-    setItems((arr) => arr.filter((_, i) => i !== idx));
-  }
-
-  async function addItem() {
-    setAddError(null);
-    const name = addName.trim();
-    const grams = parseFloat(addGrams);
-    if (!name) return setAddError("name required");
-    if (!grams || grams <= 0) return setAddError("grams required");
-    setAddBusy(true);
-    try {
-      const r = await fetch("/api/lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "lookup failed");
-      const newItem: Item = {
-        name,
-        grams,
-        confidence: "medium",
-        is_plant: !!j.is_plant,
-        per_100g: j.per_100g,
-      };
-      setItems((arr) => [...arr, newItem]);
-      setAddName("");
-      setAddGrams("");
-      setAdding(false);
-    } catch (err: any) {
-      setAddError(err.message ?? "lookup failed");
-    } finally {
-      setAddBusy(false);
-    }
-  }
-
-  const dirty = JSON.stringify(items) !== JSON.stringify(original);
-  const canSave = !busy && !addBusy && items.length > 0 && dirty;
-
-  return (
-    <SheetShell onScrimClick={busy ? undefined : onCancel} maxHeightVh={92}>
-      {meal.photo_filename && (
-        <img
-          src={`/api/photo/${meal.photo_filename}`}
-          alt=""
-          style={{
-            width: "100%",
-            maxHeight: 200,
-            objectFit: "cover",
-            borderRadius: 8,
-            background: "#18181b",
-          }}
-        />
-      )}
-      {meal.caption && (
-        <div style={{ fontSize: 12, color: "#a1a1aa", fontStyle: "italic" }}>
-          “{meal.caption}”
-        </div>
-      )}
-
-      <div
-        style={{
-          background: "#0f0f10",
-          border: "1px solid #1f1f22",
-          borderRadius: 8,
-          padding: 10,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-        }}
-      >
-        <div style={{ fontSize: 11, color: "#71717a", letterSpacing: 0.5 }}>
-          QUICK FIX — TELL CLAUDE
-        </div>
-        <textarea
-          value={talkMsg}
-          onChange={(e) => setTalkMsg(e.target.value)}
-          placeholder="e.g. it's all plant / smaller portion / add olive oil"
-          maxLength={500}
-          disabled={talkBusy || busy}
-          onKeyDown={(e) => {
-            // Enter submits, Shift+Enter inserts a newline.
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              talkFix();
-            }
-          }}
-          rows={2}
-          style={{ ...textareaStyle, padding: "10px 12px", fontSize: 14 }}
-        />
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            onClick={talkFix}
-            disabled={talkBusy || busy || !talkMsg.trim()}
-            style={{
-              background: talkBusy || !talkMsg.trim() ? "#3f3f46" : "#0c4a6e",
-              color: "#fff",
-              padding: "8px 12px",
-              fontSize: 13,
-              borderRadius: 6,
-            }}
-          >
-            {talkBusy ? "thinking…" : "fix it"}
-          </button>
-          {talkError && (
-            <span style={{ fontSize: 11, color: "#fca5a5" }}>{talkError}</span>
-          )}
-          {talkHint && !talkError && (
-            <span style={{ fontSize: 11, color: "#a3e635" }}>{talkHint}</span>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", flex: 1, minHeight: 0 }}>
-        {items.map((it, idx) => (
-          <ItemRow
-            key={idx}
-            item={it}
-            onName={(v) => patchName(idx, v)}
-            onGrams={(v) => patchGrams(idx, v)}
-            onRemove={() => removeItem(idx)}
-            disabled={busy}
-          />
-        ))}
-        {adding ? (
-          <div style={{ background: "#0f0f10", border: "1px dashed #3f3f46", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-            <textarea
-              autoFocus
-              value={addName}
-              placeholder="e.g. olive oil, avocado, salmon"
-              onChange={(e) => setAddName(e.target.value)}
-              disabled={addBusy}
-              rows={1}
-              style={textareaStyle}
-            />
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="number"
-                value={addGrams}
-                placeholder="grams"
-                onChange={(e) => setAddGrams(e.target.value)}
-                disabled={addBusy}
-                style={{ ...inputStyle, flex: 1 }}
-                min={0}
-                max={5000}
-                inputMode="numeric"
-              />
-              <SecondaryButton
-                onClick={() => {
-                  setAdding(false);
-                  setAddName("");
-                  setAddGrams("");
-                  setAddError(null);
-                }}
-                disabled={addBusy}
-              >
-                cancel
-              </SecondaryButton>
-              <PrimaryButton onClick={addItem} disabled={addBusy}>
-                {addBusy ? "looking up…" : "add"}
-              </PrimaryButton>
-            </div>
-            {addError && (
-              <div style={{ fontSize: 11, color: "#fca5a5" }}>{addError}</div>
-            )}
-          </div>
-        ) : (
-          <button
-            onClick={() => setAdding(true)}
-            disabled={busy}
-            style={{
-              background: "transparent",
-              color: "#a1a1aa",
-              border: "1px dashed #3f3f46",
-              borderRadius: 8,
-              padding: "10px 12px",
-              fontSize: 13,
-              textAlign: "left",
-            }}
-          >
-            + add item
-          </button>
-        )}
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
-          gap: 6,
-          fontSize: 11,
-          color: "#a1a1aa",
-          padding: "8px 0 4px",
-          borderTop: "1px solid #27272a",
-        }}
-      >
-        <LiveStat label="kcal" value={Math.round(live.calories).toString()} />
-        <LiveStat label="sat" value={`${live.sat_fat_g.toFixed(1)}g`} />
-        <LiveStat label="fib" value={`${live.soluble_fiber_g.toFixed(1)}g`} />
-        <LiveStat label="pro" value={`${live.protein_g.toFixed(0)}g`} />
-        <LiveStat label="plant" value={`${live.plant_pct}%`} />
-      </div>
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <SecondaryButton onClick={onCancel} disabled={busy}>
-          cancel
-        </SecondaryButton>
-        <PrimaryButton onClick={() => onSave(items)} disabled={!canSave} flex>
-          {busy ? "saving…" : "save"}
-        </PrimaryButton>
-      </div>
-    </SheetShell>
-  );
-}
-
-function ItemRow({
-  item,
-  onName,
-  onGrams,
-  onRemove,
-  disabled,
-}: {
-  item: Item;
-  onName: (v: string) => void;
-  onGrams: (v: string) => void;
-  onRemove: () => void;
-  disabled: boolean;
-}) {
-  const dot =
-    item.confidence === "low"
-      ? { color: "#f97316", title: "low confidence — Vision was guessing" }
-      : item.confidence === "medium"
-      ? { color: "#a16207", title: "medium confidence — reasonable estimate" }
-      : null;
-  return (
-    <div
-      style={{
-        background: "#0f0f10",
-        border: "1px solid #27272a",
-        borderRadius: 8,
-        padding: 10,
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {dot && (
-          <span
-            title={dot.title}
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: dot.color,
-              flexShrink: 0,
-            }}
-          />
-        )}
-        <textarea
-          value={item.name}
-          onChange={(e) => onName(e.target.value)}
-          disabled={disabled}
-          rows={1}
-          style={{
-            ...textareaStyle,
-            padding: "8px 10px",
-            fontSize: 14,
-            flex: 1,
-            minHeight: 36,
-          }}
-        />
-        <button
-          onClick={onRemove}
-          disabled={disabled}
-          aria-label="remove item"
-          style={{
-            color: "#71717a",
-            padding: "4px 8px",
-            fontSize: 16,
-            background: "transparent",
-          }}
-        >
-          ✕
-        </button>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input
-          type="number"
-          value={item.grams}
-          onChange={(e) => onGrams(e.target.value)}
-          disabled={disabled}
-          inputMode="numeric"
-          min={0}
-          max={5000}
-          style={{
-            ...inputStyle,
-            padding: "8px 10px",
-            fontSize: 14,
-            width: 90,
-          }}
-        />
-        <span style={{ fontSize: 12, color: "#71717a" }}>g</span>
-        <span style={{ fontSize: 11, color: "#52525b", marginLeft: "auto" }}>
-          {Math.round((item.grams * item.per_100g.calories) / 100)} kcal · {(
-            (item.grams * item.per_100g.sat_fat_g) /
-            100
-          ).toFixed(1)}g sat
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function LiveStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 9, color: "#52525b", letterSpacing: 0.5, textTransform: "uppercase" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 14, color: "#f4f4f5", fontWeight: 500 }}>{value}</div>
-    </div>
-  );
-}
 
 function SheetShell({
   children,
@@ -1496,33 +1068,8 @@ const dayNavBtnStyle: React.CSSProperties = {
   WebkitTapHighlightColor: "transparent",
 };
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "#18181b",
-  color: "#f4f4f5",
-  border: "1px solid #27272a",
-  borderRadius: 8,
-  padding: "12px 14px",
-  fontSize: 16,
-  outline: "none",
-};
-
-// Same look as inputStyle but for <textarea>: wraps long text so the
-// caret stays visible on mobile (single-line <input> scrolls horizontally
-// and hides what you're typing).
-const textareaStyle: React.CSSProperties = {
-  width: "100%",
-  background: "#18181b",
-  color: "#f4f4f5",
-  border: "1px solid #27272a",
-  borderRadius: 8,
-  padding: "12px 14px",
-  fontSize: 16,
-  outline: "none",
-  lineHeight: 1.4,
-  minHeight: 44,
-  resize: "none",
-};
+// inputStyle + textareaStyle live in lib/styles for cross-component reuse;
+// imported at the top of this file.
 
 function PrimaryButton({
   children,
