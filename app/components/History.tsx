@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { colors } from "@/lib/styles";
 import type { DayAggregate } from "@/lib/types";
+import { fetchStats } from "@/lib/api";
 import { CalendarHeatmap } from "./CalendarHeatmap";
 import { RollingHeadline } from "./RollingHeadline";
 import { SatFatTrend } from "./SatFatTrend";
@@ -28,10 +29,9 @@ export function History({
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/stats?days=84")
-      .then((r) => r.json())
-      .then((j) => {
-        if (alive) setAggs(j.aggregates ?? []);
+    fetchStats(84)
+      .then((data) => {
+        if (alive) setAggs(data);
       })
       .catch(() => {
         if (alive) setAggs([]);

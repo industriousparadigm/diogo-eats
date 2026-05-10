@@ -1,18 +1,31 @@
-import { createClient } from "@supabase/supabase-js";
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars");
-}
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Server-side admin client. Service role key bypasses RLS, which is what
 // we want — all reads/writes go through Next.js API routes that already
 // gate access. The anon key never touches data tables.
-export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+//
+// Lazy singleton: env vars are read on first call, NOT at module-import
+// time. Lets tests + tools import this file (for types, helpers) without
+// having to set env vars or stub them out.
+let _client: SupabaseClient | null = null;
+export function getSupabase(): SupabaseClient {
+  if (_client) return _client;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars");
+  }
+  _client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _client;
+}
+
+// Test-only: drop the cached client so a re-import-style test can re-init
+// with different env vars. No production caller should use this.
+export function _resetSupabaseForTests() {
+  _client = null;
+}
 
 export type Meal = {
   id: string;
@@ -35,7 +48,7 @@ export type Meal = {
 };
 
 export async function insertMeal(m: Meal) {
-  const { error } = await supabase.from("meals").insert(m);
+  const { error } = await getSupabase().from("meals").insert(m);
   if (error) throw new Error(`insertMeal: ${error.message}`);
 }
 
@@ -44,20 +57,20 @@ export async function deleteMeal(id: string) {
   // then drop the storage object alongside the DB row. Failures on the
   // storage side don't block the DB delete — orphan files are easy to
   // garbage-collect later.
-  const { data: row } = await supabase
+  const { data: row } = await getSupabase()
     .from("meals")
     .select("photo_filename")
     .eq("id", id)
     .maybeSingle();
   if (row?.photo_filename) {
-    await supabase.storage.from("photos").remove([row.photo_filename]).catch(() => {});
+    await getSupabase().storage.from("photos").remove([row.photo_filename]).catch(() => {});
   }
-  const { error } = await supabase.from("meals").delete().eq("id", id);
+  const { error } = await getSupabase().from("meals").delete().eq("id", id);
   if (error) throw new Error(`deleteMeal: ${error.message}`);
 }
 
 export async function getMeal(id: string): Promise<Meal | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("meals")
     .select("*")
     .eq("id", id)
@@ -67,7 +80,7 @@ export async function getMeal(id: string): Promise<Meal | null> {
 }
 
 export async function getMealsBetween(startMs: number, endMs: number): Promise<Meal[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("meals")
     .select("*")
     .gte("created_at", startMs)
@@ -94,7 +107,7 @@ export async function updateMealItems(
   itemsJson: string,
   totals: MealTotals
 ) {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from("meals")
     .update({ items_json: itemsJson, ...totals })
     .eq("id", id);
@@ -130,7 +143,7 @@ export async function upsertFoodMemory(items: UpsertableItem[]) {
     items
       .filter((i) => i && i.per_100g && i.name?.trim())
       .map((i) =>
-        supabase
+        getSupabase()
           .rpc("upsert_food_memory", {
             p_name_key: normalizeFoodName(i.name),
             p_display_name: i.name.trim(),
@@ -146,7 +159,7 @@ export async function upsertFoodMemory(items: UpsertableItem[]) {
 }
 
 export async function topFoodMemory(limit: number = 30): Promise<FoodMemory[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("food_memory")
     .select("*")
     .order("last_seen", { ascending: false })
@@ -187,7 +200,7 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
   start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - (daysBack - 1));
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("meals")
     .select(
       "created_at, items_json, plant_pct, sat_fat_g, soluble_fiber_g, calories, protein_g"
@@ -286,7 +299,7 @@ export async function getRecentMealsForContext(
   limit: number = 30
 ): Promise<MealSummary[]> {
   const since = Date.now() - daysBack * 24 * 3600 * 1000;
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("meals")
     .select("created_at, caption, meal_vibe, items_json")
     .gte("created_at", since)

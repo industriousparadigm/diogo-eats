@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Item, Meal } from "@/lib/types";
 import { colors, inputStyle, radii, textareaStyle } from "@/lib/styles";
 import { computeTotals } from "@/lib/computeTotals";
+import { deleteMeal, lookupFood, patchMealItems, talkFixMeal } from "@/lib/api";
 import { ItemRow } from "@/app/components/ItemRow";
 
 function safeParseItems(raw: string): Item[] {
@@ -67,19 +68,13 @@ export function EditPage({ meal }: { meal: Meal }) {
     if (!grams || grams <= 0) return setAddError("grams required");
     setAddBusy(true);
     try {
-      const r = await fetch("/api/lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "lookup failed");
+      const result = await lookupFood(name);
       const newItem: Item = {
         name,
         grams,
         confidence: "medium",
-        is_plant: !!j.is_plant,
-        per_100g: j.per_100g,
+        is_plant: result.is_plant,
+        per_100g: result.per_100g,
       };
       setItems((arr) => [...arr, newItem]);
       setAddName("");
@@ -99,17 +94,8 @@ export function EditPage({ meal }: { meal: Meal }) {
     setTalkError(null);
     setTalkHint(null);
     try {
-      const r = await fetch(`/api/meals/${meal.id}/talk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "fix failed");
-      if (!Array.isArray(j.items) || j.items.length === 0) {
-        throw new Error("got empty items back");
-      }
-      setItems(j.items);
+      const updated = await talkFixMeal(meal.id, message);
+      setItems(updated);
       setTalkMsg("");
       setTalkHint("updated — review, then save");
     } catch (err: any) {
@@ -127,13 +113,7 @@ export function EditPage({ meal }: { meal: Meal }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await fetch(`/api/meals/${meal.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "save failed");
+      await patchMealItems(meal.id, items);
       router.push("/");
       router.refresh();
     } catch (err: any) {
@@ -142,15 +122,11 @@ export function EditPage({ meal }: { meal: Meal }) {
     }
   }
 
-  async function deleteMeal() {
+  async function onDelete() {
     if (!confirm("Delete this meal?")) return;
     setBusy(true);
     try {
-      await fetch("/api/meals", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: meal.id }),
-      });
+      await deleteMeal(meal.id);
       router.push("/");
       router.refresh();
     } catch (err: any) {
@@ -212,7 +188,7 @@ export function EditPage({ meal }: { meal: Meal }) {
           {time.toUpperCase()}
         </div>
         <button
-          onClick={deleteMeal}
+          onClick={onDelete}
           disabled={busy}
           style={{
             background: "transparent",
