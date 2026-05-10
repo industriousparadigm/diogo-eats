@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Item, Meal } from "@/lib/types";
-import { colors, inputStyle, radii, textareaStyle } from "@/lib/styles";
+import { colors, inputStyle, radii } from "@/lib/styles";
 import { computeTotals } from "@/lib/computeTotals";
 import { deleteMeal, lookupFood, patchMealItems, talkFixMeal } from "@/lib/api";
+import { AutoGrowTextarea } from "@/app/components/AutoGrowTextarea";
 import { ItemRow } from "@/app/components/ItemRow";
 
 function safeParseItems(raw: string): Item[] {
@@ -293,7 +294,7 @@ export function EditPage({ meal }: { meal: Meal }) {
               <div style={{ fontSize: 11, color: colors.textSubtle, letterSpacing: 0.5 }}>
                 QUICK FIX — TELL CLAUDE
               </div>
-              <textarea
+              <AutoGrowTextarea
                 value={talkMsg}
                 onChange={(e) => setTalkMsg(e.target.value)}
                 placeholder="e.g. it's all plant / smaller portion / add olive oil"
@@ -305,8 +306,8 @@ export function EditPage({ meal }: { meal: Meal }) {
                     talkFix();
                   }
                 }}
-                rows={2}
-                style={{ ...textareaStyle, padding: "10px 12px", fontSize: 14 }}
+                minRows={2}
+                style={{ padding: "10px 12px", fontSize: 14 }}
               />
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button
@@ -357,14 +358,12 @@ export function EditPage({ meal }: { meal: Meal }) {
                     gap: 8,
                   }}
                 >
-                  <textarea
+                  <AutoGrowTextarea
                     autoFocus
                     value={addName}
                     placeholder="e.g. olive oil, avocado, salmon"
                     onChange={(e) => setAddName(e.target.value)}
                     disabled={addBusy}
-                    rows={1}
-                    style={textareaStyle}
                   />
                   <div style={{ display: "flex", gap: 8 }}>
                     <input

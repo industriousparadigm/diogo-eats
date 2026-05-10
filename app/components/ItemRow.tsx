@@ -1,7 +1,8 @@
 "use client";
 
-import { colors, textareaStyle } from "@/lib/styles";
+import { colors } from "@/lib/styles";
 import type { Item } from "@/lib/types";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 // One item row inside the meal-edit screen. Rendered as a card with two
 // rows: name + remove on top, grams + per-item nutrient summary below.
@@ -53,13 +54,11 @@ export function ItemRow({
             }}
           />
         )}
-        <textarea
+        <AutoGrowTextarea
           value={item.name}
           onChange={(e) => onName(e.target.value)}
           disabled={disabled}
-          rows={1}
           style={{
-            ...textareaStyle,
             padding: "8px 10px",
             fontSize: 14,
             flex: 1,

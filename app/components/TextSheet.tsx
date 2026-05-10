@@ -1,6 +1,6 @@
 "use client";
 
-import { inputStyle } from "@/lib/styles";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { PrimaryButton, SecondaryButton, SheetShell } from "./sheet";
 
 // Modal sheet for text-only meal logging. Used when the user wants to
@@ -24,20 +24,18 @@ export function TextSheet({
       <div style={{ fontSize: 12, color: "#71717a", letterSpacing: 0.5 }}>
         TYPE WHAT YOU ATE
       </div>
-      <textarea
+      <AutoGrowTextarea
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="e.g. two slices of peanut butter cake / a small bowl of oats with banana / takeout pasta with cream sauce"
         maxLength={1000}
         disabled={busy}
-        rows={5}
+        minRows={5}
         style={{
-          ...inputStyle,
           padding: "12px 14px",
           fontSize: 16,
           lineHeight: 1.4,
-          resize: "vertical",
           minHeight: 120,
         }}
       />

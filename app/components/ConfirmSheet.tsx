@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { textareaStyle } from "@/lib/styles";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { PrimaryButton, SecondaryButton, SheetShell } from "./sheet";
 
 // Modal sheet shown after the user picks one or more photos. They can
@@ -106,7 +106,7 @@ export function ConfirmSheet({
           </div>
         </>
       )}
-      <textarea
+      <AutoGrowTextarea
         autoFocus
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
@@ -117,8 +117,7 @@ export function ConfirmSheet({
         }
         maxLength={500}
         disabled={busy}
-        rows={2}
-        style={textareaStyle}
+        minRows={2}
       />
       <div style={{ display: "flex", gap: 8 }}>
         <SecondaryButton onClick={onCancel} disabled={busy}>
