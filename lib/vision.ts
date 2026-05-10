@@ -220,12 +220,16 @@ export async function parseMealPhoto(
   mediaType: "image/jpeg" | "image/png" | "image/webp",
   caption?: string,
   knownFoods?: KnownFood[],
-  recentMeals?: RecentMeal[]
+  recentMeals?: RecentMeal[],
+  isComposite?: boolean
 ): Promise<ParsedMeal> {
   const cleanCaption = caption?.trim();
+  const compositeHint = isComposite
+    ? "\n\nThis image is a vertical strip of multiple photos the user took for the same meal. Common patterns: (1) the meal itself plus nutrition labels of one or more components; (2) several nutrition labels of multiple ingredients combined into one dish. Use any nutrition-label panels for deterministic per-100g values; use the meal photo (if present) to estimate portions. Treat panels separated by black gaps as logically distinct photos of the same meal."
+    : "";
   const userText = cleanCaption
-    ? `Identify the items in this meal and return per-item nutrition.\n\nUser's note: "${cleanCaption}"`
-    : "Identify the items in this meal and return per-item nutrition.";
+    ? `Identify the items in this meal and return per-item nutrition.${compositeHint}\n\nUser's note: "${cleanCaption}"`
+    : `Identify the items in this meal and return per-item nutrition.${compositeHint}`;
 
   const response = await client.messages.create({
     model: "claude-opus-4-7",

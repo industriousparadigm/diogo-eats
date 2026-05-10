@@ -8,17 +8,64 @@ import sharp from "sharp";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Claude Vision caps base64 images at 5 MB. iPhone HEIC/JPG conversions
-// routinely produce 8-15 MB files. We always resize + re-encode to JPEG so
-// (a) the API call doesn't reject big originals, (b) stored photos stay
-// reasonable. 2048px max dim is well above what Vision needs (~1568 sweet
-// spot per Anthropic), so we're not losing useful detail.
-async function normalizePhoto(buf: Buffer): Promise<Buffer> {
+const MAX_PHOTOS = 4;
+const COMPOSITE_PANEL_WIDTH = 1500; // px each input is resized to
+const COMPOSITE_GAP = 8; // px between panels in the vertical strip
+
+// Single-photo normalize: EXIF rotation + max 2048 + JPEG 85. Used both as
+// a one-shot for solo uploads AND as the per-panel pre-step before
+// compositing multi-photo uploads.
+async function normalizePhoto(buf: Buffer, maxDim = 2048): Promise<Buffer> {
   return sharp(buf)
-    .rotate() // honor EXIF orientation
-    .resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
+    .rotate()
+    .resize(maxDim, maxDim, { fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 85 })
     .toBuffer();
+}
+
+// Vertically stack 2-4 photos into a single composite JPEG. Each input
+// gets resized to a common width so the strip stays clean; small dark gap
+// between panels makes boundaries unambiguous to Vision. Final composite
+// is capped at 2048 max dim for Claude's 5MB limit.
+async function compositeStrip(buffers: Buffer[]): Promise<Buffer> {
+  // Step 1: resize each panel to a common width and capture its height.
+  const panels = await Promise.all(
+    buffers.map(async (buf) => {
+      const out = await sharp(buf)
+        .rotate()
+        .resize({ width: COMPOSITE_PANEL_WIDTH, withoutEnlargement: false })
+        .jpeg({ quality: 88 })
+        .toBuffer();
+      const meta = await sharp(out).metadata();
+      return { buf: out, height: meta.height ?? 0 };
+    })
+  );
+
+  const totalHeight =
+    panels.reduce((sum, p) => sum + p.height, 0) + (panels.length - 1) * COMPOSITE_GAP;
+
+  // Step 2: layer panels onto a black canvas at calculated y offsets.
+  let y = 0;
+  const overlays = panels.map((p) => {
+    const top = y;
+    y += p.height + COMPOSITE_GAP;
+    return { input: p.buf, top, left: 0 };
+  });
+
+  const stitched = await sharp({
+    create: {
+      width: COMPOSITE_PANEL_WIDTH,
+      height: totalHeight,
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 },
+    },
+  })
+    .composite(overlays)
+    .jpeg({ quality: 85 })
+    .toBuffer();
+
+  // Step 3: clamp to 2048 max so we stay well inside Claude's 5MB cap.
+  return normalizePhoto(stitched, 2048);
 }
 
 async function knownFoodsFromMemory(): Promise<KnownFood[]> {
@@ -45,8 +92,20 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const file = form.get("photo") as File | null;
-    if (!file) return NextResponse.json({ error: "no photo" }, { status: 400 });
+
+    // Multi-photo support: the client may send 1-4 files under the same
+    // "photo" key. Single = parse as before; multi = composite first.
+    const allEntries = form.getAll("photo");
+    const files = allEntries.filter((e): e is File => e instanceof File);
+    if (files.length === 0) {
+      return NextResponse.json({ error: "no photo" }, { status: 400 });
+    }
+    if (files.length > MAX_PHOTOS) {
+      return NextResponse.json(
+        { error: `up to ${MAX_PHOTOS} photos per meal` },
+        { status: 400 }
+      );
+    }
 
     const rawCaption = form.get("caption");
     const caption =
@@ -54,10 +113,15 @@ export async function POST(req: Request) {
         ? rawCaption.trim().slice(0, 500)
         : null;
 
-    const rawBuf = Buffer.from(await file.arrayBuffer());
     let buf: Buffer;
     try {
-      buf = await normalizePhoto(rawBuf);
+      const rawBuffers = await Promise.all(
+        files.map(async (f) => Buffer.from(await f.arrayBuffer()))
+      );
+      buf =
+        rawBuffers.length === 1
+          ? await normalizePhoto(rawBuffers[0])
+          : await compositeStrip(rawBuffers);
     } catch (err: any) {
       console.error("photo normalize failed", err);
       return NextResponse.json(
@@ -79,7 +143,8 @@ export async function POST(req: Request) {
       "image/jpeg",
       caption ?? undefined,
       known,
-      recent
+      recent,
+      files.length > 1
     );
     const totals = totalsFromItems(parsed.items);
 

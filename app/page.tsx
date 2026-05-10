@@ -72,7 +72,10 @@ export default function Home() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // Multi-photo support: a meal can be 1-4 images (e.g. plate + nutrition
+  // labels). The /api/parse route stitches them server-side into one
+  // composite before sending to Vision, so it's still one Vision call.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [textMode, setTextMode] = useState(false);
@@ -105,26 +108,34 @@ export default function Home() {
   }
 
   function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     setError(null);
     setCaption("");
-    setPendingFile(file);
+    // Hard-cap at 4 to match server. Anything beyond gets dropped silently
+    // — the iOS chooser already discourages mass selection.
+    setPendingFiles(files.slice(0, 4));
   }
 
   function cancelPending() {
-    setPendingFile(null);
+    setPendingFiles([]);
     setCaption("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  function removePendingAt(idx: number) {
+    setPendingFiles((arr) => arr.filter((_, i) => i !== idx));
+  }
+
   async function submitPending() {
-    if (!pendingFile) return;
+    if (pendingFiles.length === 0) return;
     setBusy(true);
     setError(null);
     try {
       const fd = new FormData();
-      fd.append("photo", pendingFile);
+      // Server reads `form.getAll("photo")` so multiple values under the
+      // same key get composited into one image before Vision sees them.
+      for (const f of pendingFiles) fd.append("photo", f);
       if (caption.trim()) fd.append("caption", caption.trim());
       const r = await fetch("/api/parse", { method: "POST", body: fd });
       const j = await r.json();
@@ -134,7 +145,7 @@ export default function Home() {
       setViewDate(today);
       await loadMeals(today);
       setHistoryVersion((v) => v + 1);
-      setPendingFile(null);
+      setPendingFiles([]);
       setCaption("");
     } catch (err: any) {
       setError(err.message);
@@ -369,6 +380,7 @@ export default function Home() {
         id="photo-input"
         type="file"
         accept="image/*"
+        multiple
         onChange={onPhoto}
         style={{
           position: "absolute",
@@ -383,9 +395,10 @@ export default function Home() {
         }}
       />
 
-      {pendingFile && (
+      {pendingFiles.length > 0 && (
         <ConfirmSheet
-          file={pendingFile}
+          files={pendingFiles}
+          onRemoveAt={removePendingAt}
           caption={caption}
           setCaption={setCaption}
           busy={busy}
@@ -899,41 +912,116 @@ function ActionBar({
 }
 
 function ConfirmSheet({
-  file,
+  files,
+  onRemoveAt,
   caption,
   setCaption,
   busy,
   onCancel,
   onSubmit,
 }: {
-  file: File;
+  files: File[];
+  onRemoveAt: (idx: number) => void;
   caption: string;
   setCaption: (v: string) => void;
   busy: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+  // Object URLs for previews; revoked on unmount or file-list change.
+  const previewUrls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previewUrls.forEach(URL.revokeObjectURL), [previewUrls]);
+
+  const single = files.length === 1;
 
   return (
     <SheetShell onScrimClick={busy ? undefined : onCancel}>
-      <img
-        src={previewUrl}
-        alt="meal preview"
-        style={{
-          width: "100%",
-          maxHeight: 280,
-          objectFit: "cover",
-          borderRadius: 12,
-          background: "#18181b",
-        }}
-      />
+      {single ? (
+        <img
+          src={previewUrls[0]}
+          alt="meal preview"
+          style={{
+            width: "100%",
+            maxHeight: 280,
+            objectFit: "cover",
+            borderRadius: 12,
+            background: "#18181b",
+          }}
+        />
+      ) : (
+        <>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              overflowX: "auto",
+              paddingBottom: 4,
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            {previewUrls.map((url, i) => (
+              <div
+                key={i}
+                style={{
+                  position: "relative",
+                  flexShrink: 0,
+                  width: 120,
+                  height: 160,
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  background: "#18181b",
+                }}
+              >
+                <img
+                  src={url}
+                  alt={`photo ${i + 1}`}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+                <button
+                  onClick={() => onRemoveAt(i)}
+                  disabled={busy}
+                  aria-label={`remove photo ${i + 1}`}
+                  style={{
+                    position: "absolute",
+                    top: 4,
+                    right: 4,
+                    width: 24,
+                    height: 24,
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.65)",
+                    color: "#fff",
+                    fontSize: 14,
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "#71717a", lineHeight: 1.4 }}>
+            {files.length} photos will be combined into one image — same Vision
+            cost as a single photo. Add nutrition labels here for accuracy.
+          </div>
+        </>
+      )}
       <textarea
         autoFocus
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
-        placeholder="describe (optional) — e.g. at restaurant, small plate, low-sugar"
+        placeholder={
+          single
+            ? "describe (optional) — e.g. at restaurant, small plate, low-sugar"
+            : "describe (optional) — e.g. toast with guac + cottage cheese (labels included)"
+        }
         maxLength={500}
         disabled={busy}
         rows={2}
