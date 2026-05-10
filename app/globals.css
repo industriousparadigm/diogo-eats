@@ -68,3 +68,35 @@ textarea:focus-visible {
 .fade-in {
   animation: fadeInUp 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* Skeleton shimmer. Slow, dark, in-theme — a pulse rather than a flash.
+   Single hue (greens muted to grey) so it reads as quiet activity, never
+   urgency. Bg is the surface color; the moving highlight is one shade up. */
+@keyframes skeletonShimmer {
+  0% {
+    background-position: -160% 0;
+  }
+  100% {
+    background-position: 260% 0;
+  }
+}
+
+.skeleton {
+  background-color: #161618;
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(132, 204, 22, 0.045) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: skeletonShimmer 2.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

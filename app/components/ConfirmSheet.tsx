@@ -8,12 +8,15 @@ import { PrimaryButton, SecondaryButton, SheetShell } from "./sheet";
 // review the previews, optionally tweak caption, and either confirm or
 // cancel. Multi-photo state is supported here even though the server
 // stitches them — the user sees them as separate thumbnails for clarity.
+//
+// Submit closes the sheet immediately — the parse runs in the background
+// and a pending card appears in the meal list. No "thinking…" state here
+// any more; the visible work moves to the list.
 export function ConfirmSheet({
   files,
   onRemoveAt,
   caption,
   setCaption,
-  busy,
   onCancel,
   onSubmit,
 }: {
@@ -21,18 +24,16 @@ export function ConfirmSheet({
   onRemoveAt: (idx: number) => void;
   caption: string;
   setCaption: (v: string) => void;
-  busy: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  // Object URLs for previews; revoked on unmount or file-list change.
   const previewUrls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previewUrls.forEach(URL.revokeObjectURL), [previewUrls]);
 
   const single = files.length === 1;
 
   return (
-    <SheetShell onScrimClick={busy ? undefined : onCancel}>
+    <SheetShell onScrimClick={onCancel}>
       {single ? (
         <img
           src={previewUrls[0]}
@@ -76,7 +77,6 @@ export function ConfirmSheet({
                 />
                 <button
                   onClick={() => onRemoveAt(i)}
-                  disabled={busy}
                   aria-label={`remove photo ${i + 1}`}
                   style={{
                     position: "absolute",
@@ -116,15 +116,12 @@ export function ConfirmSheet({
             : "describe (optional) — e.g. toast with guac + cottage cheese (labels included)"
         }
         maxLength={500}
-        disabled={busy}
         minRows={2}
       />
       <div style={{ display: "flex", gap: 8 }}>
-        <SecondaryButton onClick={onCancel} disabled={busy}>
-          cancel
-        </SecondaryButton>
-        <PrimaryButton onClick={onSubmit} disabled={busy} flex>
-          {busy ? "reading the plate…" : "log it"}
+        <SecondaryButton onClick={onCancel}>cancel</SecondaryButton>
+        <PrimaryButton onClick={onSubmit} flex>
+          log it
         </PrimaryButton>
       </div>
     </SheetShell>

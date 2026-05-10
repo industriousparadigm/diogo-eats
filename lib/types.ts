@@ -63,6 +63,34 @@ export const TARGETS = {
   protein_g: 90,
 };
 
+// Client-only state for an in-flight log task. Never crosses the wire —
+// lives in the home page state until the LLM call resolves and the meal
+// row appears in the DB. The card UI uses this to show "reading the
+// plate…" with a real photo preview without blocking new uploads.
+//
+// `files` and `text` are kept on the task so the "try again" affordance
+// on a failed card can re-fire the same payload without forcing the
+// user to re-pick photos.
+export type PendingTask = {
+  id: string;
+  kind: "photo" | "text";
+  // For photo tasks: a preview object URL (must be revoked on cleanup).
+  previewUrl?: string;
+  // Original payload — kept so retry doesn't need a re-pick.
+  files?: File[];
+  // Optional caption text the user added in ConfirmSheet, shown faintly
+  // on the placeholder so they remember which one is which.
+  caption?: string;
+  // For text tasks: the typed-in description.
+  text?: string;
+  // Number of photos in the original submit (1..4). Renders a "+N more"
+  // badge on the preview when > 1.
+  photoCount?: number;
+  status: "processing" | "error";
+  errorMessage?: string;
+  startedAt: number;
+};
+
 // Diogo's anchor: cardiology retest with Sergio Machado Leite.
 // Used by the looking-back surface to show "X weeks to retest" gently.
 // Update this if the appointment moves.

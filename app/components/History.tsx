@@ -9,6 +9,7 @@ import { RollingHeadline } from "./RollingHeadline";
 import { SatFatTrend } from "./SatFatTrend";
 import { FiberTrend } from "./FiberTrend";
 import { RetestAnchor } from "./RetestAnchor";
+import { HistorySkeleton } from "./Skeleton";
 
 // The "looking back" surface. Fetches its own aggregates so the home page
 // doesn't have to thread state through. Re-fetches when `version` changes
@@ -42,7 +43,7 @@ export function History({
   }, [version]);
 
   if (aggs === null) {
-    return <Skeleton />;
+    return <HistorySkeleton />;
   }
 
   const totalLogged = aggs.filter((a) => a.meal_count > 0).length;
@@ -145,17 +146,3 @@ function FirstDaysCopy({ logged }: { logged: number }) {
   );
 }
 
-function Skeleton() {
-  return (
-    <div
-      aria-hidden
-      style={{
-        height: 280,
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 14,
-        opacity: 0.5,
-      }}
-    />
-  );
-}

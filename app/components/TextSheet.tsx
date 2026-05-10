@@ -6,21 +6,22 @@ import { PrimaryButton, SecondaryButton, SheetShell } from "./sheet";
 // Modal sheet for text-only meal logging. Used when the user wants to
 // describe a meal without a photo (e.g. retroactive logs, café snacks
 // without a label).
+//
+// Submit closes the sheet immediately — the parse runs in the background
+// and a pending card appears in the meal list.
 export function TextSheet({
   value,
   setValue,
-  busy,
   onCancel,
   onSubmit,
 }: {
   value: string;
   setValue: (v: string) => void;
-  busy: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
   return (
-    <SheetShell onScrimClick={busy ? undefined : onCancel}>
+    <SheetShell onScrimClick={onCancel}>
       <div style={{ fontSize: 12, color: "#71717a", letterSpacing: 0.5 }}>
         TYPE WHAT YOU ATE
       </div>
@@ -30,7 +31,6 @@ export function TextSheet({
         onChange={(e) => setValue(e.target.value)}
         placeholder="e.g. two slices of peanut butter cake / a small bowl of oats with banana / takeout pasta with cream sauce"
         maxLength={1000}
-        disabled={busy}
         minRows={5}
         style={{
           padding: "12px 14px",
@@ -44,11 +44,9 @@ export function TextSheet({
         restaurant” if eating out.
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <SecondaryButton onClick={onCancel} disabled={busy}>
-          cancel
-        </SecondaryButton>
-        <PrimaryButton onClick={onSubmit} disabled={busy || !value.trim()} flex>
-          {busy ? "thinking…" : "log it"}
+        <SecondaryButton onClick={onCancel}>cancel</SecondaryButton>
+        <PrimaryButton onClick={onSubmit} disabled={!value.trim()} flex>
+          log it
         </PrimaryButton>
       </div>
     </SheetShell>
