@@ -48,7 +48,7 @@ export function DailyHeadline({
   const wins: string[] = [];
   if (plantPct >= 80) wins.push("Plant-led day");
   else if (plantPct >= 60) wins.push("Plant-leaning");
-  else if (plantPct >= 40) wins.push("Mixed plate");
+  else if (plantPct >= 40) wins.push("Mixed day");
   else wins.push("Animal-led day");
 
   const fiber = totals.soluble_fiber_g;
@@ -59,7 +59,7 @@ export function DailyHeadline({
   const satRatio = totals.sat_fat_g / targets.sat_fat_g;
   const fatNote = satRatio >= 1.2 ? "Sat fat well over target" : null;
 
-  const mealLabel = meals.length === 1 ? "1 meal" : `${meals.length} meals`;
+  const mealLabel = meals.length === 1 ? "1 log" : `${meals.length} logs`;
   const dayPart = isToday
     ? "today"
     : viewDate.toLocaleDateString(undefined, {

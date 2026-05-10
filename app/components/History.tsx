@@ -140,7 +140,7 @@ function FirstDaysCopy({ logged }: { logged: number }) {
       }}
     >
       {logged === 0
-        ? "Just getting started. Log a few meals and the shape of your week will start showing up here."
+        ? "Just getting started. Log a few and you'll start seeing patterns here."
         : `${logged} day${logged === 1 ? "" : "s"} in. A few more and you'll start seeing patterns.`}
     </div>
   );

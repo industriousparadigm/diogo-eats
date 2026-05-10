@@ -372,7 +372,7 @@ export default function Home() {
             {!hasContent && (
               <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
                 {isToday
-                  ? "Nothing yet. Snap your first meal."
+                  ? "Nothing yet. Snap something to start."
                   : "Nothing logged that day."}
               </p>
             )}
