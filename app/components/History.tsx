@@ -17,10 +17,12 @@ export function History({
   version,
   selectedDate,
   onPickDate,
+  onOpenSettings,
 }: {
   version: number;
   selectedDate?: string;
   onPickDate: (ymd: string) => void;
+  onOpenSettings?: () => void;
 }) {
   const [aggs, setAggs] = useState<DayAggregate[] | null>(null);
 
@@ -96,6 +98,29 @@ export function History({
       )}
 
       <RetestAnchor />
+
+      {/* Settings used to live in the header but overlapped the next-day
+          arrow on iPhone. Moved here — discoverable when scrolled, never
+          in the way of primary actions. */}
+      {onOpenSettings && (
+        <button
+          onClick={onOpenSettings}
+          style={{
+            background: "transparent",
+            color: colors.textFaint,
+            fontSize: 12,
+            padding: "8px 12px",
+            margin: "0 auto",
+            display: "block",
+            border: "none",
+            cursor: "pointer",
+            letterSpacing: 0.3,
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          settings
+        </button>
+      )}
     </section>
   );
 }

@@ -262,21 +262,6 @@ export default function Home() {
         >
           ›
         </button>
-        <button
-          onClick={() => setSettingsOpen(true)}
-          aria-label="settings"
-          title="Settings"
-          style={{
-            ...dayNavBtnStyle,
-            fontSize: 16,
-            color: "#52525b",
-            position: "absolute",
-            right: 16,
-            top: 20,
-          }}
-        >
-          ⋯
-        </button>
       </header>
 
       {error && (
@@ -296,35 +281,18 @@ export default function Home() {
             version={historyVersion}
             selectedDate={ymd(viewDate)}
             onPickDate={(d) => setViewDate(new Date(d + "T00:00:00"))}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
           <div
             style={{
-              marginTop: 28,
-              padding: "20px 16px",
+              marginTop: 24,
+              padding: "12px 16px 32px",
               textAlign: "center",
               color: "#71717a",
               fontSize: 14,
-              lineHeight: 1.5,
             }}
           >
             Nothing yet today.
-            <button
-              onClick={() => setTextMode(true)}
-              disabled={busy}
-              style={{
-                display: "block",
-                margin: "12px auto 0",
-                background: "transparent",
-                color: "#a1a1aa",
-                fontSize: 13,
-                border: "none",
-                padding: 6,
-                cursor: "pointer",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              or type what you ate →
-            </button>
           </div>
         </>
       ) : (
@@ -373,27 +341,6 @@ export default function Home() {
           ))}
         </div>
 
-        {isToday && (
-          <button
-            onClick={() => setTextMode(true)}
-            disabled={busy}
-            style={{
-              background: "transparent",
-              color: "#71717a",
-              fontSize: 13,
-              padding: "20px 8px 8px",
-              margin: "12px auto 0",
-              display: "block",
-              textAlign: "center",
-              width: "100%",
-              border: "none",
-              cursor: "pointer",
-              WebkitTapHighlightColor: "transparent",
-            }}
-          >
-            or type what you ate →
-          </button>
-        )}
       </section>
 
       {/* Looking-back lives below today when today has meals (or you're
@@ -404,12 +351,19 @@ export default function Home() {
           version={historyVersion}
           selectedDate={ymd(viewDate)}
           onPickDate={(d) => setViewDate(new Date(d + "T00:00:00"))}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       </div>
         </>
       )}
 
-      {isToday && <FAB busy={busy} inputId="photo-input" />}
+      {isToday && (
+        <ActionBar
+          busy={busy}
+          inputId="photo-input"
+          onType={() => setTextMode(true)}
+        />
+      )}
       <input
         ref={fileInputRef}
         id="photo-input"
@@ -881,38 +835,66 @@ function MealCard({
   );
 }
 
-function FAB({ busy, inputId }: { busy: boolean; inputId: string }) {
-  const sharedStyle: React.CSSProperties = {
+// Bottom-fixed action bar. Two equally-weighted buttons: photo and write.
+// The single jade FAB used to occlude content when scrolled and quietly
+// nudged users toward photo even when the type-flow was the one they
+// wanted. Two equal buttons makes the choice symmetric.
+//
+// On a busy state (parse in progress) the bar collapses to a single
+// status indicator so neither input can fire mid-parse.
+function ActionBar({
+  busy,
+  inputId,
+  onType,
+}: {
+  busy: boolean;
+  inputId: string;
+  onType: () => void;
+}) {
+  const wrap: React.CSSProperties = {
     position: "fixed",
-    bottom: "max(32px, env(safe-area-inset-bottom))",
+    bottom: "max(28px, env(safe-area-inset-bottom))",
     left: "50%",
     transform: "translateX(-50%)",
-    width: 72,
-    height: 72,
+    display: "flex",
+    gap: 14,
+    zIndex: 40,
+  };
+  const btn: React.CSSProperties = {
+    width: 64,
+    height: 64,
     borderRadius: "50%",
     background: busy ? "#3f3f46" : "#65a30d",
     boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-    fontSize: 28,
+    fontSize: 26,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     cursor: busy ? "default" : "pointer",
     WebkitTapHighlightColor: "transparent",
     userSelect: "none",
-    zIndex: 40,
+    color: "#fff",
+    border: "none",
   };
 
   if (busy) {
     return (
-      <div role="status" aria-label="processing" style={sharedStyle}>
-        …
+      <div style={wrap}>
+        <div role="status" aria-label="processing" style={btn}>
+          …
+        </div>
       </div>
     );
   }
   return (
-    <label htmlFor={inputId} aria-label="snap meal" style={sharedStyle}>
-      📷
-    </label>
+    <div style={wrap}>
+      <label htmlFor={inputId} aria-label="snap meal" style={btn}>
+        📷
+      </label>
+      <button onClick={onType} aria-label="type a meal" style={btn}>
+        ✏️
+      </button>
+    </div>
   );
 }
 
