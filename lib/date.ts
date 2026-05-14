@@ -29,6 +29,29 @@ export function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
+// Compute a meal's created_at timestamp. Default is "now". If a valid
+// "YYYY-MM-DD" forDate is passed, the timestamp lands on that calendar
+// date at the current local time-of-day — so a meal backfilled to
+// yesterday at 8pm appears at 8pm yesterday, not at midnight. Future
+// dates fall back to now: the app never logs forward.
+export function createdAtFor(
+  forDate: string | null | undefined,
+  now: Date = new Date()
+): number {
+  if (!forDate || !/^\d{4}-\d{2}-\d{2}$/.test(forDate)) return now.getTime();
+  const [y, m, d] = forDate.split("-").map(Number);
+  const target = new Date(
+    y,
+    m - 1,
+    d,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+  return target.getTime() > now.getTime() ? now.getTime() : target.getTime();
+}
+
 // Human-readable relative-or-absolute label for the header.
 // Today / Yesterday for the close cases; weekday + month + day for older.
 export function dayLabel(d: Date, now: Date = new Date()): string {

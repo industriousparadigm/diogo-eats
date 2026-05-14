@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parseMealPhoto, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { uploadPhoto } from "@/lib/storage";
+import { createdAtFor } from "@/lib/date";
 import crypto from "crypto";
 import sharp from "sharp";
 
@@ -66,25 +67,6 @@ async function compositeStrip(buffers: Buffer[]): Promise<Buffer> {
 
   // Step 3: clamp to 2048 max so we stay well inside Claude's 5MB cap.
   return normalizePhoto(stitched, 2048);
-}
-
-// Compute a meal's created_at: "now" by default, or the chosen calendar
-// date with the current local time-of-day if the client passed for_date
-// (YYYY-MM-DD). Future dates fall back to now — we don't log forward.
-function createdAtFor(forDate: string | null): number {
-  if (!forDate) return Date.now();
-  const [y, m, d] = forDate.split("-").map(Number);
-  const now = new Date();
-  const target = new Date(
-    y,
-    m - 1,
-    d,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-    now.getMilliseconds()
-  );
-  return target.getTime() > Date.now() ? Date.now() : target.getTime();
 }
 
 async function knownFoodsFromMemory(): Promise<KnownFood[]> {

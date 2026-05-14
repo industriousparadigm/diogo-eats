@@ -1,28 +1,11 @@
 import { NextResponse } from "next/server";
 import { parseMealText, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
+import { createdAtFor } from "@/lib/date";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-// Mirrors the helper in /api/parse — kept duplicated rather than pulled
-// into lib/ since it's three lines and these are the only two callers.
-function createdAtFor(forDate: string | null): number {
-  if (!forDate) return Date.now();
-  const [y, m, d] = forDate.split("-").map(Number);
-  const now = new Date();
-  const target = new Date(
-    y,
-    m - 1,
-    d,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-    now.getMilliseconds()
-  );
-  return target.getTime() > Date.now() ? Date.now() : target.getTime();
-}
 
 async function knownFoodsFromMemory(): Promise<KnownFood[]> {
   const rows = await topFoodMemory(30);

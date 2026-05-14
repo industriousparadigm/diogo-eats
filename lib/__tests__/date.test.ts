@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { todayStart, ymd, parseYmd, isSameDay, dayLabel } from "../date";
+import { todayStart, ymd, parseYmd, isSameDay, dayLabel, createdAtFor } from "../date";
 
 describe("todayStart", () => {
   it("zeroes the time portion", () => {
@@ -49,6 +49,42 @@ describe("isSameDay", () => {
     expect(
       isSameDay(new Date("2026-05-08T23:59"), new Date("2026-05-09T00:01"))
     ).toBe(false);
+  });
+});
+
+describe("createdAtFor", () => {
+  const now = new Date(2026, 4, 14, 20, 30, 45, 0); // Thu 14 May 2026 20:30:45
+
+  it("returns now.getTime() when forDate is null/undefined/empty", () => {
+    expect(createdAtFor(null, now)).toBe(now.getTime());
+    expect(createdAtFor(undefined, now)).toBe(now.getTime());
+    expect(createdAtFor("", now)).toBe(now.getTime());
+  });
+
+  it("returns now.getTime() when forDate is malformed", () => {
+    expect(createdAtFor("not-a-date", now)).toBe(now.getTime());
+    expect(createdAtFor("2026-5-1", now)).toBe(now.getTime()); // unpadded
+    expect(createdAtFor("2026/05/14", now)).toBe(now.getTime()); // wrong sep
+  });
+
+  it("uses the chosen date with current time-of-day for past dates", () => {
+    const out = new Date(createdAtFor("2026-05-12", now));
+    expect(out.getFullYear()).toBe(2026);
+    expect(out.getMonth()).toBe(4);
+    expect(out.getDate()).toBe(12);
+    expect(out.getHours()).toBe(20);
+    expect(out.getMinutes()).toBe(30);
+    expect(out.getSeconds()).toBe(45);
+  });
+
+  it("falls back to now for future dates — never logs forward", () => {
+    expect(createdAtFor("2026-05-15", now)).toBe(now.getTime());
+    expect(createdAtFor("2030-01-01", now)).toBe(now.getTime());
+  });
+
+  it("logging for today returns the actual current timestamp", () => {
+    // forDate === today should be equivalent to passing null: same value.
+    expect(createdAtFor("2026-05-14", now)).toBe(now.getTime());
   });
 });
 
