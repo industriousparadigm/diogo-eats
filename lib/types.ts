@@ -94,7 +94,3 @@ export type PendingTask = {
   forDate?: string;
 };
 
-// Diogo's anchor: cardiology retest with Sergio Machado Leite.
-// Used by the looking-back surface to show "X weeks to retest" gently.
-// Update this if the appointment moves.
-export const RETEST_DATE = "2026-09-15";

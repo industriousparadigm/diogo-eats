@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { colors, plantColor } from "@/lib/styles";
 import type { DayAggregate } from "@/lib/types";
+import type { Flag } from "@/lib/overview";
+import { isPositiveFlag } from "@/lib/overview";
 import { visibleAggregates } from "@/lib/window";
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -41,12 +43,26 @@ export function CalendarHeatmap({
   aggregates,
   onPickDate,
   selectedDate,
+  flagsByDate,
+  windowDays,
 }: {
   aggregates: DayAggregate[];
   onPickDate: (ymd: string) => void;
   selectedDate?: string;
+  // When provided, each day cell renders a tiny corner dot — green for
+  // positive flags (plant-led, fiber-hit, etc.), amber for negative
+  // (over-target sat fat). Lets the overview surface flag patterns
+  // without changing the home calendar's behaviour.
+  flagsByDate?: Map<string, Flag[]>;
+  // Optional: when set, bypass the auto-window in visibleAggregates and
+  // show exactly the last `windowDays` of the data passed in. The
+  // overview page uses this to render the user-chosen window verbatim.
+  windowDays?: number;
 }) {
-  const grid = useMemo(() => buildWeekGrid(aggregates), [aggregates]);
+  const grid = useMemo(
+    () => buildWeekGrid(aggregates, windowDays),
+    [aggregates, windowDays]
+  );
 
   if (grid.weeks.length === 0) return null;
 
@@ -145,6 +161,7 @@ export function CalendarHeatmap({
                   agg={cell}
                   selected={cell.date === selectedDate}
                   onPick={() => onPickDate(cell.date)}
+                  flags={flagsByDate?.get(cell.date)}
                 />
               ) : (
                 <div
@@ -172,10 +189,12 @@ function Cell({
   agg,
   selected,
   onPick,
+  flags,
 }: {
   agg: DayAggregate;
   selected: boolean;
   onPick: () => void;
+  flags?: Flag[];
 }) {
   const hasMeals = agg.meal_count > 0;
   const bg = plantColor(agg.plant_pct, hasMeals);
@@ -185,16 +204,27 @@ function Cell({
     month: "short",
     day: "numeric",
   });
-  const label = hasMeals
+  const baseLabel = hasMeals
     ? `${friendly}: ${agg.meal_count} meal${agg.meal_count === 1 ? "" : "s"}, ${agg.plant_pct}% plant`
     : `${friendly}: no meals`;
+  // Negative flag wins precedence — if a day was both clean-ish and
+  // over the fat target, the warning is the more useful signal.
+  const negative = flags?.find((f) => !isPositiveFlag(f));
+  const positive = flags?.find((f) => isPositiveFlag(f));
+  const dotColor = negative
+    ? colors.warn
+    : positive
+      ? colors.accentBright
+      : null;
+  const dotLabel = flags?.length ? ` · ${flags.join(", ")}` : "";
   return (
     <button
       role="gridcell"
       onClick={onPick}
-      title={label}
-      aria-label={label}
+      title={baseLabel + dotLabel}
+      aria-label={baseLabel + dotLabel}
       style={{
+        position: "relative",
         width: CELL,
         height: CELL,
         borderRadius: 3,
@@ -206,7 +236,23 @@ function Cell({
         cursor: "pointer",
         transition: "transform 100ms ease, background 200ms ease",
       }}
-    />
+    >
+      {dotColor && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 2,
+            right: 2,
+            width: 5,
+            height: 5,
+            borderRadius: "50%",
+            background: dotColor,
+            boxShadow: "0 0 0 1px rgba(0,0,0,0.5)",
+          }}
+        />
+      )}
+    </button>
   );
 }
 
@@ -245,11 +291,15 @@ function Legend() {
 // Build the week-column grid for the visible window. Uses the same
 // window-derivation logic as the trend line so the calendar and trend
 // always show the same horizon. Pads to Sunday-Saturday boundaries so
-// each column is a full week visually.
-function buildWeekGrid(aggs: DayAggregate[]): {
+// each column is a full week visually. When `windowDays` is set, takes
+// the last N entries verbatim instead of running through visibleAggregates.
+function buildWeekGrid(
+  aggs: DayAggregate[],
+  windowDays?: number
+): {
   weeks: Array<Array<DayAggregate | null>>;
 } {
-  const visible = visibleAggregates(aggs);
+  const visible = windowDays != null ? aggs.slice(-windowDays) : visibleAggregates(aggs);
   if (visible.length === 0) return { weeks: [] };
 
   const byDate = new Map(visible.map((a) => [a.date, a]));

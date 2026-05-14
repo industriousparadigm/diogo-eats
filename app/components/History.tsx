@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { colors } from "@/lib/styles";
 import type { DayAggregate } from "@/lib/types";
 import { fetchStats } from "@/lib/api";
@@ -8,7 +9,6 @@ import { CalendarHeatmap } from "./CalendarHeatmap";
 import { RollingHeadline } from "./RollingHeadline";
 import { SatFatTrend } from "./SatFatTrend";
 import { FiberTrend } from "./FiberTrend";
-import { RetestAnchor } from "./RetestAnchor";
 import { HistorySkeleton } from "./Skeleton";
 
 // The "looking back" surface. Fetches its own aggregates so the home page
@@ -69,7 +69,16 @@ export function History({
           margin: 0,
         }}
       >
-        <span>LOOKING BACK</span>
+        <Link
+          href="/overview"
+          style={{
+            color: "inherit",
+            textDecoration: "none",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          LOOKING BACK →
+        </Link>
         <span style={{ flex: 1, height: 1, background: colors.border }} />
         <span style={{ color: colors.textFaint, letterSpacing: 0.5 }}>
           {totalLogged} day{totalLogged === 1 ? "" : "s"} logged
@@ -97,8 +106,6 @@ export function History({
           <SatFatTrend aggregates={aggs} />
         </>
       )}
-
-      <RetestAnchor />
 
       {/* Settings used to live in the header but overlapped the next-day
           arrow on iPhone. Moved here — discoverable when scrolled, never
