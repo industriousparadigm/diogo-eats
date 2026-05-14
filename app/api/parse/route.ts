@@ -68,6 +68,25 @@ async function compositeStrip(buffers: Buffer[]): Promise<Buffer> {
   return normalizePhoto(stitched, 2048);
 }
 
+// Compute a meal's created_at: "now" by default, or the chosen calendar
+// date with the current local time-of-day if the client passed for_date
+// (YYYY-MM-DD). Future dates fall back to now — we don't log forward.
+function createdAtFor(forDate: string | null): number {
+  if (!forDate) return Date.now();
+  const [y, m, d] = forDate.split("-").map(Number);
+  const now = new Date();
+  const target = new Date(
+    y,
+    m - 1,
+    d,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+  return target.getTime() > Date.now() ? Date.now() : target.getTime();
+}
+
 async function knownFoodsFromMemory(): Promise<KnownFood[]> {
   const rows = await topFoodMemory(30);
   return rows.map((m) => ({
@@ -113,6 +132,12 @@ export async function POST(req: Request) {
         ? rawCaption.trim().slice(0, 500)
         : null;
 
+    const rawForDate = form.get("for_date");
+    const forDate =
+      typeof rawForDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawForDate)
+        ? rawForDate
+        : null;
+
     let buf: Buffer;
     try {
       const rawBuffers = await Promise.all(
@@ -150,7 +175,7 @@ export async function POST(req: Request) {
 
     const meal = {
       id,
-      created_at: Date.now(),
+      created_at: createdAtFor(forDate),
       photo_filename: filename,
       items_json: JSON.stringify(parsed.items),
       ...totals,

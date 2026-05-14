@@ -94,9 +94,13 @@ async function resizeForUpload(file: File): Promise<Blob> {
   }
 }
 
+// `forDate` is an optional "YYYY-MM-DD" that backfills a log to a past day.
+// Server treats absence as "log for now"; presence means "use that calendar
+// date with the current local time-of-day as the meal's created_at".
 export async function parsePhoto(
   files: File[],
-  caption?: string
+  caption?: string,
+  forDate?: string
 ): Promise<Meal> {
   const fd = new FormData();
   for (const f of files) {
@@ -105,16 +109,17 @@ export async function parsePhoto(
     fd.append("photo", blob, name);
   }
   if (caption?.trim()) fd.append("caption", caption.trim());
+  if (forDate) fd.append("for_date", forDate);
   const r = await fetch("/api/parse", { method: "POST", body: fd });
   const j = await jsonOrThrow<{ meal: Meal }>(r, "parse failed");
   return j.meal;
 }
 
-export async function parseText(text: string): Promise<Meal> {
+export async function parseText(text: string, forDate?: string): Promise<Meal> {
   const r = await fetch("/api/parse-text", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, for_date: forDate }),
   });
   const j = await jsonOrThrow<{ meal: Meal }>(r, "parse-text failed");
   return j.meal;

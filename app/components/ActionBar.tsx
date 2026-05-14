@@ -9,9 +9,13 @@ import type React from "react";
 export function ActionBar({
   inputId,
   onType,
+  dayHint,
 }: {
   inputId: string;
   onType: () => void;
+  // When set, a small label renders above the buttons so the user knows
+  // the next log will land on a past day, not today.
+  dayHint?: string;
 }) {
   const wrap: React.CSSProperties = {
     position: "fixed",
@@ -19,8 +23,24 @@ export function ActionBar({
     left: "50%",
     transform: "translateX(-50%)",
     display: "flex",
-    gap: 14,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 10,
     zIndex: 40,
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    gap: 14,
+  };
+  const hint: React.CSSProperties = {
+    fontSize: 11,
+    color: "#a3a3a3",
+    background: "rgba(15,15,17,0.85)",
+    padding: "4px 10px",
+    borderRadius: 999,
+    letterSpacing: 0.5,
+    backdropFilter: "blur(6px)",
+    WebkitBackdropFilter: "blur(6px)",
   };
   const btn: React.CSSProperties = {
     width: 64,
@@ -41,12 +61,15 @@ export function ActionBar({
 
   return (
     <div style={wrap}>
-      <label htmlFor={inputId} aria-label="snap meal" style={btn}>
-        📷
-      </label>
-      <button onClick={onType} aria-label="type a meal" style={btn}>
-        ✏️
-      </button>
+      {dayHint && <div style={hint}>Logging for {dayHint}</div>}
+      <div style={row}>
+        <label htmlFor={inputId} aria-label="snap meal" style={btn}>
+          📷
+        </label>
+        <button onClick={onType} aria-label="type a meal" style={btn}>
+          ✏️
+        </button>
+      </div>
     </div>
   );
 }

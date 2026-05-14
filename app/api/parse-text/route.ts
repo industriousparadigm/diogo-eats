@@ -6,6 +6,24 @@ import crypto from "crypto";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// Mirrors the helper in /api/parse — kept duplicated rather than pulled
+// into lib/ since it's three lines and these are the only two callers.
+function createdAtFor(forDate: string | null): number {
+  if (!forDate) return Date.now();
+  const [y, m, d] = forDate.split("-").map(Number);
+  const now = new Date();
+  const target = new Date(
+    y,
+    m - 1,
+    d,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+  return target.getTime() > Date.now() ? Date.now() : target.getTime();
+}
+
 async function knownFoodsFromMemory(): Promise<KnownFood[]> {
   const rows = await topFoodMemory(30);
   return rows.map((m) => ({
@@ -32,6 +50,12 @@ export async function POST(req: Request) {
       typeof rawText === "string" && rawText.trim() ? rawText.trim().slice(0, 1000) : "";
     if (!text) return NextResponse.json({ error: "text required" }, { status: 400 });
 
+    const rawForDate = (body as { for_date?: unknown })?.for_date;
+    const forDate =
+      typeof rawForDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawForDate)
+        ? rawForDate
+        : null;
+
     const [known, recent] = await Promise.all([
       knownFoodsFromMemory(),
       recentMealsForContext(),
@@ -42,7 +66,7 @@ export async function POST(req: Request) {
 
     const meal = {
       id,
-      created_at: Date.now(),
+      created_at: createdAtFor(forDate),
       photo_filename: null,
       items_json: JSON.stringify(parsed.items),
       ...totals,

@@ -24,6 +24,14 @@ import type { Meal, PendingTask } from "@/lib/types";
 export default function Home() {
   const router = useRouter();
   const [viewDate, setViewDate] = useState<Date>(() => todayStart());
+  // Mirrors `viewDate` for reading inside async closures (processTask
+  // resolves after the user may have navigated to a different day). The
+  // closure-captured `viewDate` would otherwise refer to the day at fire
+  // time, not the day they're looking at when the LLM call returns.
+  const viewDateRef = useRef(viewDate);
+  useEffect(() => {
+    viewDateRef.current = viewDate;
+  }, [viewDate]);
   // null = "haven't loaded yet for this view" → render skeleton.
   // [] = "loaded, day was empty" → render the empty-day surfaces.
   const [meals, setMeals] = useState<Meal[] | null>(null);
@@ -104,9 +112,9 @@ export default function Home() {
   async function processTask(task: PendingTask) {
     try {
       if (task.kind === "photo") {
-        await parsePhoto(task.files ?? [], task.caption);
+        await parsePhoto(task.files ?? [], task.caption, task.forDate);
       } else {
-        await parseText(task.text ?? "");
+        await parseText(task.text ?? "", task.forDate);
       }
       setPendingTasks((arr) => {
         const idx = arr.findIndex((t) => t.id === task.id);
@@ -115,14 +123,11 @@ export default function Home() {
         if (t.previewUrl) URL.revokeObjectURL(t.previewUrl);
         return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
       });
-      // Silent reload so the new meal pops in without flashing the
-      // skeleton over everything else still on screen.
-      const today = todayStart();
-      // Only force-jump to today if user is currently viewing today.
-      // Don't yank them back if they navigated to a past day to read.
-      if (isSameDay(viewDate, today)) {
-        await loadMeals(today, { silent: true });
-      }
+      // Silent reload of whatever day the user is currently on. The new
+      // meal lives on `task.forDate` (today if undefined); if that's the
+      // current view it'll appear, otherwise the history calendar bump
+      // below is enough — they'll see it next time they navigate there.
+      await loadMeals(viewDateRef.current, { silent: true });
       setHistoryVersion((v) => v + 1);
     } catch (err: any) {
       setPendingTasks((arr) =>
@@ -147,6 +152,7 @@ export default function Home() {
     const files = pendingFiles.slice();
     const cap = caption.trim();
     const previewUrl = URL.createObjectURL(files[0]);
+    const forDate = isToday ? undefined : ymd(viewDate);
     const task: PendingTask = {
       id: crypto.randomUUID(),
       kind: "photo",
@@ -156,11 +162,10 @@ export default function Home() {
       photoCount: files.length,
       status: "processing",
       startedAt: Date.now(),
+      forDate,
     };
     setPendingTasks((arr) => [...arr, task]);
 
-    // Snap to today so the new card is visible. Cleared sheet state.
-    if (!isSameDay(viewDate, todayStart())) setViewDate(todayStart());
     setPendingFiles([]);
     setCaption("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -173,16 +178,17 @@ export default function Home() {
     const text = textInput.trim();
     if (!text) return;
     setError(null);
+    const forDate = isToday ? undefined : ymd(viewDate);
     const task: PendingTask = {
       id: crypto.randomUUID(),
       kind: "text",
       text,
       status: "processing",
       startedAt: Date.now(),
+      forDate,
     };
     setPendingTasks((arr) => [...arr, task]);
 
-    if (!isSameDay(viewDate, todayStart())) setViewDate(todayStart());
     setTextInput("");
     setTextMode(false);
 
@@ -256,12 +262,14 @@ export default function Home() {
     ? Math.round(totals.plant_pct_sum / mealList.length)
     : 0;
 
-  // Pending cards only show on today's view — the meal is always
-  // logged with a "now" timestamp, so showing it on a past day would
-  // be misleading. Newest first so the most recent action is on top.
-  const visiblePending = isToday
-    ? [...pendingTasks].reverse()
-    : ([] as PendingTask[]);
+  // Show pending cards on the day they're being logged for. Tasks with
+  // no forDate are implicitly "today". Newest first so the most recent
+  // action is on top.
+  const viewYmd = ymd(viewDate);
+  const todayYmd = ymd(todayStart());
+  const visiblePending = [...pendingTasks]
+    .filter((t) => (t.forDate ?? todayYmd) === viewYmd)
+    .reverse();
   const hasContent = mealList.length > 0 || visiblePending.length > 0;
 
   return (
@@ -407,9 +415,12 @@ export default function Home() {
         </>
       )}
 
-      {isToday && (
-        <ActionBar inputId="photo-input" onType={() => setTextMode(true)} />
-      )}
+      <ActionBar
+        inputId="photo-input"
+        onType={() => setTextMode(true)}
+        dayHint={isToday ? undefined : dayLabel(viewDate)}
+      />
+
       <input
         ref={fileInputRef}
         id="photo-input"

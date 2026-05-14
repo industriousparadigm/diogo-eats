@@ -89,6 +89,9 @@ export type PendingTask = {
   status: "processing" | "error";
   errorMessage?: string;
   startedAt: number;
+  // YYYY-MM-DD. Set when the task is for a past day; undefined means today.
+  // Drives which day's column the pending card appears in.
+  forDate?: string;
 };
 
 // Diogo's anchor: cardiology retest with Sergio Machado Leite.
