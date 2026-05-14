@@ -377,11 +377,14 @@ export default function Home() {
               <span>{isToday ? "TODAY" : dayLabel(viewDate).toUpperCase()}</span>
               <span style={{ flex: 1, height: 1, background: "#1f1f22" }} />
             </h2>
-            {!hasContent && (
+            {!hasContent && isToday && (
               <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
-                {isToday
-                  ? "Nothing yet. Snap something to start."
-                  : "Nothing logged that day."}
+                Nothing yet. Snap something to start.
+              </p>
+            )}
+            {!hasContent && !isToday && (
+              <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
+                Add one with the buttons below.
               </p>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
