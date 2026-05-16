@@ -8,6 +8,7 @@ import { computeTotals } from "@/lib/computeTotals";
 import { deleteMeal, lookupFood, patchMealItems, talkFixMeal } from "@/lib/api";
 import { AutoGrowTextarea } from "@/app/components/AutoGrowTextarea";
 import { ItemRow } from "@/app/components/ItemRow";
+import { PhotoLightbox } from "@/app/components/PhotoLightbox";
 
 function safeParseItems(raw: string): Item[] {
   try {
@@ -41,6 +42,14 @@ export function EditPage({ meal }: { meal: Meal }) {
   const [addGrams, setAddGrams] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Optional override of created_at. When the user opens "edit time",
+  // we seed this with the meal's current timestamp (datetime-local
+  // string). Empty string = no override.
+  const [customTime, setCustomTime] = useState<string>("");
+  const [editingTime, setEditingTime] = useState(false);
 
   const [talkMsg, setTalkMsg] = useState("");
   const [talkBusy, setTalkBusy] = useState(false);
@@ -114,7 +123,17 @@ export function EditPage({ meal }: { meal: Meal }) {
     setBusy(true);
     setError(null);
     try {
-      await patchMealItems(meal.id, items);
+      // If the user edited the time, parse the datetime-local string in
+      // their LOCAL timezone (no Z suffix means local), then forward.
+      // Server validates not-in-future and not-older-than-a-year.
+      let createdAt: number | undefined;
+      if (customTime) {
+        const parsed = new Date(customTime).getTime();
+        if (Number.isFinite(parsed) && parsed !== meal.created_at) {
+          createdAt = parsed;
+        }
+      }
+      await patchMealItems(meal.id, items, createdAt);
       router.push("/");
       router.refresh();
     } catch (err: any) {
@@ -136,16 +155,31 @@ export function EditPage({ meal }: { meal: Meal }) {
     }
   }
 
-  const dirty = JSON.stringify(items) !== JSON.stringify(original);
+  const itemsDirty = JSON.stringify(items) !== JSON.stringify(original);
+  const timeDirty =
+    !!customTime &&
+    Number.isFinite(new Date(customTime).getTime()) &&
+    new Date(customTime).getTime() !== meal.created_at;
+  const dirty = itemsDirty || timeDirty;
   const canSave = !busy && !addBusy && !talkBusy && items.length > 0 && dirty;
 
-  const time = new Date(meal.created_at).toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const isBackfill = (() => {
+    const d = new Date(meal.created_at);
+    return d.getHours() === 23 && d.getMinutes() === 59 && d.getSeconds() === 59;
+  })();
+  const time = isBackfill
+    ? new Date(meal.created_at).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }) + " · added later"
+    : new Date(meal.created_at).toLocaleString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
 
   return (
     <main
@@ -185,8 +219,62 @@ export function EditPage({ meal }: { meal: Meal }) {
         >
           ‹
         </button>
-        <div style={{ flex: 1, fontSize: 13, color: colors.textMuted, letterSpacing: 0.5 }}>
-          {time.toUpperCase()}
+        <div
+          style={{
+            flex: 1,
+            fontSize: 13,
+            color: colors.textMuted,
+            letterSpacing: 0.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          {editingTime ? (
+            <input
+              type="datetime-local"
+              value={customTime || toDatetimeLocal(meal.created_at)}
+              max={toDatetimeLocal(Date.now())}
+              onChange={(e) => setCustomTime(e.target.value)}
+              style={{
+                background: colors.surfaceMuted,
+                color: colors.text,
+                border: `1px solid ${colors.borderStrong}`,
+                borderRadius: 6,
+                padding: "6px 8px",
+                fontSize: 13,
+              }}
+            />
+          ) : (
+            <span>{time.toUpperCase()}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (editingTime) {
+                setEditingTime(false);
+                setCustomTime("");
+              } else {
+                setEditingTime(true);
+                setCustomTime(toDatetimeLocal(meal.created_at));
+              }
+            }}
+            aria-label={editingTime ? "cancel time edit" : "edit time"}
+            style={{
+              background: "transparent",
+              color: colors.textFaint,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 999,
+              padding: "2px 8px",
+              fontSize: 10,
+              letterSpacing: 0.5,
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >
+            {editingTime ? "revert" : "edit"}
+          </button>
         </div>
         <button
           onClick={onDelete}
@@ -204,17 +292,32 @@ export function EditPage({ meal }: { meal: Meal }) {
 
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
         {meal.photo_filename && (
-          <img
-            src={`/api/photo/${meal.photo_filename}`}
-            alt=""
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            aria-label="open photo full-size"
             style={{
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "zoom-in",
+              display: "block",
               width: "100%",
-              maxHeight: "60vh",
-              objectFit: "contain",
-              borderRadius: radii.md,
-              background: colors.surfaceMuted,
             }}
-          />
+          >
+            <img
+              src={`/api/photo/${meal.photo_filename}`}
+              alt=""
+              style={{
+                width: "100%",
+                maxHeight: "60vh",
+                objectFit: "contain",
+                borderRadius: radii.md,
+                background: colors.surfaceMuted,
+                display: "block",
+              }}
+            />
+          </button>
         )}
 
         {meal.caption && (
@@ -448,6 +551,13 @@ export function EditPage({ meal }: { meal: Meal }) {
         )}
       </div>
 
+      {lightboxOpen && meal.photo_filename && (
+        <PhotoLightbox
+          src={`/api/photo/${meal.photo_filename}`}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+
       {!isLegacy && (
         <div
           style={{
@@ -515,6 +625,14 @@ export function EditPage({ meal }: { meal: Meal }) {
       )}
     </main>
   );
+}
+
+// HTML datetime-local expects "YYYY-MM-DDTHH:MM" with no timezone — it's
+// implicitly the user's local time. Format from epoch ms.
+function toDatetimeLocal(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function LiveStat({ label, value }: { label: string; value: string }) {

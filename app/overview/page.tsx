@@ -10,7 +10,7 @@ import { useTargets } from "@/lib/targets";
 import { flagsForDay, isPositiveFlag, windowAverages, summarySentence, type Flag } from "@/lib/overview";
 import type { DayAggregate } from "@/lib/types";
 import { CalendarHeatmap } from "../components/CalendarHeatmap";
-import { MetricTrend } from "../components/MetricTrend";
+import { DayBarChart } from "../components/DayBarChart";
 import { OverviewHero } from "../components/OverviewHero";
 import { Streaks } from "../components/Streaks";
 import { WindowToggle } from "../components/WindowToggle";
@@ -119,37 +119,41 @@ export default function OverviewPage() {
 
           {averages.logged_days >= 2 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <MetricTrend
+              <DayBarChart
                 aggregates={visible}
-                title="PLANT SHARE"
+                title="PLANT SHARE · PER DAY"
                 accessor={(a) => a.plant_pct}
                 target={undefined}
                 direction="above_good"
                 format={(v) => `${Math.round(v)}%`}
+                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
-              <MetricTrend
+              <DayBarChart
                 aggregates={visible}
-                title="SOLUBLE FIBER"
+                title="SOLUBLE FIBER · PER DAY"
                 accessor={(a) => a.soluble_fiber_g}
                 target={targets.soluble_fiber_g}
                 direction="above_good"
                 format={(v) => `${v.toFixed(1)}g`}
+                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
-              <MetricTrend
+              <DayBarChart
                 aggregates={visible}
-                title="SAT FAT"
+                title="SAT FAT · PER DAY"
                 accessor={(a) => a.sat_fat_g}
                 target={targets.sat_fat_g}
                 direction="below_good"
                 format={(v) => `${v.toFixed(1)}g`}
+                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
-              <MetricTrend
+              <DayBarChart
                 aggregates={visible}
-                title="CALORIES"
+                title="CALORIES · PER DAY"
                 accessor={(a) => a.calories}
                 target={targets.calories}
                 direction="below_good"
                 format={(v) => `${Math.round(v)}`}
+                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
             </div>
           )}

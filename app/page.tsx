@@ -12,6 +12,7 @@ import { Pulse } from "./components/Pulse";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { HomeSkeleton } from "./components/Skeleton";
 import { TextSheet } from "./components/TextSheet";
+import { CopyDayButton } from "./components/CopyDayButton";
 import { todayStart, ymd, isSameDay, dayLabel } from "@/lib/date";
 import {
   deleteMeal as apiDeleteMeal,
@@ -104,6 +105,10 @@ export default function Home() {
 
   function removePendingAt(idx: number) {
     setPendingFiles((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  function replacePendingAt(idx: number, file: File) {
+    setPendingFiles((arr) => arr.map((f, i) => (i === idx ? file : f)));
   }
 
   // Drives one in-flight task to completion. Resolves silently — errors
@@ -376,6 +381,9 @@ export default function Home() {
             >
               <span>{isToday ? "TODAY" : dayLabel(viewDate).toUpperCase()}</span>
               <span style={{ flex: 1, height: 1, background: "#1f1f22" }} />
+              {mealList.length > 0 && (
+                <CopyDayButton meals={mealList} date={viewDate} />
+              )}
             </h2>
             {!hasContent && isToday && (
               <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
@@ -448,6 +456,7 @@ export default function Home() {
         <ConfirmSheet
           files={pendingFiles}
           onRemoveAt={removePendingAt}
+          onReplaceAt={replacePendingAt}
           caption={caption}
           setCaption={setCaption}
           onCancel={cancelPending}

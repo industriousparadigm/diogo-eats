@@ -67,14 +67,29 @@ describe("createdAtFor", () => {
     expect(createdAtFor("2026/05/14", now)).toBe(now.getTime()); // wrong sep
   });
 
-  it("uses the chosen date with current time-of-day for past dates", () => {
+  it("anchors past-day backfills to the last second of the chosen day", () => {
     const out = new Date(createdAtFor("2026-05-12", now));
     expect(out.getFullYear()).toBe(2026);
     expect(out.getMonth()).toBe(4);
     expect(out.getDate()).toBe(12);
-    expect(out.getHours()).toBe(20);
-    expect(out.getMinutes()).toBe(30);
-    expect(out.getSeconds()).toBe(45);
+    expect(out.getHours()).toBe(23);
+    expect(out.getMinutes()).toBe(59);
+    expect(out.getSeconds()).toBe(59);
+  });
+
+  it("preserves stable ordering between two same-day backfills made at different real times", () => {
+    const morningNow = new Date(2026, 4, 14, 8, 0, 0, 0); // 8am today
+    const eveningNow = new Date(2026, 4, 14, 22, 0, 0, 0); // 10pm today
+    const a = createdAtFor("2026-05-12", morningNow);
+    const b = createdAtFor("2026-05-12", eveningNow);
+    // Later real-time today → larger timestamp on the past day, so
+    // the meal entered later sorts higher in the day's list.
+    expect(b).toBeGreaterThan(a);
+    // Both still inside the last second of 2026-05-12.
+    expect(new Date(a).getHours()).toBe(23);
+    expect(new Date(b).getHours()).toBe(23);
+    expect(new Date(a).getMinutes()).toBe(59);
+    expect(new Date(b).getMinutes()).toBe(59);
   });
 
   it("falls back to now for future dates — never logs forward", () => {

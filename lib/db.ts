@@ -114,6 +114,14 @@ export async function updateMealItems(
   if (error) throw new Error(`updateMealItems: ${error.message}`);
 }
 
+export async function updateMealCreatedAt(id: string, createdAt: number) {
+  const { error } = await getSupabase()
+    .from("meals")
+    .update({ created_at: createdAt })
+    .eq("id", id);
+  if (error) throw new Error(`updateMealCreatedAt: ${error.message}`);
+}
+
 // ---- food memory ----
 
 export type FoodMemory = {

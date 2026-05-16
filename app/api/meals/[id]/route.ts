@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getMeal, updateMealItems, upsertFoodMemory } from "@/lib/db";
+import {
+  getMeal,
+  updateMealCreatedAt,
+  updateMealItems,
+  upsertFoodMemory,
+} from "@/lib/db";
 import { Item, totalsFromItems } from "@/lib/vision";
 import { isValidItem } from "@/lib/validate";
 
@@ -37,6 +42,19 @@ export async function PATCH(
   const items = itemsRaw as Item[];
   const totals = totalsFromItems(items);
   await updateMealItems(id, JSON.stringify(items), totals);
+
+  // Optional created_at override — lets the user fix a wrong time after
+  // the fact (e.g. promote an "added later" backfill to a real clock
+  // time). Validated as a finite number, not in the future, not older
+  // than a year. Anything else is silently ignored.
+  const rawCreatedAt = (body as { created_at?: unknown })?.created_at;
+  if (typeof rawCreatedAt === "number" && Number.isFinite(rawCreatedAt)) {
+    const now = Date.now();
+    const oneYearAgo = now - 366 * 24 * 3600 * 1000;
+    if (rawCreatedAt > oneYearAgo && rawCreatedAt <= now) {
+      await updateMealCreatedAt(id, Math.floor(rawCreatedAt));
+    }
+  }
 
   // Save these now-validated items to long-term food memory so future parses
   // recognize them automatically. Only items the user has reviewed/saved

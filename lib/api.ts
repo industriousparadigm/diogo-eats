@@ -37,11 +37,17 @@ export async function deleteMeal(id: string): Promise<void> {
   await jsonOrThrow<{ ok: true }>(r, "delete failed");
 }
 
-export async function patchMealItems(id: string, items: Item[]): Promise<Meal> {
+export async function patchMealItems(
+  id: string,
+  items: Item[],
+  createdAt?: number
+): Promise<Meal> {
   const r = await fetch(`/api/meals/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify(
+      createdAt != null ? { items, created_at: createdAt } : { items }
+    ),
   });
   const j = await jsonOrThrow<{ meal: Meal }>(r, "save failed");
   return j.meal;

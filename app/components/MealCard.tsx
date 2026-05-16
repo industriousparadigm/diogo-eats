@@ -1,6 +1,7 @@
 "use client";
 
 import type { Item, Meal } from "@/lib/types";
+import { isBackfillCreatedAt } from "@/lib/dayReport";
 
 function safeParseItems(raw: string): Item[] {
   try {
@@ -28,10 +29,13 @@ export function MealCard({
   onEdit: () => void;
 }) {
   const items = safeParseItems(meal.items_json);
-  const time = new Date(meal.created_at).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const isBackfill = isBackfillCreatedAt(meal.created_at);
+  const time = isBackfill
+    ? "added later"
+    : new Date(meal.created_at).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
   const lowOrMed = items.some((i) => i.confidence !== "high");
   const isLegacy = items.length > 0 && items[0].per_100g === undefined;
 
