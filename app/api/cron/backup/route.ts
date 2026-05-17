@@ -63,9 +63,11 @@ export async function GET(req: Request) {
       food_memory: memory ?? [],
     };
 
+    // Private store: blobs require auth to download. /api/admin/backups
+    // mediates downloads server-side using the same token.
     const filename = `eats-backups/meals-backup-${iso}.json`;
     const { url: blobUrl, pathname } = await put(filename, JSON.stringify(payload), {
-      access: "public", // public URL — random suffix in path makes it un-enumerable
+      access: "private",
       contentType: "application/json",
       token: blobToken,
       addRandomSuffix: true,
