@@ -4,7 +4,7 @@ out
 .env
 .env.local
 data/
-backups/
+/backups/
 *.log
 .DS_Store
 .vercel
