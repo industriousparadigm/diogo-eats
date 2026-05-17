@@ -7,7 +7,7 @@ import {
 } from "@/lib/db";
 import { Item, totalsFromItems } from "@/lib/vision";
 import { isValidItem } from "@/lib/validate";
-import { ownerUserId } from "@/lib/user";
+import { requireUser } from "@/lib/user";
 
 export const runtime = "nodejs";
 
@@ -15,9 +15,20 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let userId: string;
+  try {
+    ({ userId } = await requireUser());
+  } catch (resp) {
+    if (resp instanceof NextResponse) return resp;
+    throw resp;
+  }
+
   const { id } = await params;
   const meal = await getMeal(id);
   if (!meal) return NextResponse.json({ error: "meal not found" }, { status: 404 });
+  if ((meal as { user_id?: string }).user_id !== userId) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   let body: unknown;
   try {
@@ -60,7 +71,7 @@ export async function PATCH(
   // Save these now-validated items to long-term food memory so future parses
   // recognize them automatically. Only items the user has reviewed/saved
   // make it here, which keeps memory high-signal.
-  await upsertFoodMemory(ownerUserId(), items);
+  await upsertFoodMemory(userId, items);
 
   const updated = await getMeal(id);
   return NextResponse.json({ meal: updated });

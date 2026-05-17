@@ -1,12 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Refreshes the Supabase session on every request, mirroring the
-// reference setup from Supabase's Next.js docs. Without this, expired
-// access tokens silently log users out mid-session.
+// Session refresh + protected-route gating.
 //
-// No route gating yet — Phase 3 adds the redirect-if-unauthenticated
-// logic in tandem with RLS. For now this just keeps the session alive.
+// - Refreshes the Supabase session on every request (token rotation).
+// - Redirects unauthenticated browsers to /login on protected UI routes.
+// - API routes still surface 401 themselves (more granular control over
+//   what protected vs not), so middleware doesn't 401 the API surface.
+
+const PUBLIC_PATHS = new Set<string>([
+  "/login",
+  "/auth/callback",
+]);
+
+const PUBLIC_API_PREFIXES = [
+  "/api/auth/", // magic-link send, sign-out
+  "/api/cron/", // secret-gated, doesn't use session
+  "/api/admin/", // secret-gated
+];
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
 
@@ -28,16 +40,28 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // Triggers a token refresh if needed and propagates the new cookies
-  // through the response.
-  await supa.auth.getUser();
+  const { data } = await supa.auth.getUser();
+  const isAuthed = !!data?.user;
 
+  const path = req.nextUrl.pathname;
+  const isPublicUi = PUBLIC_PATHS.has(path);
+  const isPublicApi = PUBLIC_API_PREFIXES.some((p) => path.startsWith(p));
+  const isApi = path.startsWith("/api/");
+
+  // Unauthenticated UI hit on a protected route → redirect to /login.
+  if (!isAuthed && !isPublicUi && !isApi) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Public APIs and authed traffic pass through normally.
+  void isPublicApi;
   return res;
 }
 
 export const config = {
-  // Skip static assets + framework internals. Everything else gets the
-  // session refresh.
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|gif|woff2|ico)$).*)",
   ],

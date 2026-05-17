@@ -3,7 +3,7 @@ import { parseMealPhoto, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vi
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { uploadPhoto } from "@/lib/storage";
 import { createdAtFor } from "@/lib/date";
-import { ownerUserId } from "@/lib/user";
+import { requireUser } from "@/lib/user";
 import crypto from "crypto";
 import sharp from "sharp";
 
@@ -84,6 +84,14 @@ async function recentMealsForContext(userId: string): Promise<RecentMeal[]> {
 }
 
 export async function POST(req: Request) {
+  let userId: string;
+  try {
+    const auth = await requireUser();
+    userId = auth.userId;
+  } catch (resp) {
+    if (resp instanceof NextResponse) return resp;
+    throw resp;
+  }
   try {
     let form: FormData;
     try {
@@ -142,7 +150,6 @@ export async function POST(req: Request) {
     const filename = `${id}.jpg`;
     await uploadPhoto(filename, buf, "image/jpeg");
 
-    const userId = ownerUserId();
     const [known, recent] = await Promise.all([
       knownFoodsFromMemory(userId),
       recentMealsForContext(userId),

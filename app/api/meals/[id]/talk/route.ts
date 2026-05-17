@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { editMealItems, Item, KnownFood, RecentMeal } from "@/lib/vision";
-import { ownerUserId } from "@/lib/user";
+import { requireUser } from "@/lib/user";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,10 +23,20 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let userId: string;
+  try {
+    ({ userId } = await requireUser());
+  } catch (resp) {
+    if (resp instanceof NextResponse) return resp;
+    throw resp;
+  }
   try {
     const { id } = await params;
     const meal = await getMeal(id);
     if (!meal) return NextResponse.json({ error: "meal not found" }, { status: 404 });
+    if ((meal as { user_id?: string }).user_id !== userId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
     let body: unknown;
     try {
@@ -55,7 +65,6 @@ export async function POST(
       );
     }
 
-    const userId = ownerUserId();
     const [known, recent] = await Promise.all([
       knownFoodsFromMemory(userId),
       recentMealsForContext(userId),

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { parseMealText, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { createdAtFor } from "@/lib/date";
-import { ownerUserId } from "@/lib/user";
+import { requireUser } from "@/lib/user";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -22,6 +22,14 @@ async function recentMealsForContext(userId: string): Promise<RecentMeal[]> {
 }
 
 export async function POST(req: Request) {
+  let userId: string;
+  try {
+    const auth = await requireUser();
+    userId = auth.userId;
+  } catch (resp) {
+    if (resp instanceof NextResponse) return resp;
+    throw resp;
+  }
   try {
     let body: unknown;
     try {
@@ -40,7 +48,6 @@ export async function POST(req: Request) {
         ? rawForDate
         : null;
 
-    const userId = ownerUserId();
     const [known, recent] = await Promise.all([
       knownFoodsFromMemory(userId),
       recentMealsForContext(userId),
