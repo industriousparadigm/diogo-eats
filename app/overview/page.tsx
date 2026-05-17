@@ -131,7 +131,6 @@ export default function OverviewPage() {
                 target={undefined}
                 direction="above_good"
                 format={(v) => `${Math.round(v)}%`}
-                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
               <DayBarChart
                 aggregates={visible}
@@ -140,7 +139,6 @@ export default function OverviewPage() {
                 target={targets.soluble_fiber_g}
                 direction="above_good"
                 format={(v) => `${v.toFixed(1)}g`}
-                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
               <DayBarChart
                 aggregates={visible}
@@ -149,7 +147,6 @@ export default function OverviewPage() {
                 target={targets.sat_fat_g}
                 direction="below_good"
                 format={(v) => `${v.toFixed(1)}g`}
-                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
               <DayBarChart
                 aggregates={visible}
@@ -158,7 +155,6 @@ export default function OverviewPage() {
                 target={targets.calories}
                 direction="below_good"
                 format={(v) => `${Math.round(v)}`}
-                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
               <DayBarChart
                 aggregates={visible}
@@ -167,7 +163,6 @@ export default function OverviewPage() {
                 target={14}
                 direction="below_good"
                 format={(v) => `${v.toFixed(1)}g`}
-                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
             </div>
           )}

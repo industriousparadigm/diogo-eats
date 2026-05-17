@@ -20,12 +20,16 @@ const RED_UNDER = 0.25;
 // Replaces the 7-day-rolling line that washed out actual variation.
 //
 // Layout:
-//   - Header row: title + latest value vs target
+//   - Header row: title + latest value vs target (OR active bar's date
+//     + exact value when one is selected)
 //   - Plot: bars (one per day) with Y-axis ticks on the left and a
 //     dashed target line if a target is supplied
 //   - X-axis micro labels show the first / middle / last day for context
 //
-// onPickDate is fired when the user taps a bar — routes to the day view.
+// Interaction: bars are tap-to-inspect only. Tapping a bar selects it
+// and surfaces its exact date + value above the chart. Tapping the
+// same bar again deselects. No navigation away from /overview —
+// leaving the page is intentional via the page's back buttons.
 export function DayBarChart({
   aggregates,
   title,
@@ -33,7 +37,6 @@ export function DayBarChart({
   target,
   direction,
   format,
-  onPickDate,
 }: {
   aggregates: DayAggregate[];
   title: string;
@@ -41,7 +44,6 @@ export function DayBarChart({
   target?: number;
   direction: Direction;
   format: (v: number) => string;
-  onPickDate?: (ymd: string) => void;
 }) {
   const prepped = useMemo(
     () => prepDayBars(aggregates, accessor, target),
@@ -136,18 +138,6 @@ export function DayBarChart({
           )}
         </div>
       </div>
-      {activeIdx != null && onPickDate && prepped.bars[activeIdx]?.logged && (
-        <div
-          style={{
-            fontSize: 10,
-            color: colors.textFaint,
-            letterSpacing: 0.3,
-            marginTop: -4,
-          }}
-        >
-          tap the bar again to open this day
-        </div>
-      )}
 
       <div style={{ display: "flex", gap: 8 }}>
         <div
@@ -243,13 +233,7 @@ export function DayBarChart({
                   rx={Math.min(0.5, barWidth / 4)}
                   opacity={isActive ? 1 : activeIdx == null ? 1 : 0.55}
                   style={{ cursor: "pointer" }}
-                  onClick={() => {
-                    if (activeIdx === i && onPickDate) {
-                      onPickDate(b.date);
-                    } else {
-                      setActiveIdx(i);
-                    }
-                  }}
+                  onClick={() => setActiveIdx((cur) => (cur === i ? null : i))}
                 />
               );
             })}
