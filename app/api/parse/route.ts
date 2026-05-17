@@ -3,6 +3,7 @@ import { parseMealPhoto, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vi
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { uploadPhoto } from "@/lib/storage";
 import { createdAtFor } from "@/lib/date";
+import { ownerUserId } from "@/lib/user";
 import crypto from "crypto";
 import sharp from "sharp";
 
@@ -69,8 +70,8 @@ async function compositeStrip(buffers: Buffer[]): Promise<Buffer> {
   return normalizePhoto(stitched, 2048);
 }
 
-async function knownFoodsFromMemory(): Promise<KnownFood[]> {
-  const rows = await topFoodMemory(30);
+async function knownFoodsFromMemory(userId: string): Promise<KnownFood[]> {
+  const rows = await topFoodMemory(userId, 30);
   return rows.map((m) => ({
     name: m.display_name,
     is_plant: m.is_plant === 1,
@@ -78,8 +79,8 @@ async function knownFoodsFromMemory(): Promise<KnownFood[]> {
   }));
 }
 
-async function recentMealsForContext(): Promise<RecentMeal[]> {
-  return getRecentMealsForContext(7, 30);
+async function recentMealsForContext(userId: string): Promise<RecentMeal[]> {
+  return getRecentMealsForContext(userId, 7, 30);
 }
 
 export async function POST(req: Request) {
@@ -141,9 +142,10 @@ export async function POST(req: Request) {
     const filename = `${id}.jpg`;
     await uploadPhoto(filename, buf, "image/jpeg");
 
+    const userId = ownerUserId();
     const [known, recent] = await Promise.all([
-      knownFoodsFromMemory(),
-      recentMealsForContext(),
+      knownFoodsFromMemory(userId),
+      recentMealsForContext(userId),
     ]);
     const parsed = await parseMealPhoto(
       buf.toString("base64"),
@@ -157,6 +159,7 @@ export async function POST(req: Request) {
 
     const meal = {
       id,
+      user_id: userId,
       created_at: createdAtFor(forDate),
       photo_filename: filename,
       items_json: JSON.stringify(parsed.items),

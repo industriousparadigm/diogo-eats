@@ -83,10 +83,15 @@ export async function getMeal(id: string): Promise<Meal | null> {
   return (data as Meal) ?? null;
 }
 
-export async function getMealsBetween(startMs: number, endMs: number): Promise<Meal[]> {
+export async function getMealsBetween(
+  userId: string,
+  startMs: number,
+  endMs: number
+): Promise<Meal[]> {
   const { data, error } = await getSupabase()
     .from("meals")
     .select("*")
+    .eq("user_id", userId)
     .gte("created_at", startMs)
     .lt("created_at", endMs)
     .order("created_at", { ascending: false });
@@ -148,7 +153,7 @@ type UpsertableItem = {
   per_100g: { sat_fat_g: number; soluble_fiber_g: number; calories: number; protein_g: number };
 };
 
-export async function upsertFoodMemory(items: UpsertableItem[]) {
+export async function upsertFoodMemory(userId: string, items: UpsertableItem[]) {
   const now = Date.now();
   // Loop one RPC per item — fine at single-user scale (≤ ~10 items per meal).
   // Errors are swallowed individually so one bad row can't kill a save.
@@ -157,7 +162,8 @@ export async function upsertFoodMemory(items: UpsertableItem[]) {
       .filter((i) => i && i.per_100g && i.name?.trim())
       .map((i) =>
         getSupabase()
-          .rpc("upsert_food_memory", {
+          .rpc("upsert_food_memory_v2", {
+            p_user_id: userId,
             p_name_key: normalizeFoodName(i.name),
             p_display_name: i.name.trim(),
             p_is_plant: i.is_plant ? 1 : 0,
@@ -171,10 +177,14 @@ export async function upsertFoodMemory(items: UpsertableItem[]) {
   );
 }
 
-export async function topFoodMemory(limit: number = 30): Promise<FoodMemory[]> {
+export async function topFoodMemory(
+  userId: string,
+  limit: number = 30
+): Promise<FoodMemory[]> {
   const { data, error } = await getSupabase()
     .from("food_memory")
     .select("*")
+    .eq("user_id", userId)
     .order("last_seen", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`topFoodMemory: ${error.message}`);
@@ -207,7 +217,10 @@ export type DayAggregate = {
 // Build local-day buckets for the requested range, then aggregate meals into
 // them. Inclusive of today. Days with no meals come back with meal_count=0
 // so the UI can render empty cells without holes.
-export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggregate[]> {
+export async function getDailyAggregates(
+  userId: string,
+  daysBack: number = 84
+): Promise<DayAggregate[]> {
   const now = new Date();
   // Start from local-midnight of (daysBack-1) days ago so we get exactly
   // `daysBack` cells including today.
@@ -220,6 +233,7 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
     .select(
       "created_at, items_json, plant_pct, sat_fat_g, soluble_fiber_g, calories, protein_g, carbs_g, alcohol_g"
     )
+    .eq("user_id", userId)
     .gte("created_at", start.getTime())
     .order("created_at", { ascending: true });
   if (error) throw new Error(`getDailyAggregates: ${error.message}`);
@@ -318,6 +332,7 @@ function localYmd(d: Date): string {
 }
 
 export async function getRecentMealsForContext(
+  userId: string,
   daysBack: number = 7,
   limit: number = 30
 ): Promise<MealSummary[]> {
@@ -325,6 +340,7 @@ export async function getRecentMealsForContext(
   const { data, error } = await getSupabase()
     .from("meals")
     .select("created_at, caption, meal_vibe, items_json")
+    .eq("user_id", userId)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(limit);

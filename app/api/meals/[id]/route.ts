@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import { Item, totalsFromItems } from "@/lib/vision";
 import { isValidItem } from "@/lib/validate";
+import { ownerUserId } from "@/lib/user";
 
 export const runtime = "nodejs";
 
@@ -59,7 +60,7 @@ export async function PATCH(
   // Save these now-validated items to long-term food memory so future parses
   // recognize them automatically. Only items the user has reviewed/saved
   // make it here, which keeps memory high-signal.
-  await upsertFoodMemory(items);
+  await upsertFoodMemory(ownerUserId(), items);
 
   const updated = await getMeal(id);
   return NextResponse.json({ meal: updated });

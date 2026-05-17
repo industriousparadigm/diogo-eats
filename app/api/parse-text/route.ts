@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { parseMealText, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { createdAtFor } from "@/lib/date";
+import { ownerUserId } from "@/lib/user";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-async function knownFoodsFromMemory(): Promise<KnownFood[]> {
-  const rows = await topFoodMemory(30);
+async function knownFoodsFromMemory(userId: string): Promise<KnownFood[]> {
+  const rows = await topFoodMemory(userId, 30);
   return rows.map((m) => ({
     name: m.display_name,
     is_plant: m.is_plant === 1,
@@ -16,8 +17,8 @@ async function knownFoodsFromMemory(): Promise<KnownFood[]> {
   }));
 }
 
-async function recentMealsForContext(): Promise<RecentMeal[]> {
-  return getRecentMealsForContext(7, 30);
+async function recentMealsForContext(userId: string): Promise<RecentMeal[]> {
+  return getRecentMealsForContext(userId, 7, 30);
 }
 
 export async function POST(req: Request) {
@@ -39,9 +40,10 @@ export async function POST(req: Request) {
         ? rawForDate
         : null;
 
+    const userId = ownerUserId();
     const [known, recent] = await Promise.all([
-      knownFoodsFromMemory(),
-      recentMealsForContext(),
+      knownFoodsFromMemory(userId),
+      recentMealsForContext(userId),
     ]);
     const parsed = await parseMealText(text, known, recent);
     const totals = totalsFromItems(parsed.items);
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
 
     const meal = {
       id,
+      user_id: userId,
       created_at: createdAtFor(forDate),
       photo_filename: null,
       items_json: JSON.stringify(parsed.items),

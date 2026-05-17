@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMealsBetween, deleteMeal } from "@/lib/db";
+import { ownerUserId } from "@/lib/user";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ function dayBoundsFromQuery(req: Request): [number, number] {
 
 export async function GET(req: Request) {
   const [start, end] = dayBoundsFromQuery(req);
-  const meals = await getMealsBetween(start, end);
+  const meals = await getMealsBetween(ownerUserId(), start, end);
   return NextResponse.json({ meals });
 }
 

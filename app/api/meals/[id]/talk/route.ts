@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { editMealItems, Item, KnownFood, RecentMeal } from "@/lib/vision";
+import { ownerUserId } from "@/lib/user";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-async function knownFoodsFromMemory(): Promise<KnownFood[]> {
-  const rows = await topFoodMemory(30);
+async function knownFoodsFromMemory(userId: string): Promise<KnownFood[]> {
+  const rows = await topFoodMemory(userId, 30);
   return rows.map((m) => ({
     name: m.display_name,
     is_plant: m.is_plant === 1,
@@ -14,8 +15,8 @@ async function knownFoodsFromMemory(): Promise<KnownFood[]> {
   }));
 }
 
-async function recentMealsForContext(): Promise<RecentMeal[]> {
-  return getRecentMealsForContext(7, 30);
+async function recentMealsForContext(userId: string): Promise<RecentMeal[]> {
+  return getRecentMealsForContext(userId, 7, 30);
 }
 
 export async function POST(
@@ -54,9 +55,10 @@ export async function POST(
       );
     }
 
+    const userId = ownerUserId();
     const [known, recent] = await Promise.all([
-      knownFoodsFromMemory(),
-      recentMealsForContext(),
+      knownFoodsFromMemory(userId),
+      recentMealsForContext(userId),
     ]);
     const items = await editMealItems(currentItems, message, known, recent);
     return NextResponse.json({ items });
