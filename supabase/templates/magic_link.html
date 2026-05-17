@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #111; max-width: 480px; margin: 24px auto; padding: 0 16px;">
+    <h2 style="font-size: 18px; letter-spacing: 2px; margin: 0 0 8px 0;">EATS</h2>
+    <p style="font-size: 14px; line-height: 1.5; color: #555; margin: 0 0 16px 0;">
+      Personal food log.
+    </p>
+
+    <p style="font-size: 15px; line-height: 1.5; margin: 0 0 24px 0;">
+      Tap the button below to sign in. This link works once.
+    </p>
+
+    <p style="margin: 0 0 24px 0;">
+      <a
+        href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email"
+        style="
+          display: inline-block;
+          background: #65a30d;
+          color: #fff;
+          text-decoration: none;
+          padding: 12px 22px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+        "
+      >
+        SIGN IN TO EATS
+      </a>
+    </p>
+
+    <p style="font-size: 12px; line-height: 1.5; color: #777; margin: 24px 0 0 0;">
+      Or paste this link into your browser if the button doesn't work:<br />
+      <a
+        href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email"
+        style="color: #65a30d; word-break: break-all;"
+      >{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email</a>
+    </p>
+
+    <p style="font-size: 11px; line-height: 1.5; color: #999; margin: 24px 0 0 0;">
+      If you didn't request this, you can safely ignore the email.
+    </p>
+  </body>
+</html>

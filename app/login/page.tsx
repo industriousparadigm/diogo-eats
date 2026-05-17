@@ -1,13 +1,15 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { colors } from "@/lib/styles";
+import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
-// Magic-link sign-in / sign-up. One field (email), one button.
-// Submitting calls /api/auth/magic-link which checks the allowlist and
-// then asks Supabase to send the email. If accepted, we show a confirm
-// screen; if rejected, an error.
+// Magic-link sign-in. Browser-side so the Supabase client can write the
+// PKCE code_verifier cookie BEFORE the email goes out — that's what
+// makes the server-side /auth/callback exchange work. Allowlist is
+// checked via /api/auth/check-allowlist first so non-invited addresses
+// don't waste the email rate limit.
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -17,7 +19,6 @@ export default function LoginPage() {
 }
 
 function LoginInner() {
-  const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -30,23 +31,45 @@ function LoginInner() {
     if (!email.trim()) return;
     setState("sending");
     setError(null);
+
+    // 1. Allowlist precheck (server-side env-var read).
     try {
-      const r = await fetch("/api/auth/magic-link", {
+      const r = await fetch("/api/auth/check-allowlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
       });
-      const j = await r.json().catch(() => ({}));
       if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
         setState("error");
         setError(j.error ?? "couldn't send link");
         return;
       }
-      setState("sent");
     } catch (err: any) {
       setState("error");
       setError(err?.message ?? "network error");
+      return;
     }
+
+    // 2. Browser-side signInWithOtp — stores PKCE verifier cookie so
+    //    the eventual /auth/callback exchange succeeds.
+    const supa = getSupabaseBrowser();
+    const { error: otpErr } = await supa.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (otpErr) {
+      setState("error");
+      const friendly = otpErr.message?.toLowerCase().includes("rate")
+        ? "too many sign-in attempts — wait a few minutes and try again"
+        : otpErr.message ?? "couldn't send link";
+      setError(friendly);
+      return;
+    }
+    setState("sent");
   }
 
   return (
@@ -204,8 +227,6 @@ function LoginInner() {
           </form>
         )}
       </div>
-      {/* router prop intentionally unused — kept for future post-send redirect. */}
-      {void router}
     </main>
   );
 }
