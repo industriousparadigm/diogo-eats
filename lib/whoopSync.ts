@@ -50,7 +50,13 @@ export async function syncUser(userId: string, daysBack = 7): Promise<SyncResult
     const recByCycleId = new Map<number, (typeof recoveries)[number]>();
     for (const r of recoveries) recByCycleId.set(r.cycle_id, r);
 
-    const cycleRows = cycles.map((c) => {
+    // Whoop "cycles" are sleep-wake bounded, not calendar-day bounded —
+    // so multiple cycle records can bucket to the same local day. Take
+    // the latest one per day (highest whoop_cycle_id wins) to avoid
+    // the "ON CONFLICT DO UPDATE command cannot affect row a second
+    // time" postgres error.
+    const cycleByDay = new Map<string, ReturnType<typeof toCycleRow>>();
+    function toCycleRow(c: (typeof cycles)[number]) {
       const rec = recByCycleId.get(c.id);
       return {
         user_id: userId,
@@ -63,7 +69,15 @@ export async function syncUser(userId: string, daysBack = 7): Promise<SyncResult
         whoop_cycle_id: c.id,
         fetched_at: Date.now(),
       };
-    });
+    }
+    for (const c of cycles) {
+      const row = toCycleRow(c);
+      const existing = cycleByDay.get(row.day);
+      if (!existing || (existing.whoop_cycle_id ?? 0) < (row.whoop_cycle_id ?? 0)) {
+        cycleByDay.set(row.day, row);
+      }
+    }
+    const cycleRows = Array.from(cycleByDay.values());
 
     if (cycleRows.length > 0) {
       const { error } = await supa

@@ -9,23 +9,47 @@ import { colors } from "@/lib/styles";
 // with a tap → /settings (deeper info lives there for now).
 type Today = {
   connected: boolean;
+  last_sync_at?: number | null;
   today?: {
     strain: number | null;
     recovery_pct: number | null;
   } | null;
 };
 
+// Trigger an auto-sync if cached data is older than this. The /sync
+// route enforces its own 1-min floor, so this is just the staleness
+// threshold for UX freshness — not a hard guarantee.
+const STALE_AFTER_MS = 15 * 60 * 1000;
+
 export function WhoopHomeChip() {
   const [data, setData] = useState<Today | null>(null);
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/whoop/status")
-      .then((r) => (r.ok ? r.json() : { connected: false }))
-      .then((j) => {
-        if (alive) setData(j);
-      })
-      .catch(() => alive && setData({ connected: false }));
+    (async () => {
+      const r = await fetch("/api/whoop/status");
+      if (!alive) return;
+      if (!r.ok) {
+        setData({ connected: false });
+        return;
+      }
+      const initial = (await r.json()) as Today;
+      setData(initial);
+
+      if (!initial.connected) return;
+      const last = initial.last_sync_at ?? 0;
+      if (Date.now() - last > STALE_AFTER_MS) {
+        // Background sync; refresh status when it returns. Failures
+        // are silent — the chip just shows the last-known data.
+        try {
+          await fetch("/api/whoop/sync", { method: "POST" });
+          const r2 = await fetch("/api/whoop/status");
+          if (alive && r2.ok) setData(await r2.json());
+        } catch {
+          // ignore
+        }
+      }
+    })();
     return () => {
       alive = false;
     };

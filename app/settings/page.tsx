@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { colors, inputStyle } from "@/lib/styles";
 import { DEFAULT_TARGETS, Targets, resetTargets, saveTargets, useTargets } from "@/lib/targets";
+import { WhoopIntegrationCard } from "@/app/components/WhoopIntegrationCard";
 
 // Settings as its own page — replaces the modal sheet that obscured
 // the underlying screen. Same shape as the old sheet, just framed in
@@ -147,6 +148,18 @@ export default function SettingsPage() {
           onChange={(v) => patch("protein_g", v)}
           hint="~1.2g/kg bodyweight is a fair default once strength training starts."
         />
+
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 11,
+            color: colors.textSubtle,
+            letterSpacing: 0.5,
+          }}
+        >
+          INTEGRATIONS
+        </div>
+        <WhoopIntegrationCard />
       </div>
 
       <div

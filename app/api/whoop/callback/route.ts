@@ -24,41 +24,49 @@ export async function GET(req: Request) {
 
   const cookieState = req.headers.get("cookie")?.match(/whoop_oauth_state=([^;]+)/)?.[1];
 
+  // Construct the public origin from request headers so redirects don't
+  // bounce the user from `localhost:3000` to `0.0.0.0:3000` and lose
+  // their session cookies. Same fix as /api/whoop/connect.
+  const host = req.headers.get("host") ?? url.host;
+  const proto =
+    req.headers.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  const origin = `${proto}://${host}`;
+
   if (err) {
     return NextResponse.redirect(
-      new URL(`/settings?whoop=denied&reason=${encodeURIComponent(err)}`, url.origin)
+      new URL(`/settings?whoop=denied&reason=${encodeURIComponent(err)}`, origin)
     );
   }
   if (!code || !state || !cookieState || state !== cookieState) {
-    return NextResponse.redirect(new URL(`/settings?whoop=bad_state`, url.origin));
+    return NextResponse.redirect(new URL(`/settings?whoop=bad_state`, origin));
   }
-  // CSRF cookie also binds the user prefix.
   if (!state.startsWith(`${userId}.`)) {
-    return NextResponse.redirect(new URL(`/settings?whoop=user_mismatch`, url.origin));
+    return NextResponse.redirect(new URL(`/settings?whoop=user_mismatch`, origin));
   }
 
   try {
-    const redirectUri = `${url.origin}/api/whoop/callback`;
+    const redirectUri = `${origin}/api/whoop/callback`;
     const tokens = await exchangeCodeForTokens(code, redirectUri);
-    // Stash the connection FIRST so getAccessTokenForUser works for the
-    // profile fetch below.
     await upsertConnection(userId, tokens, null);
     const profile = await fetchProfile(userId).catch(() => null);
     if (profile?.user_id) {
-      // Re-upsert with the whoop_user_id now that we have it.
       await upsertConnection(userId, tokens, profile.user_id);
     }
     // Fire an initial sync so the UI has something to show immediately.
-    // Fail-soft: the cron will catch up if this hiccups.
+    // Fail-soft: the user can hit "refresh now" if this hiccups.
     await syncUser(userId, 14).catch((e) => console.error("initial sync:", e));
   } catch (e: any) {
     console.error("whoop callback failed:", e?.message ?? e);
     return NextResponse.redirect(
-      new URL(`/settings?whoop=error&reason=${encodeURIComponent(e?.message ?? "unknown")}`, url.origin)
+      new URL(
+        `/settings?whoop=error&reason=${encodeURIComponent(e?.message ?? "unknown")}`,
+        origin
+      )
     );
   }
 
-  const res = NextResponse.redirect(new URL(`/settings?whoop=connected`, url.origin));
+  const res = NextResponse.redirect(new URL(`/settings?whoop=connected`, origin));
   res.cookies.delete("whoop_oauth_state");
   return res;
 }

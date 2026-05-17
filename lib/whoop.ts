@@ -289,7 +289,9 @@ export async function fetchRecentRecoveries(
 }
 
 export type WhoopWorkout = {
-  id: number;
+  // Whoop v2 returns UUID strings (v1 used numeric ids). Our column is
+  // now text to match.
+  id: string;
   start: string;
   end: string;
   sport_name?: string;

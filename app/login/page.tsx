@@ -26,6 +26,37 @@ function LoginInner() {
 
   const fromError = params?.get("error");
 
+  // Dev-only shortcut. Magic-link emails point at prod's site_url, so
+  // localhost normally dead-ends. We show a "dev sign-in" button when
+  // running on localhost; the /api/dev/signin endpoint is itself gated
+  // by NODE_ENV so it'll 404 in prod even if the button leaks.
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1");
+
+  async function devSignIn(devEmail: string) {
+    setState("sending");
+    setError(null);
+    try {
+      const r = await fetch("/api/dev/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: devEmail }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setState("error");
+        setError(j.error ?? "dev sign-in failed");
+        return;
+      }
+      window.location.href = "/";
+    } catch (err: any) {
+      setState("error");
+      setError(err?.message ?? "network error");
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
@@ -224,6 +255,55 @@ function LoginInner() {
               sign in. Eats is invite-only right now — if you weren't
               invited, the link won't send.
             </p>
+
+            {isLocalhost && (
+              <div
+                style={{
+                  marginTop: 18,
+                  paddingTop: 16,
+                  borderTop: `1px dashed ${colors.borderDashed}`,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: colors.textSubtle,
+                    letterSpacing: 0.5,
+                    marginBottom: 8,
+                  }}
+                >
+                  DEV ONLY · LOCALHOST
+                </div>
+                <button
+                  type="button"
+                  onClick={() => devSignIn("dsgmcosta@gmail.com")}
+                  disabled={state === "sending"}
+                  style={{
+                    background: "transparent",
+                    color: colors.textMuted,
+                    border: `1px solid ${colors.borderStrong}`,
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    fontSize: 12,
+                    cursor: state === "sending" ? "default" : "pointer",
+                    width: "100%",
+                  }}
+                >
+                  sign in as dsgmcosta@gmail.com (dev shortcut)
+                </button>
+                <p
+                  style={{
+                    fontSize: 10,
+                    color: colors.textFaint,
+                    marginTop: 6,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Bypasses email. Only available in development — the
+                  /api/dev/signin route is hard-blocked in prod.
+                </p>
+              </div>
+            )}
           </form>
         )}
       </div>
