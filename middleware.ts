@@ -10,7 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // - API routes self-handle 401 in their handlers (more granularity
 //   than a one-size response from middleware).
 
-const PUBLIC_UI_PATHS = new Set<string>(["/login", "/auth/callback"]);
+const PUBLIC_UI_PATHS = new Set<string>(["/login", "/auth/callback", "/privacy"]);
 const ONBOARDING_PATH = "/onboarding";
 
 export async function middleware(req: NextRequest) {

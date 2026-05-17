@@ -11,6 +11,7 @@ import { Pulse } from "./components/Pulse";
 import { HomeSkeleton } from "./components/Skeleton";
 import { Topbar } from "./components/Topbar";
 import { CopyDayButton } from "./components/CopyDayButton";
+import { WhoopHomeChip } from "./components/WhoopHomeChip";
 import { todayStart, ymd, isSameDay, dayLabel } from "@/lib/date";
 import {
   deleteMeal as apiDeleteMeal,
@@ -229,6 +230,12 @@ function Home() {
           ›
         </button>
       </div>
+      {/* Whoop chip — only renders when connected AND today has data. */}
+      {isToday && (
+        <div style={{ display: "flex", justifyContent: "center", marginTop: -12, marginBottom: 18 }}>
+          <WhoopHomeChip />
+        </div>
+      )}
 
       {/* Three-state render:
           - meals === null: still loading → skeleton.
