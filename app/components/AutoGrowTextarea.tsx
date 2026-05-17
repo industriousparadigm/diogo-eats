@@ -43,18 +43,21 @@ export function AutoGrowTextarea({
   // Resize on every value change. We zero the height first so shrinking
   // works (scrollHeight only ever grows otherwise).
   //
-  // After resizing, scroll the bottom of the textarea into view if it's
-  // focused. Otherwise on iOS the keyboard can cover the caret as the
-  // text grows past the visible viewport — invisible-typing is the #1
-  // complaint about long-text capture. `block: "nearest"` is a no-op
-  // when already on screen, so this is cheap on short inputs too.
+  // NOTE: we used to call `scrollIntoView` on every keystroke. On iOS
+  // that caused jank when the page had other heavy content (a big
+  // image preview, say) — every keypress triggered layout + paint of
+  // everything above. We only scroll into view when the rendered
+  // textarea height actually changed (line wrap / newline), and when
+  // focus first lands.
+  const prevHeightRef = useRef(0);
   useIsoLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-    if (document.activeElement === el) {
-      // Defer to next frame so the new height has flushed before scrolling.
+    const next = el.scrollHeight;
+    el.style.height = `${next}px`;
+    if (next !== prevHeightRef.current && document.activeElement === el) {
+      prevHeightRef.current = next;
       requestAnimationFrame(() => {
         try {
           el.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -62,6 +65,8 @@ export function AutoGrowTextarea({
           // Safari can throw if the element was unmounted between RAFs.
         }
       });
+    } else {
+      prevHeightRef.current = next;
     }
   }, [value]);
 

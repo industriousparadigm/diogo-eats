@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AutoGrowTextarea } from "../components/AutoGrowTextarea";
 import { PhotoCropSheet } from "../components/PhotoCropSheet";
@@ -52,9 +52,18 @@ function LogInner() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const previewUrls = files.map((f) => URL.createObjectURL(f));
-  // (Object URLs leak technically. revoked on unmount via the home
-  // page's PendingTask cleanup; OK for this short-lived screen.)
+  // CRITICAL: memoize object URLs against the files array. Without
+  // this, every keystroke in the caption box re-renders this component,
+  // which would re-allocate URLs and force the browser to re-decode
+  // every image on every keypress — main cause of the typing-lag bug
+  // on iOS. Revoke the previous batch when files change so we don't
+  // leak blobs across edits either.
+  const previewUrls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => {
+    return () => {
+      for (const u of previewUrls) URL.revokeObjectURL(u);
+    };
+  }, [previewUrls]);
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []).slice(0, 4);
