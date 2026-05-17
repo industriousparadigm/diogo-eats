@@ -42,6 +42,10 @@ export type Meal = {
   carbs_g: number;
   sugar_g: number;
   salt_g: number;
+  // Pure ethanol grams (added 2026-05-17). Default 0 in the DB for
+  // pre-existing rows; backfill script populates from items where
+  // applicable.
+  alcohol_g: number;
   notes: string | null;
   caption: string | null;
   meal_vibe: string | null;
@@ -100,6 +104,7 @@ export type MealTotals = {
   carbs_g: number;
   sugar_g: number;
   salt_g: number;
+  alcohol_g: number;
 };
 
 export async function updateMealItems(
@@ -195,6 +200,8 @@ export type DayAggregate = {
   soluble_fiber_g: number;
   calories: number;
   protein_g: number;
+  carbs_g: number;
+  alcohol_g: number;
 };
 
 // Build local-day buckets for the requested range, then aggregate meals into
@@ -211,7 +218,7 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
   const { data, error } = await getSupabase()
     .from("meals")
     .select(
-      "created_at, items_json, plant_pct, sat_fat_g, soluble_fiber_g, calories, protein_g"
+      "created_at, items_json, plant_pct, sat_fat_g, soluble_fiber_g, calories, protein_g, carbs_g, alcohol_g"
     )
     .gte("created_at", start.getTime())
     .order("created_at", { ascending: true });
@@ -229,6 +236,8 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
       soluble_fiber_g: number;
       calories: number;
       protein_g: number;
+      carbs_g: number;
+      alcohol_g: number;
     }
   >();
   for (let i = 0; i < daysBack; i++) {
@@ -242,6 +251,8 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
       soluble_fiber_g: 0,
       calories: 0,
       protein_g: 0,
+      carbs_g: 0,
+      alcohol_g: 0,
     });
   }
 
@@ -254,6 +265,8 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
     bucket.soluble_fiber_g += (m as any).soluble_fiber_g || 0;
     bucket.calories += (m as any).calories || 0;
     bucket.protein_g += (m as any).protein_g || 0;
+    bucket.carbs_g += (m as any).carbs_g || 0;
+    bucket.alcohol_g += (m as any).alcohol_g || 0;
 
     // Rebuild grams-weighted plant share from items_json — simple sum is wrong
     // for combining meals with different masses.
@@ -283,6 +296,8 @@ export async function getDailyAggregates(daysBack: number = 84): Promise<DayAggr
       soluble_fiber_g: round1(b.soluble_fiber_g),
       calories: Math.round(b.calories),
       protein_g: round1(b.protein_g),
+      carbs_g: round1(b.carbs_g),
+      alcohol_g: round1(b.alcohol_g),
     });
   }
   // Map iteration is insertion order, so chronological ascending.

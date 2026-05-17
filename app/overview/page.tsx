@@ -61,9 +61,14 @@ export default function OverviewPage() {
   const flagStats = useMemo(() => {
     let positive = 0;
     let negative = 0;
+    // "Watch" tier: high_sat_fat or alcohol_medium+ — alcohol_light
+    // alone isn't a strong enough signal to count toward the day-watch
+    // tally (it still gets a soft dot on the calendar though).
+    const isWatch = (f: string) =>
+      f === "high_sat_fat" || f === "alcohol_medium" || f === "alcohol_high";
     for (const flags of flagsByDate.values()) {
-      if (flags.some((f) => !isPositiveFlag(f))) negative += 1;
-      else if (flags.some((f) => isPositiveFlag(f))) positive += 1;
+      if (flags.some(isWatch)) negative += 1;
+      else if (flags.some((f) => isPositiveFlag(f as any))) positive += 1;
     }
     return { positive, negative };
   }, [flagsByDate]);
@@ -155,6 +160,15 @@ export default function OverviewPage() {
                 format={(v) => `${Math.round(v)}`}
                 onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
               />
+              <DayBarChart
+                aggregates={visible}
+                title="ALCOHOL · PER DAY (g pure ethanol)"
+                accessor={(a) => a.alcohol_g}
+                target={14}
+                direction="below_good"
+                format={(v) => `${v.toFixed(1)}g`}
+                onPickDate={(ymd) => router.push(`/?date=${ymd}`)}
+              />
             </div>
           )}
 
@@ -176,7 +190,9 @@ export default function OverviewPage() {
               <span style={{ ...dot, background: colors.accentBright }} />
               <span style={legendText}>plant-led / fiber on target / low sat fat</span>
               <span style={{ ...dot, background: colors.warn, marginLeft: 12 }} />
-              <span style={legendText}>sat fat well over target</span>
+              <span style={legendText}>sat fat over · drinks (~1+)</span>
+              <span style={{ ...dot, background: colors.badStrong, marginLeft: 12, width: 7, height: 7 }} />
+              <span style={legendText}>heavy drinks (3+)</span>
             </div>
           </section>
 

@@ -10,6 +10,10 @@ export type Per100g = {
   carbs_g?: number;
   sugar_g?: number;
   salt_g?: number;
+  // Pure ethanol grams per 100g of the as-served item. 0 for non-
+  // alcoholic foods. Optional for backward-compat with pre-2026-05-17
+  // items that pre-date the column.
+  alcohol_g?: number;
 };
 
 export type Item = {
@@ -34,6 +38,7 @@ export type Meal = {
   carbs_g?: number;
   sugar_g?: number;
   salt_g?: number;
+  alcohol_g?: number;
   notes: string | null;
   caption: string | null;
   meal_vibe: string | null;
@@ -47,6 +52,8 @@ export type DayAggregate = {
   soluble_fiber_g: number;
   calories: number;
   protein_g: number;
+  carbs_g: number;
+  alcohol_g: number;
 };
 
 // Daily targets — reference numbers, not gates. Calibrated to Diogo's

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ActionBar } from "./components/ActionBar";
 import { ConfirmSheet } from "./components/ConfirmSheet";
 import { DailyHeadline } from "./components/DailyHeadline";
@@ -11,6 +11,7 @@ import { PendingMealCard } from "./components/PendingMealCard";
 import { Pulse } from "./components/Pulse";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { HomeSkeleton } from "./components/Skeleton";
+import Link from "next/link";
 import { TextSheet } from "./components/TextSheet";
 import { CopyDayButton } from "./components/CopyDayButton";
 import { todayStart, ymd, isSameDay, dayLabel } from "@/lib/date";
@@ -22,9 +23,46 @@ import {
 } from "@/lib/api";
 import type { Meal, PendingTask } from "@/lib/types";
 
-export default function Home() {
+// useSearchParams pushes the page into the client-side bailout; Next 16
+// requires a Suspense boundary around it. The default export wraps the
+// real Home component so the bailout has somewhere to render the
+// fallback during the brief CSR prerender.
+export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <Home />
+    </Suspense>
+  );
+}
+
+function Home() {
   const router = useRouter();
-  const [viewDate, setViewDate] = useState<Date>(() => todayStart());
+  const searchParams = useSearchParams();
+  // Initial date comes from ?date=YYYY-MM-DD when present (deep-link from
+  // /overview bars or calendar cells), otherwise today.
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    const q = searchParams?.get("date");
+    if (q && /^\d{4}-\d{2}-\d{2}$/.test(q)) {
+      const d = new Date(`${q}T00:00:00`);
+      if (!isNaN(d.getTime()) && d.getTime() <= todayStart().getTime()) {
+        return d;
+      }
+    }
+    return todayStart();
+  });
+
+  // React to ?date= changing while the page is mounted (back/forward nav
+  // from /overview after a bar tap).
+  useEffect(() => {
+    const q = searchParams?.get("date");
+    if (q && /^\d{4}-\d{2}-\d{2}$/.test(q)) {
+      const d = new Date(`${q}T00:00:00`);
+      if (!isNaN(d.getTime()) && d.getTime() <= todayStart().getTime()) {
+        setViewDate((prev) => (isSameDay(prev, d) ? prev : d));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   // Mirrors `viewDate` for reading inside async closures (processTask
   // resolves after the user may have navigated to a different day). The
   // closure-captured `viewDate` would otherwise refer to the day at fire
@@ -288,6 +326,13 @@ export default function Home() {
           gap: 8,
         }}
       >
+        <Link
+          href="/overview"
+          aria-label="open overview"
+          style={overviewLinkStyle}
+        >
+          OVERVIEW
+        </Link>
         <button
           onClick={() => shiftDay(-1)}
           aria-label="previous day"
@@ -478,6 +523,20 @@ export default function Home() {
   );
 }
 
+
+const overviewLinkStyle: React.CSSProperties = {
+  background: "rgba(132,204,22,0.10)",
+  color: "#bef264",
+  border: "1px solid rgba(132,204,22,0.30)",
+  borderRadius: 999,
+  padding: "5px 10px",
+  fontSize: 10,
+  fontWeight: 500,
+  letterSpacing: 0.5,
+  textDecoration: "none",
+  WebkitTapHighlightColor: "transparent",
+  whiteSpace: "nowrap",
+};
 
 const dayNavBtnStyle: React.CSSProperties = {
   background: "transparent",

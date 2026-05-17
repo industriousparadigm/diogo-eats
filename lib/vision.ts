@@ -14,6 +14,10 @@ export type Per100g = {
   carbs_g?: number;
   sugar_g?: number;
   salt_g?: number;
+  // Pure ethanol grams per 100g of the as-served item. 0 for non-
+  // alcoholic foods. Reference: wine ~10g/100mL, beer ~4g/100mL,
+  // spirits ~32g/100mL, fortified wine / liqueurs ~16g/100mL.
+  alcohol_g?: number;
 };
 
 export type Item = {
@@ -41,6 +45,7 @@ const PER_100G_SCHEMA = {
     carbs_g: { type: "number" },
     sugar_g: { type: "number" },
     salt_g: { type: "number" },
+    alcohol_g: { type: "number" },
   },
   required: [
     "sat_fat_g",
@@ -51,6 +56,7 @@ const PER_100G_SCHEMA = {
     "carbs_g",
     "sugar_g",
     "salt_g",
+    "alcohol_g",
   ],
   additionalProperties: false,
 };
@@ -107,6 +113,26 @@ For each item:
 - Flag confidence honestly: "high" only when food + portion are both obvious; "medium" if reasonable; "low" if guessing OR inferring an implicit ingredient. Err toward low rather than overconfident.
 - per_100g: standard reference nutrition per 100 grams of that item as prepared (cooked pasta ~158 kcal/100g, olive oil ~884 kcal/100g, etc.).
 - is_plant: true if wholly from plants. Olive oil, nuts, beans, fruit, vegetables, grains, legumes → plant. Cheese, butter, eggs, meat, fish, honey, gelatin → not.
+- alcohol_g (per_100g): pure ethanol grams per 100g of the as-served item. 0 for non-alcoholic foods. Reference:
+  - Beer (~5% ABV) ≈ 4g/100g; lager / IPA similar
+  - Wine red/white (~12-14% ABV) ≈ 10g/100g
+  - Champagne / prosecco (~12% ABV) ≈ 10g/100g
+  - Fortified wines (port, sherry, vermouth, ~17-20% ABV) ≈ 15g/100g
+  - Spirits (gin, vodka, whisky, rum, tequila, ~40% ABV) ≈ 32g/100g
+  - Liqueurs (limoncello, amaretto, baileys, ~25-30% ABV) ≈ 22g/100g
+  - Cocktails: estimate from ABV of components; a standard ~120mL spirits-based cocktail ≈ 14-18g/100g of drink mass
+  - Cooking wine that's been simmered for 20+ min retains ~30% of original alcohol; flambé items < 25%
+  - If the dish is alcohol-cooked but you can't tell how much remains, prefer the lower estimate
+- **When an item contains alcohol, name it specifically with the type** (e.g. "red wine", "port", "limoncello", "gin tonic") so downstream flagging works even if alcohol_g is conservative.
+
+**Alcohol detection — important.** A drink (wine, beer, cocktail, spirits, liqueur) is its OWN item — never roll it into the food it accompanies. Estimate grams by container/glass size:
+- Wine glass: typically 120-180mL ≈ 120-180g
+- Pint of beer: ~500mL ≈ 500g
+- Bottle of beer: ~330mL ≈ 330g
+- Shot of spirits: ~40-50mL ≈ 40-50g (single) / 80-100g (double)
+- Cocktail: ~150-250mL ≈ 150-250g
+- Glass of port / liqueur: ~50-80mL ≈ 50-80g
+If the user's caption mentions wine, cerveja, vinho, gin, cocktail, "had a beer", etc., include it as an item even without a visible glass. Same for visibly empty / half-drunk glasses in the photo.
 
 **Default context: home cooking.** Assume the user is eating something they made or had made at home in Portugal: olive oil as primary cooking fat (modest 5-15g per dish), simple seasoning, **normal hungry-adult portions** — not restaurant-sized, but also not "disciplined small" portions; assume the user is eating to satisfy hunger, with second helpings possible if the photo or description suggests it. Keep this default unless the caption clearly signals otherwise.
 
@@ -204,6 +230,9 @@ For each item:
 - Confidence "high" only when the food + portion are both well-described; "medium" if reasonable; "low" if guessing or inferring.
 - per_100g: standard reference nutrition per 100 grams of that item as eaten.
 - is_plant: true if wholly from plants.
+- alcohol_g (per_100g): pure ethanol grams per 100g. 0 for non-alcoholic items. Reference: beer (~5% ABV) ≈ 4g/100g; wine (~12-14%) ≈ 10g/100g; champagne / prosecco ≈ 10g/100g; fortified wine / port / sherry / vermouth (~17-20%) ≈ 15g/100g; spirits (~40%) ≈ 32g/100g; liqueurs / limoncello / baileys (~25-30%) ≈ 22g/100g.
+
+**Alcohol detection — always log a drink as its OWN item, never roll into the food.** When the user says "wine", "beer", "gin tonic", "cocktail", "vinho", "cerveja", "imperial", "uma branquinha", a port, a champagne, etc., include it. Estimate grams from glass / container size — wine glass ≈ 120-180g, beer bottle ≈ 330g, pint ≈ 500g, shot ≈ 40-50g, cocktail ≈ 150-250g, port/liqueur glass ≈ 50-80g. Name with the type (e.g. "red wine", "port", "limoncello").
 
 **Default context: home cooking** in Portugal (modest olive oil, simple seasoning, normal hungry-adult portions). Override only if the user's text signals otherwise.
 
@@ -387,6 +416,7 @@ export function totalsFromItems(items: Item[]) {
   let carbs_g = 0;
   let sugar_g = 0;
   let salt_g = 0;
+  let alcohol_g = 0;
   let plant_grams = 0;
   let total_grams = 0;
   for (const i of items) {
@@ -401,6 +431,7 @@ export function totalsFromItems(items: Item[]) {
     if (typeof p.carbs_g === "number") carbs_g += p.carbs_g * f;
     if (typeof p.sugar_g === "number") sugar_g += p.sugar_g * f;
     if (typeof p.salt_g === "number") salt_g += p.salt_g * f;
+    if (typeof p.alcohol_g === "number") alcohol_g += p.alcohol_g * f;
     total_grams += i.grams;
     if (i.is_plant) plant_grams += i.grams;
   }
@@ -414,6 +445,7 @@ export function totalsFromItems(items: Item[]) {
     carbs_g: round1(carbs_g),
     sugar_g: round1(sugar_g),
     salt_g: round1(salt_g),
+    alcohol_g: round1(alcohol_g),
     plant_pct,
   };
 }

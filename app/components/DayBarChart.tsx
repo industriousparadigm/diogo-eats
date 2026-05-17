@@ -1,11 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { colors, radii } from "@/lib/styles";
 import { prepDayBars, niceTicks } from "@/lib/chartData";
 import type { DayAggregate } from "@/lib/types";
 
 type Direction = "above_good" | "below_good";
+
+// Thresholds (multiples of target) at which a "below_good" metric turns
+// from green to amber, and amber to red. Calories at 110% target is
+// still close; at 150% it's clearly over. For above_good metrics the
+// inversion (% UNDER) is symmetric.
+const AMBER_OVER = 1.1;
+const RED_OVER = 1.5;
+const AMBER_UNDER = 0.5;
+const RED_UNDER = 0.25;
 
 // Per-day bar chart with a labeled Y-axis and target reference line.
 // Replaces the 7-day-rolling line that washed out actual variation.
@@ -39,6 +48,10 @@ export function DayBarChart({
     [aggregates, accessor, target]
   );
   const ticks = useMemo(() => niceTicks(prepped.max), [prepped.max]);
+  // Tap-to-inspect: which bar (if any) is currently selected? Tapping a
+  // bar surfaces its exact date + value above the chart; tapping it
+  // again navigates to that day via `onPickDate`.
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
   if (!prepped.hasData) return null;
 
@@ -95,21 +108,46 @@ export function DayBarChart({
         <div
           style={{
             fontSize: 13,
-            color: valueColor,
+            color: activeIdx != null ? colors.text : valueColor,
             fontVariantNumeric: "tabular-nums",
             fontWeight: 500,
           }}
         >
-          {format(prepped.latest)}
-          {target != null && (
-            <span
-              style={{ color: colors.textFaint, marginLeft: 4, fontWeight: 400 }}
-            >
-              / {format(target)} target
-            </span>
+          {activeIdx != null ? (
+            <>
+              <span style={{ color: colors.textFaint, marginRight: 6, fontWeight: 400 }}>
+                {longDay(prepped.bars[activeIdx]?.date)}
+              </span>
+              {prepped.bars[activeIdx]?.logged
+                ? format(prepped.bars[activeIdx].value)
+                : "no log"}
+            </>
+          ) : (
+            <>
+              {format(prepped.latest)}
+              {target != null && (
+                <span
+                  style={{ color: colors.textFaint, marginLeft: 4, fontWeight: 400 }}
+                >
+                  / {format(target)} target
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>
+      {activeIdx != null && onPickDate && prepped.bars[activeIdx]?.logged && (
+        <div
+          style={{
+            fontSize: 10,
+            color: colors.textFaint,
+            letterSpacing: 0.3,
+            marginTop: -4,
+          }}
+        >
+          tap the bar again to open this day
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8 }}>
         <div
@@ -153,17 +191,21 @@ export function DayBarChart({
                 />
               );
             })}
-            {/* Target reference line */}
+            {/* Target reference line — solid + accent-tinted so it reads
+                as a real "you want to be here" marker, not a decoration. */}
             {prepped.targetRatio != null && (
-              <line
-                x1={yAxisGutter}
-                x2={W}
-                y1={H - prepped.targetRatio * H}
-                y2={H - prepped.targetRatio * H}
-                stroke={colors.borderStrong}
-                strokeWidth={0.5}
-                strokeDasharray="1.2,1.2"
-              />
+              <>
+                <line
+                  x1={yAxisGutter}
+                  x2={W}
+                  y1={H - prepped.targetRatio * H}
+                  y2={H - prepped.targetRatio * H}
+                  stroke={colors.accentBright}
+                  strokeWidth={0.5}
+                  strokeDasharray="2,2"
+                  opacity={0.7}
+                />
+              </>
             )}
             {/* Bars */}
             {prepped.bars.map((b, i) => {
@@ -171,14 +213,25 @@ export function DayBarChart({
               const rawH = b.ratio * H;
               const h = b.logged && b.value > 0 ? Math.max(rawH, 0.6) : minBarHeight;
               const y = H - h;
-              // Color: unlogged → very faint; over target on the "bad" side → warn; else accent
-              const fill = !b.logged
-                ? colors.border
-                : target != null &&
-                    ((direction === "below_good" && b.value > target * 1.1) ||
-                      (direction === "above_good" && b.value < target * 0.5 && b.value > 0))
-                  ? colors.warn
-                  : colors.accent;
+              // Three-tone semantic fill. Tightened red threshold per
+              // Diogo's feedback: 2k cal target → 4k+ shouldn't read as
+              // "just a little over" amber; it should read alarming.
+              let fill: string;
+              if (!b.logged) {
+                fill = colors.border;
+              } else if (target == null) {
+                fill = colors.accent;
+              } else if (direction === "below_good") {
+                if (b.value > target * RED_OVER) fill = colors.badStrong;
+                else if (b.value > target * AMBER_OVER) fill = colors.warn;
+                else fill = colors.accent;
+              } else {
+                // above_good — fiber/plant: undershooting is bad
+                if (b.value > 0 && b.value < target * RED_UNDER) fill = colors.badStrong;
+                else if (b.value > 0 && b.value < target * AMBER_UNDER) fill = colors.warn;
+                else fill = colors.accent;
+              }
+              const isActive = activeIdx === i;
               return (
                 <rect
                   key={b.date}
@@ -188,8 +241,15 @@ export function DayBarChart({
                   height={h}
                   fill={fill}
                   rx={Math.min(0.5, barWidth / 4)}
-                  style={{ cursor: onPickDate ? "pointer" : "default" }}
-                  onClick={() => onPickDate?.(b.date)}
+                  opacity={isActive ? 1 : activeIdx == null ? 1 : 0.55}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    if (activeIdx === i && onPickDate) {
+                      onPickDate(b.date);
+                    } else {
+                      setActiveIdx(i);
+                    }
+                  }}
                 />
               );
             })}
@@ -223,4 +283,18 @@ function shortDay(ymd: string | undefined): string {
   // "2026-05-14" → "5/14"
   const [, m, d] = ymd.split("-");
   return `${Number(m)}/${Number(d)}`;
+}
+
+function longDay(ymd: string | undefined): string {
+  if (!ymd) return "";
+  // "2026-05-14" → "Thu May 14"
+  const [yy, mm, dd] = ymd.split("-").map(Number);
+  const d = new Date(yy, mm - 1, dd);
+  return d
+    .toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    })
+    .toUpperCase();
 }

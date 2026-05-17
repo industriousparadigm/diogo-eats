@@ -207,15 +207,35 @@ function Cell({
   const baseLabel = hasMeals
     ? `${friendly}: ${agg.meal_count} meal${agg.meal_count === 1 ? "" : "s"}, ${agg.plant_pct}% plant`
     : `${friendly}: no meals`;
-  // Negative flag wins precedence — if a day was both clean-ish and
-  // over the fat target, the warning is the more useful signal.
-  const negative = flags?.find((f) => !isPositiveFlag(f));
+  // Pick the most-attention-worthy single flag for the cell's dot.
+  // Priority order (most → least loud):
+  //   alcohol_high → high_sat_fat → alcohol_medium → alcohol_light → positive
+  // Negative flags beat positive when they share a day.
+  const findFlag = (name: Flag) => flags?.find((f) => f === name);
+  const alcoholHigh = findFlag("alcohol_high");
+  const alcoholMedium = findFlag("alcohol_medium");
+  const alcoholLight = findFlag("alcohol_light");
+  const highSatFat = findFlag("high_sat_fat");
   const positive = flags?.find((f) => isPositiveFlag(f));
-  const dotColor = negative
-    ? colors.warn
-    : positive
-      ? colors.accentBright
-      : null;
+
+  let dotColor: string | null = null;
+  let dotSize = 5;
+  if (alcoholHigh) {
+    dotColor = colors.badStrong;
+    dotSize = 7;
+  } else if (highSatFat) {
+    dotColor = colors.warn;
+    dotSize = 5;
+  } else if (alcoholMedium) {
+    dotColor = colors.warn;
+    dotSize = 5;
+  } else if (alcoholLight) {
+    dotColor = "#ca8a04"; // a softer amber for "a sip" days
+    dotSize = 4;
+  } else if (positive) {
+    dotColor = colors.accentBright;
+    dotSize = 5;
+  }
   const dotLabel = flags?.length ? ` · ${flags.join(", ")}` : "";
   return (
     <button
@@ -244,8 +264,8 @@ function Cell({
             position: "absolute",
             top: 2,
             right: 2,
-            width: 5,
-            height: 5,
+            width: dotSize,
+            height: dotSize,
             borderRadius: "50%",
             background: dotColor,
             boxShadow: "0 0 0 1px rgba(0,0,0,0.5)",

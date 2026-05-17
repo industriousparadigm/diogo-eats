@@ -15,6 +15,8 @@ function day(
     soluble_fiber_g: 0,
     calories: 0,
     protein_g: 0,
+    carbs_g: 0,
+    alcohol_g: 0,
     ...fields,
   };
 }

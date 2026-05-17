@@ -5,6 +5,7 @@ import {
   longestStreak,
   summarySentence,
   isPositiveFlag,
+  alcoholFlagFor,
   type Flag,
 } from "../overview";
 import type { DayAggregate } from "../types";
@@ -30,9 +31,57 @@ function day(
     soluble_fiber_g: 0,
     calories: 0,
     protein_g: 0,
+    carbs_g: 0,
+    alcohol_g: 0,
     ...fields,
   };
 }
+
+describe("alcoholFlagFor", () => {
+  it("returns null for exactly 0g (no drinks at all)", () => {
+    expect(alcoholFlagFor(0)).toBeNull();
+  });
+  it("a sip-to-a-drink (0 < x ≤ 14g) returns alcohol_light", () => {
+    expect(alcoholFlagFor(1)).toBe("alcohol_light");
+    expect(alcoholFlagFor(10.1)).toBe("alcohol_light");
+    expect(alcoholFlagFor(14)).toBe("alcohol_light");
+  });
+  it("standard-drink-plus (14g < x ≤ 42g) returns alcohol_medium", () => {
+    expect(alcoholFlagFor(14.1)).toBe("alcohol_medium");
+    expect(alcoholFlagFor(31.6)).toBe("alcohol_medium");
+    expect(alcoholFlagFor(42)).toBe("alcohol_medium");
+  });
+  it("over 18cl-limoncello (>42g) returns alcohol_high", () => {
+    expect(alcoholFlagFor(42.1)).toBe("alcohol_high");
+    expect(alcoholFlagFor(80)).toBe("alcohol_high");
+  });
+});
+
+describe("flagsForDay alcohol", () => {
+  it("includes alcohol_light for a small wine day", () => {
+    const f = flagsForDay(day("2026-05-10", 3, { alcohol_g: 10 }), targets);
+    expect(f).toContain("alcohol_light");
+    expect(f).not.toContain("alcohol_medium");
+    expect(f).not.toContain("alcohol_high");
+  });
+  it("includes alcohol_medium for ~2 standard drinks", () => {
+    const f = flagsForDay(day("2026-05-10", 3, { alcohol_g: 25 }), targets);
+    expect(f).toContain("alcohol_medium");
+  });
+  it("includes alcohol_high for limoncello-night", () => {
+    const f = flagsForDay(day("2026-05-10", 3, { alcohol_g: 50 }), targets);
+    expect(f).toContain("alcohol_high");
+  });
+  it("alcohol flags coexist with positive flags", () => {
+    const f = flagsForDay(
+      day("2026-05-10", 3, { alcohol_g: 30, plant_pct: 100, soluble_fiber_g: 12 }),
+      targets
+    );
+    expect(f).toContain("all_plant");
+    expect(f).toContain("fiber_hit");
+    expect(f).toContain("alcohol_medium");
+  });
+});
 
 describe("flagsForDay", () => {
   it("returns empty array for unlogged days", () => {

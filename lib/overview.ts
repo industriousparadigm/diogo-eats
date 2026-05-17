@@ -9,15 +9,33 @@ export type Flag =
   | "fiber_hit"
   | "low_sat_fat"
   | "clean_day"
-  | "high_sat_fat";
+  | "high_sat_fat"
+  | "alcohol_light"
+  | "alcohol_medium"
+  | "alcohol_high";
 
 export function isPositiveFlag(f: Flag): boolean {
   return f === "all_plant" || f === "fiber_hit" || f === "low_sat_fat" || f === "clean_day";
 }
 
-// Derive day-level flags from the aggregate alone. No new vision work
-// needed — these are all reads from existing fields. The "alcohol" /
-// "ultra-processed" markers wait for a future data-model expansion.
+// Alcohol tiering. Diogo's thresholds: 0g = no flag, >0g = light (a sip
+// to a drink), >14g = medium (~1+ standard drinks), >42g = high (clearly
+// over — calibrated to ~18cl of limoncello, ~45g pure ethanol).
+export const ALCOHOL_LIGHT_THRESHOLD_G = 0;
+export const ALCOHOL_MEDIUM_THRESHOLD_G = 14;
+export const ALCOHOL_HIGH_THRESHOLD_G = 42;
+
+export function alcoholFlagFor(grams: number): Flag | null {
+  if (grams > ALCOHOL_HIGH_THRESHOLD_G) return "alcohol_high";
+  if (grams > ALCOHOL_MEDIUM_THRESHOLD_G) return "alcohol_medium";
+  if (grams > ALCOHOL_LIGHT_THRESHOLD_G) return "alcohol_light";
+  return null;
+}
+
+// Derive day-level flags from the aggregate alone. All reads from
+// existing aggregate fields. Alcohol is tiered into three intensities
+// so the calendar can show soft → loud watch dots based on how much
+// alcohol the day actually held.
 export function flagsForDay(agg: DayAggregate, targets: Targets): Flag[] {
   if (agg.meal_count === 0) return [];
   const out: Flag[] = [];
@@ -32,6 +50,8 @@ export function flagsForDay(agg: DayAggregate, targets: Targets): Flag[] {
     out.push("clean_day");
   }
   if (agg.sat_fat_g >= targets.sat_fat_g * 1.5) out.push("high_sat_fat");
+  const alc = alcoholFlagFor(agg.alcohol_g ?? 0);
+  if (alc) out.push(alc);
   return out;
 }
 
