@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { colors, inputStyle } from "@/lib/styles";
 import { DEFAULT_TARGETS, Targets, resetTargets, saveTargets, useTargets } from "@/lib/targets";
+import { useKeyboardInset } from "@/lib/useKeyboardInset";
 import { WhoopIntegrationCard } from "@/app/components/WhoopIntegrationCard";
 
 // Settings as its own page — replaces the modal sheet that obscured
@@ -20,6 +21,7 @@ export default function SettingsPage() {
   }
 
   const [saving, setSaving] = useState(false);
+  const keyboardInset = useKeyboardInset();
 
   async function save() {
     setSaving(true);
@@ -165,16 +167,17 @@ export default function SettingsPage() {
       <div
         style={{
           position: "fixed",
-          bottom: 0,
+          bottom: keyboardInset,
           left: 0,
           right: 0,
           background: colors.bg,
           borderTop: `1px solid ${colors.border}`,
           padding: "12px 16px",
-          paddingBottom: "calc(12px + env(safe-area-inset-bottom))",
+          paddingBottom: keyboardInset > 0 ? 12 : "calc(12px + env(safe-area-inset-bottom))",
           display: "flex",
           gap: 8,
           zIndex: 10,
+          transition: "bottom 120ms ease-out",
         }}
       >
         <button

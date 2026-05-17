@@ -9,6 +9,7 @@ import { deleteMeal, lookupFood, patchMealItems, talkFixMeal } from "@/lib/api";
 import { AutoGrowTextarea } from "@/app/components/AutoGrowTextarea";
 import { ItemRow } from "@/app/components/ItemRow";
 import { PhotoLightbox } from "@/app/components/PhotoLightbox";
+import { useKeyboardInset } from "@/lib/useKeyboardInset";
 
 function safeParseItems(raw: string): Item[] {
   try {
@@ -33,6 +34,7 @@ export function EditPage({ meal }: { meal: Meal }) {
   const router = useRouter();
   const original = useMemo(() => safeParseItems(meal.items_json), [meal.items_json]);
   const [items, setItems] = useState<Item[]>(() => original);
+  const keyboardInset = useKeyboardInset();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -562,17 +564,18 @@ export function EditPage({ meal }: { meal: Meal }) {
         <div
           style={{
             position: "fixed",
-            bottom: 0,
+            bottom: keyboardInset,
             left: 0,
             right: 0,
             background: colors.bg,
             borderTop: `1px solid ${colors.border}`,
             padding: "12px 16px",
-            paddingBottom: "calc(12px + env(safe-area-inset-bottom))",
+            paddingBottom: keyboardInset > 0 ? 12 : "calc(12px + env(safe-area-inset-bottom))",
             display: "flex",
             flexDirection: "column",
             gap: 10,
             zIndex: 10,
+            transition: "bottom 120ms ease-out",
           }}
         >
           <div

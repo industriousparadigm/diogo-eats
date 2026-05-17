@@ -9,6 +9,7 @@ import { parsePhoto, parseText } from "@/lib/api";
 import { addPendingTask, removePendingTask, updatePendingTask } from "@/lib/pendingStore";
 import type { PendingTask } from "@/lib/types";
 import { ymd, todayStart, isSameDay } from "@/lib/date";
+import { useKeyboardInset } from "@/lib/useKeyboardInset";
 
 // Unified capture page. One screen, one submit, no modal. The user can:
 //   - Add 1-4 photos (optional)
@@ -51,6 +52,7 @@ function LogInner() {
   const [cropIdx, setCropIdx] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const keyboardInset = useKeyboardInset();
 
   // CRITICAL: memoize object URLs against the files array. Without
   // this, every keystroke in the caption box re-renders this component,
@@ -462,16 +464,17 @@ function LogInner() {
       <div
         style={{
           position: "fixed",
-          bottom: 0,
+          bottom: keyboardInset,
           left: 0,
           right: 0,
           background: colors.bg,
           borderTop: `1px solid ${colors.border}`,
           padding: "12px 16px",
-          paddingBottom: "calc(12px + env(safe-area-inset-bottom))",
+          paddingBottom: keyboardInset > 0 ? 12 : "calc(12px + env(safe-area-inset-bottom))",
           display: "flex",
           gap: 8,
           zIndex: 10,
+          transition: "bottom 120ms ease-out",
         }}
       >
         <button
