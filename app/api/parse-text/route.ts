@@ -3,6 +3,7 @@ import { parseMealText, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vis
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { createdAtFor } from "@/lib/date";
 import { requireUser } from "@/lib/user";
+import { getParseQuota, recordParseEvent } from "@/lib/quota";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -30,6 +31,18 @@ export async function POST(req: Request) {
     if (resp instanceof NextResponse) return resp;
     throw resp;
   }
+
+  const quota = await getParseQuota(userId);
+  if (!quota.ok) {
+    return NextResponse.json(
+      {
+        error: `today's parse limit reached (${quota.limit}). resets at local midnight.`,
+        quota,
+      },
+      { status: 429 }
+    );
+  }
+
   try {
     let body: unknown;
     try {
@@ -68,6 +81,7 @@ export async function POST(req: Request) {
       meal_vibe: parsed.meal_vibe,
     };
     await insertMeal(meal);
+    void recordParseEvent(userId);
 
     return NextResponse.json({ meal });
   } catch (err: any) {

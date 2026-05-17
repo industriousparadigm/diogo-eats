@@ -4,6 +4,7 @@ import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { uploadPhoto } from "@/lib/storage";
 import { createdAtFor } from "@/lib/date";
 import { requireUser } from "@/lib/user";
+import { getParseQuota, recordParseEvent } from "@/lib/quota";
 import crypto from "crypto";
 import sharp from "sharp";
 
@@ -92,6 +93,19 @@ export async function POST(req: Request) {
     if (resp instanceof NextResponse) return resp;
     throw resp;
   }
+
+  // Per-user daily quota check before doing any expensive work.
+  const quota = await getParseQuota(userId);
+  if (!quota.ok) {
+    return NextResponse.json(
+      {
+        error: `today's parse limit reached (${quota.limit}). resets at local midnight.`,
+        quota,
+      },
+      { status: 429 }
+    );
+  }
+
   try {
     let form: FormData;
     try {
@@ -176,6 +190,7 @@ export async function POST(req: Request) {
       meal_vibe: parsed.meal_vibe,
     };
     await insertMeal(meal);
+    void recordParseEvent(userId);
 
     return NextResponse.json({ meal });
   } catch (err: any) {
