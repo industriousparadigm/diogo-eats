@@ -18,13 +18,20 @@ export default function SettingsPage() {
     setDraft((d) => ({ ...d, [field]: isFinite(n) && n > 0 ? n : 0 }));
   }
 
-  function save() {
-    saveTargets(draft);
-    router.back();
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await saveTargets(draft);
+      router.back();
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function resetAll() {
-    resetTargets();
+  async function resetAll() {
+    await resetTargets();
     setDraft(DEFAULT_TARGETS);
   }
 
@@ -172,18 +179,20 @@ export default function SettingsPage() {
         </button>
         <button
           onClick={save}
+          disabled={saving}
           style={{
             flex: 1,
-            background: colors.accent,
+            background: saving ? "#3f3f46" : colors.accent,
             color: "#fff",
             padding: "12px 16px",
             fontSize: 14,
             fontWeight: 500,
             borderRadius: 8,
             border: "none",
+            cursor: saving ? "default" : "pointer",
           }}
         >
-          save
+          {saving ? "saving…" : "save"}
         </button>
       </div>
     </main>
