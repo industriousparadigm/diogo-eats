@@ -50,11 +50,14 @@ export async function deriveTargets(
 ): Promise<DerivedTargets> {
   const userMsg = buildUserMessage(inputs);
 
+  // Onboarding runs once per user; we use Opus 4.7 with adaptive
+  // thinking for the best target-derivation reasoning.
   const resp = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 600,
+    model: "claude-opus-4-7",
+    max_tokens: 1500,
+    thinking: { type: "adaptive" },
     output_config: {
-      effort: "medium",
+      effort: "high",
       format: { type: "json_schema", schema: TARGETS_SCHEMA },
     },
     system: SYSTEM,

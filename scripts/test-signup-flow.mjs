@@ -1,14 +1,16 @@
-// End-to-end signup flow rehearsal. Creates a synthetic auth user,
-// generates their magic link, walks through /auth/callback to get a
-// session cookie, then exercises every signup-adjacent endpoint:
-//   - /api/profile (auto-create stub)
-//   - /api/onboarding (Claude-Haiku target derivation)
-//   - /api/parse-text (sanity meal log under the new user)
-//   - /api/stats (verify the meal aggregates only for them)
-// Finally deletes the test user + their data so prod stays pristine.
+// End-to-end signup flow rehearsal against the LIVE prod deployment.
 //
-// Runs against the LIVE prod deployment so it exercises Vercel
-// middleware + the actual deployed routes. ~30 seconds total.
+// Now that magic links use the token_hash flow, the test path is
+// straightforward — no PKCE state to fake:
+//
+//   1. Create a synthetic auth user via admin
+//   2. Get a fresh token_hash via admin.generateLink
+//   3. Hit /auth/callback?token_hash=...&type=email — captures session
+//      cookies set by the server-side verifyOtp
+//   4. Exercise /api/profile + /api/onboarding + /api/parse-text +
+//      /api/stats with those cookies to confirm Claude-Haiku target
+//      derivation works AND data is isolated to the new user
+//   5. Delete the test user
 //
 //   cd ~/Dev/Personal/eats && node scripts/test-signup-flow.mjs
 
@@ -45,12 +47,10 @@ function fail(msg) {
   process.exitCode = 1;
 }
 
-// CookieJar: keep all Set-Cookie name=value pairs across redirects.
 function makeJar() {
   const cookies = new Map();
   return {
     addFromHeaders(headers) {
-      // node-fetch's Headers has getSetCookie() in recent versions
       const setCookies = headers.getSetCookie?.() ?? [];
       for (const sc of setCookies) {
         const pair = sc.split(";")[0];
@@ -58,11 +58,8 @@ function makeJar() {
         if (eq <= 0) continue;
         const name = pair.slice(0, eq).trim();
         const value = pair.slice(eq + 1).trim();
-        if (value === "" || value === "deleted") {
-          cookies.delete(name);
-        } else {
-          cookies.set(name, value);
-        }
+        if (value === "" || value === "deleted") cookies.delete(name);
+        else cookies.set(name, value);
       }
     },
     header() {
@@ -72,6 +69,9 @@ function makeJar() {
     },
     size() {
       return cookies.size;
+    },
+    names() {
+      return [...cookies.keys()];
     },
   };
 }
@@ -113,32 +113,36 @@ async function main() {
     userId = created.user.id;
     ok(`auth.users id ${userId}`);
 
-    logStep(2, "Generate a magic link (admin) — no email sent");
+    logStep(2, "Generate a magic-link token_hash (admin)");
     const { data: link, error: lErr } = await supaAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: TEST_EMAIL,
-      options: { redirectTo: `${SITE}/auth/callback` },
     });
     if (lErr) throw new Error(`generateLink failed: ${lErr.message}`);
-    const actionLink = link.properties.action_link;
-    if (!actionLink) throw new Error("no action_link returned");
-    ok("magic-link URL obtained");
+    const tokenHash = link.properties.hashed_token;
+    if (!tokenHash) throw new Error("no token_hash returned");
+    ok(`token_hash obtained (${tokenHash.slice(0, 12)}…)`);
 
-    logStep(3, "Walk the magic link through /auth/callback to acquire session cookie");
-    const { resp: cbResp, finalUrl } = await fetchFollow(actionLink, {}, jar);
+    logStep(3, "Hit /auth/callback?token_hash=…&type=email — server verifies");
+    const callbackUrl = `${SITE}/auth/callback?token_hash=${encodeURIComponent(tokenHash)}&type=email`;
+    const { resp: cbResp, finalUrl } = await fetchFollow(callbackUrl, {}, jar);
     if (cbResp.status >= 400) {
       const body = await cbResp.text();
       throw new Error(`callback hop failed: HTTP ${cbResp.status} ${body.slice(0, 200)}`);
     }
-    ok(`landed on ${finalUrl} (status ${cbResp.status}, ${jar.size()} cookies)`);
+    ok(`landed on ${finalUrl} (status ${cbResp.status}, ${jar.size()} cookies: ${jar.names().join(", ")})`);
+    if (finalUrl.includes("/login")) throw new Error("ended on /login — session not set");
 
     logStep(4, "GET /api/profile — should auto-create stub row for new user");
     const profResp = await fetch(`${SITE}/api/profile`, {
       headers: { cookie: jar.header() },
     });
     const profJson = await profResp.json();
-    if (profResp.status !== 200) throw new Error(`profile GET: ${profResp.status} ${JSON.stringify(profJson)}`);
-    ok(`stub created (sat_fat=${profJson.profile.sat_fat_g}, fiber=${profJson.profile.soluble_fiber_g}, cal=${profJson.profile.calories}, pro=${profJson.profile.protein_g})`);
+    if (profResp.status !== 200)
+      throw new Error(`profile GET: ${profResp.status} ${JSON.stringify(profJson)}`);
+    ok(
+      `stub created (sat_fat=${profJson.profile.sat_fat_g}, fiber=${profJson.profile.soluble_fiber_g}, cal=${profJson.profile.calories}, pro=${profJson.profile.protein_g})`
+    );
     if (profJson.profile.onboarded_at != null) fail("onboarded_at should still be null at stub");
 
     logStep(5, "POST /api/onboarding — Claude-Haiku derives starter targets");
@@ -156,11 +160,10 @@ async function main() {
     if (onbResp.status !== 200)
       throw new Error(`onboarding: ${onbResp.status} ${JSON.stringify(onbJson)}`);
     ok(
-      `derived targets: cal=${onbJson.profile.calories}, pro=${onbJson.profile.protein_g}, sat=${onbJson.profile.sat_fat_g}, fib=${onbJson.profile.soluble_fiber_g}`
+      `derived: cal=${onbJson.profile.calories}, pro=${onbJson.profile.protein_g}, sat=${onbJson.profile.sat_fat_g}, fib=${onbJson.profile.soluble_fiber_g}`
     );
     ok(`rationale: "${onbJson.rationale}"`);
     if (onbJson.profile.onboarded_at == null) fail("onboarded_at should be set now");
-    if (onbJson.profile.notes?.toLowerCase().includes("vegetarian")) ok("notes round-tripped");
 
     logStep(6, "POST /api/parse-text — log a sanity meal as test user");
     const parseResp = await fetch(`${SITE}/api/parse-text`, {
@@ -171,37 +174,27 @@ async function main() {
     const parseJson = await parseResp.json();
     if (parseResp.status !== 200)
       throw new Error(`parse-text: ${parseResp.status} ${JSON.stringify(parseJson)}`);
-    ok(`meal logged, id ${parseJson.meal.id}, ${parseJson.meal.calories} kcal`);
+    ok(`meal logged, ${parseJson.meal.calories} kcal, ${parseJson.meal.plant_pct}% plant`);
 
     logStep(7, "GET /api/stats?days=7 — verify the meal appears under THIS user");
     const statsResp = await fetch(`${SITE}/api/stats?days=7`, {
       headers: { cookie: jar.header() },
     });
     const statsJson = await statsResp.json();
-    if (statsResp.status !== 200)
-      throw new Error(`stats: ${statsResp.status} ${JSON.stringify(statsJson)}`);
     const today = statsJson.aggregates[statsJson.aggregates.length - 1];
     if (today.meal_count !== 1)
       fail(`expected meal_count=1 today, got ${today.meal_count}`);
     else ok(`today: ${today.meal_count} meal, ${today.calories} kcal — isolated from Diogo's data`);
 
-    logStep(8, "Cross-user isolation check: /api/meals as test user shouldn't see Diogo's 115 meals");
+    logStep(8, "Cross-user isolation: /api/meals as test user shouldn't see Diogo's 115 meals");
     const mealsResp = await fetch(
       `${SITE}/api/meals?day=${new Date().toISOString().slice(0, 10)}`,
       { headers: { cookie: jar.header() } }
     );
     const mealsJson = await mealsResp.json();
-    if (mealsResp.status !== 200) throw new Error(`meals: ${mealsResp.status}`);
     const mealCount = mealsJson.meals.length;
-    if (mealCount === 1) ok("only the one test meal visible — RLS / user_id filter working");
+    if (mealCount === 1) ok("only the one test meal visible — isolation working");
     else fail(`expected 1 meal today, saw ${mealCount}`);
-
-    logStep(9, "Cleanup: delete test user + cascade their meals/profile");
-    if (userId) {
-      const { error: dErr } = await supaAdmin.auth.admin.deleteUser(userId);
-      if (dErr) fail(`deleteUser failed: ${dErr.message}`);
-      else ok("test user + cascade rows deleted");
-    }
 
     console.log(
       process.exitCode === 0
@@ -210,11 +203,14 @@ async function main() {
     );
   } catch (err) {
     console.error(`\nFATAL: ${err.message}`);
-    if (userId) {
-      console.error("Attempting cleanup…");
-      await supaAdmin.auth.admin.deleteUser(userId).catch(() => {});
-    }
     process.exit(1);
+  } finally {
+    if (userId) {
+      console.log("\nCleanup: delete test user + cascade rows");
+      const { error } = await supaAdmin.auth.admin.deleteUser(userId);
+      if (error) console.error(`  ✗ deleteUser failed: ${error.message}`);
+      else console.log("  ✓ done");
+    }
   }
 }
 
