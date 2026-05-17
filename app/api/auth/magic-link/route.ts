@@ -4,14 +4,11 @@ import { isAllowedEmail, parseAllowedEmails } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-// Send-only endpoint for the magic-link sign-in flow. Validates the
-// email against the allowlist BEFORE asking Supabase to send the
-// email, so non-invited addresses don't end up as orphan auth.users
-// rows (and don't get spammed with sign-in attempts).
-//
-// Uses the service-role key to invite users explicitly. For existing
-// users this is equivalent to signInWithOtp; for new users it creates
-// the auth.users row and emails them. The allowlist gates both cases.
+// Send a magic-link sign-in email. Allowlist-gates first so non-invited
+// addresses don't drain the rate limit or create orphan auth.users
+// rows. Uses the anon client + signInWithOtp because that's the
+// primitive that actually sends the email; admin.generateLink only
+// returns the URL without sending.
 export async function POST(req: Request) {
   let body: unknown;
   try {
@@ -27,7 +24,7 @@ export async function POST(req: Request) {
   const allowed = parseAllowedEmails(process.env.ALLOWED_EMAILS);
   if (!isAllowedEmail(email, allowed)) {
     // Intentionally vague — don't confirm whether an email is in the
-    // allowlist or not to anyone fishing for invites.
+    // allowlist to anyone fishing for invites.
     return NextResponse.json(
       { error: "not invited — ask Diogo for access" },
       { status: 403 }
@@ -35,46 +32,36 @@ export async function POST(req: Request) {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ??
     (req.headers.get("origin") ?? "https://diogo-eats.vercel.app");
 
-  const supa = createClient(url, serviceKey, {
+  const supa = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // signInWithOtp via the public anon client would honor RLS for any
-  // post-link-creation hooks, but at the public anon scope we can't
-  // pre-create users either. Use admin generateLink so allowlist
-  // gating is the only gate.
-  const { data, error } = await supa.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: { redirectTo: `${siteUrl}/auth/callback` },
-  });
-  if (error) {
-    console.error("generateLink failed:", error.message);
-    return NextResponse.json({ error: "couldn't send link" }, { status: 500 });
-  }
-
-  // The admin API returns the action_link but DOESN'T email by default.
-  // Re-trigger via signInWithOtp now that the user exists (idempotent
-  // for existing users) so Supabase sends the email.
-  const { error: otpErr } = await supa.auth.signInWithOtp({
+  const { error } = await supa.auth.signInWithOtp({
     email,
     options: {
-      shouldCreateUser: false, // user definitely exists after generateLink above
+      shouldCreateUser: true,
       emailRedirectTo: `${siteUrl}/auth/callback`,
     },
   });
-  if (otpErr) {
-    console.error("signInWithOtp failed:", otpErr.message);
-    return NextResponse.json({ error: "couldn't send link" }, { status: 500 });
+  if (error) {
+    console.error("signInWithOtp failed:", error.message, error);
+    // Surface the actual reason to the user (rate-limit etc.) rather
+    // than hide behind a generic message — gives them a path forward.
+    const friendly = error.message?.includes("rate limit")
+      ? "too many sign-in attempts — wait a few minutes and try again"
+      : error.message?.includes("Email")
+        ? "couldn't send link — check your inbox / spam, or try again in a few minutes"
+        : "couldn't send link — try again";
+    return NextResponse.json(
+      { error: friendly, _supabase: error.message },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ ok: true, sent_to: email });
-  // `data` is unused at this point but kept for the future:
-  // we could surface the action_link directly in dev mode for testing.
-  void data;
 }
