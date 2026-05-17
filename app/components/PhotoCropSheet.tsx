@@ -1,34 +1,45 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PrimaryButton, SecondaryButton, SheetShell } from "./sheet";
 import {
-  clampOffset,
+  clampRectToBox,
+  containedDisplayDims,
+  displayRectToSourcePixels,
   effectiveDims,
-  initialFitScale,
   rotateCW,
+  type Rect,
   type Rotation,
 } from "@/lib/cropMath";
 import { colors } from "@/lib/styles";
 
-// Crop / rotate / zoom sheet. Opens from a thumbnail tap in ConfirmSheet.
-// Three gestures:
-//   - one-finger drag → pan
-//   - two-finger pinch → zoom
-//   - rotate button → 90° CW (camera saves sideways way too often)
+// Real crop: tap-and-drag a rectangle on the photo. Rotate in 90°
+// steps. Apply renders that rectangle (at source resolution) into a
+// new JPEG and hands it back as a File.
 //
-// On apply, the visible portion of the frame is rendered to a JPEG and
-// the source File is replaced.
+// Render model:
+//   - Outer container: fixed display box (~80vw cap, ~70vh cap).
+//   - Image: scaled-to-contain inside the container, rotated as needed.
+//   - Crop rect: absolutely-positioned overlay in CSS pixels relative
+//     to the rendered image's top-left. Eight handles for resize +
+//     dragging the interior to move.
+//
+// Performance:
+//   - Touch handlers only update state during the active gesture
+//     (no continuous polling).
+//   - The image is set as a CSS `background-image` on the cropped
+//     region's reveal layer so we don't need two <img> elements to
+//     show the dimmed-vs-bright contrast.
 
-const FRAME_MAX = 380; // px — used for screen layout, not output dimensions
+const CONTAINER_MAX_W = 360;
+const CONTAINER_MAX_H = 480;
+const HANDLE_SIZE = 28; // touch-friendly
+const MIN_RECT = 48;
 const OUTPUT_MAX_DIM = 2048;
-const ZOOM_MAX_FACTOR = 5; // max scale relative to initial-fit (cover)
 
-type Transform = {
-  scale: number;
-  rotation: Rotation;
-  offset: { x: number; y: number };
-};
+type DragMode =
+  | { kind: "move" }
+  | { kind: "resize"; corner: "tl" | "tr" | "bl" | "br" };
 
 export function PhotoCropSheet({
   file,
@@ -40,181 +51,186 @@ export function PhotoCropSheet({
   onCancel: () => void;
 }) {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
-  const [previewUrl] = useState(() => URL.createObjectURL(file));
-  const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
-  const [transform, setTransform] = useState<Transform>({
-    scale: 1,
-    rotation: 0,
-    offset: { x: 0, y: 0 },
+  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+
+  const [rotation, setRotation] = useState<Rotation>(0);
+  const [container, setContainer] = useState<{ w: number; h: number }>({
+    w: Math.min(CONTAINER_MAX_W, typeof window !== "undefined" ? window.innerWidth - 48 : CONTAINER_MAX_W),
+    h: Math.min(CONTAINER_MAX_H, typeof window !== "undefined" ? Math.round(window.innerHeight * 0.6) : CONTAINER_MAX_H),
   });
   const [busy, setBusy] = useState(false);
-
-  // Gesture state — refs so we don't re-render mid-drag.
-  const dragState = useRef<{
-    mode: "pan" | "pinch" | null;
-    startTouches: { id: number; x: number; y: number }[];
-    startTransform: Transform;
-  }>({ mode: null, startTouches: [], startTransform: transform });
 
   useEffect(() => {
     const i = new Image();
     i.onload = () => setImg(i);
     i.src = previewUrl;
-    return () => URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
 
-  // Compute the crop frame size from the source image aspect ratio,
-  // capped at FRAME_MAX. Re-runs on rotation since effective aspect flips.
+  // Display dims of the (rotated) image inside the container.
+  const display = useMemo(() => {
+    if (!img) return { w: 0, h: 0 };
+    const eff = effectiveDims(img.naturalWidth, img.naturalHeight, rotation);
+    return containedDisplayDims(eff.w, eff.h, container.w, container.h);
+  }, [img, rotation, container]);
+
+  // Crop rect lives in display coords (relative to the displayed image's
+  // top-left, NOT the container). Initialised to the full image; resets
+  // whenever rotation or display changes.
+  const [rect, setRect] = useState<Rect>({ x: 0, y: 0, width: 0, height: 0 });
   useEffect(() => {
-    if (!img) return;
-    const { w: ew, h: eh } = effectiveDims(
-      img.naturalWidth,
-      img.naturalHeight,
-      transform.rotation
-    );
-    const aspect = ew / eh;
-    let fw = Math.min(FRAME_MAX, window.innerWidth - 48);
-    let fh = fw / aspect;
-    if (fh > FRAME_MAX) {
-      fh = FRAME_MAX;
-      fw = fh * aspect;
+    if (display.w > 0 && display.h > 0) {
+      setRect({ x: 0, y: 0, width: display.w, height: display.h });
     }
-    setFrame({ w: fw, h: fh });
+  }, [display.w, display.h]);
 
-    // Reset to cover-fit when rotation changes.
-    const initial = initialFitScale(
-      img.naturalWidth,
-      img.naturalHeight,
-      transform.rotation,
-      fw,
-      fh
-    );
-    setTransform((t) => ({
-      ...t,
-      scale: initial,
-      offset: { x: 0, y: 0 },
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [img, transform.rotation]);
+  const dragRef = useRef<{
+    mode: DragMode | null;
+    startX: number;
+    startY: number;
+    startRect: Rect;
+  } | null>(null);
 
-  function onTouchStart(e: React.TouchEvent) {
-    if (!img || !frame) return;
-    const ts = Array.from(e.touches).map((t) => ({
-      id: t.identifier,
-      x: t.clientX,
-      y: t.clientY,
-    }));
-    dragState.current = {
-      mode: ts.length >= 2 ? "pinch" : "pan",
-      startTouches: ts,
-      startTransform: transform,
+  const onTouchStart = useCallback(
+    (mode: DragMode) => (e: React.TouchEvent | React.MouseEvent) => {
+      const t = "touches" in e ? e.touches[0] : (e as React.MouseEvent);
+      dragRef.current = {
+        mode,
+        startX: t.clientX,
+        startY: t.clientY,
+        startRect: { ...rect },
+      };
+    },
+    [rect]
+  );
+
+  const onTouchMove = useCallback(
+    (e: TouchEvent | MouseEvent) => {
+      const ds = dragRef.current;
+      if (!ds || !ds.mode) return;
+      e.preventDefault();
+      const t = "touches" in e ? e.touches[0] : (e as MouseEvent);
+      const dx = t.clientX - ds.startX;
+      const dy = t.clientY - ds.startY;
+      const s = ds.startRect;
+      let next: Rect = s;
+      if (ds.mode.kind === "move") {
+        next = { x: s.x + dx, y: s.y + dy, width: s.width, height: s.height };
+      } else {
+        const c = ds.mode.corner;
+        const minX = c === "tl" || c === "bl" ? s.x + s.width - MIN_RECT : s.x;
+        const minY = c === "tl" || c === "tr" ? s.y + s.height - MIN_RECT : s.y;
+        const maxX = c === "tr" || c === "br" ? s.x + MIN_RECT : 0;
+        const maxY = c === "bl" || c === "br" ? s.y + MIN_RECT : 0;
+        if (c === "tl") {
+          const nx = Math.min(minX, Math.max(0, s.x + dx));
+          const ny = Math.min(minY, Math.max(0, s.y + dy));
+          next = { x: nx, y: ny, width: s.width + (s.x - nx), height: s.height + (s.y - ny) };
+        } else if (c === "tr") {
+          const nw = Math.max(MIN_RECT, s.width + dx);
+          const ny = Math.min(minY, Math.max(0, s.y + dy));
+          next = { x: s.x, y: ny, width: nw, height: s.height + (s.y - ny) };
+          void maxX;
+        } else if (c === "bl") {
+          const nx = Math.min(minX, Math.max(0, s.x + dx));
+          const nh = Math.max(MIN_RECT, s.height + dy);
+          next = { x: nx, y: s.y, width: s.width + (s.x - nx), height: nh };
+          void maxY;
+        } else {
+          const nw = Math.max(MIN_RECT, s.width + dx);
+          const nh = Math.max(MIN_RECT, s.height + dy);
+          next = { x: s.x, y: s.y, width: nw, height: nh };
+        }
+      }
+      setRect(clampRectToBox(next, display, MIN_RECT));
+    },
+    [display]
+  );
+
+  const onTouchEnd = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const move = (e: TouchEvent | MouseEvent) => onTouchMove(e);
+    const end = () => onTouchEnd();
+    window.addEventListener("touchmove", move, { passive: false });
+    window.addEventListener("touchend", end);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    return () => {
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", end);
     };
-  }
-
-  function onTouchMove(e: React.TouchEvent) {
-    if (!img || !frame) return;
-    e.preventDefault();
-    const ds = dragState.current;
-    if (!ds.mode || ds.startTouches.length === 0) return;
-
-    if (ds.mode === "pan" && e.touches.length === 1) {
-      const t = e.touches[0];
-      const start = ds.startTouches[0];
-      const dx = t.clientX - start.x;
-      const dy = t.clientY - start.y;
-      const clamped = clampOffset(
-        img.naturalWidth,
-        img.naturalHeight,
-        ds.startTransform.rotation,
-        ds.startTransform.scale,
-        frame.w,
-        frame.h,
-        { x: ds.startTransform.offset.x + dx, y: ds.startTransform.offset.y + dy }
-      );
-      setTransform({ ...ds.startTransform, offset: clamped });
-    } else if (ds.mode === "pinch" && e.touches.length >= 2 && ds.startTouches.length >= 2) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const s1 = ds.startTouches[0];
-      const s2 = ds.startTouches[1];
-      const startDist = Math.hypot(s1.x - s2.x, s1.y - s2.y);
-      const nowDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      if (startDist === 0) return;
-      const factor = nowDist / startDist;
-      const minScale = initialFitScale(
-        img.naturalWidth,
-        img.naturalHeight,
-        ds.startTransform.rotation,
-        frame.w,
-        frame.h
-      );
-      const newScale = Math.max(
-        minScale,
-        Math.min(minScale * ZOOM_MAX_FACTOR, ds.startTransform.scale * factor)
-      );
-      // Pan offset needs re-clamping at the new scale.
-      const clamped = clampOffset(
-        img.naturalWidth,
-        img.naturalHeight,
-        ds.startTransform.rotation,
-        newScale,
-        frame.w,
-        frame.h,
-        ds.startTransform.offset
-      );
-      setTransform({ ...ds.startTransform, scale: newScale, offset: clamped });
-    }
-  }
-
-  function onTouchEnd() {
-    dragState.current.mode = null;
-  }
-
-  function onRotate() {
-    setTransform((t) => ({ ...t, rotation: rotateCW(t.rotation) }));
-  }
+  }, [onTouchMove, onTouchEnd]);
 
   async function apply() {
-    if (!img || !frame || busy) return;
+    if (!img || busy) return;
     setBusy(true);
     try {
-      const outW = Math.min(OUTPUT_MAX_DIM, Math.round(frame.w * 2));
-      const outH = Math.round(outW * (frame.h / frame.w));
-      const k = outW / frame.w;
+      const src = displayRectToSourcePixels(
+        rect,
+        display,
+        img.naturalWidth,
+        img.naturalHeight,
+        rotation
+      );
+      const k = Math.min(1, OUTPUT_MAX_DIM / Math.max(src.width, src.height));
+      const outW = Math.max(1, Math.round(src.width * k));
+      const outH = Math.max(1, Math.round(src.height * k));
 
       const canvas = document.createElement("canvas");
       canvas.width = outW;
       canvas.height = outH;
       const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("no 2d ctx");
+      if (!ctx) throw new Error("no ctx");
+
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, outW, outH);
+
+      // Apply rotation around the canvas centre + then drawImage from
+      // the requested SOURCE rectangle.
       ctx.save();
-      ctx.translate(
-        outW / 2 + transform.offset.x * k,
-        outH / 2 + transform.offset.y * k
+      ctx.translate(outW / 2, outH / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+      // After rotation, the source rect goes onto a -outW/2..outW/2 box.
+      // For 90/270, swap output dims for the drawImage step.
+      const drawW = rotation === 90 || rotation === 270 ? outH : outW;
+      const drawH = rotation === 90 || rotation === 270 ? outW : outH;
+      ctx.drawImage(
+        img,
+        src.x,
+        src.y,
+        src.width,
+        src.height,
+        -drawW / 2,
+        -drawH / 2,
+        drawW,
+        drawH
       );
-      ctx.rotate((transform.rotation * Math.PI) / 180);
-      ctx.scale(transform.scale * k, transform.scale * k);
-      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
       ctx.restore();
 
       const blob = await new Promise<Blob | null>((res) =>
         canvas.toBlob(res, "image/jpeg", 0.9)
       );
       if (!blob) throw new Error("toBlob failed");
-
       const name = file.name.replace(/\.[^.]+$/, "") + "-cropped.jpg";
-      const out = new File([blob], name, { type: "image/jpeg" });
-      onApply(out);
+      onApply(new File([blob], name, { type: "image/jpeg" }));
     } catch {
-      // Best effort — fail silently and let the user retry.
       setBusy(false);
     }
   }
 
+  // Layout: image rendered at (containerX, containerY) inside the
+  // outer container, centered. The crop overlay is positioned relative
+  // to that image position (offsetX, offsetY).
+  const offsetX = Math.max(0, (container.w - display.w) / 2);
+  const offsetY = Math.max(0, (container.h - display.h) / 2);
+
   return (
-    <SheetShell onScrimClick={onCancel} maxHeightVh={92}>
+    <SheetShell onScrimClick={onCancel} maxHeightVh={94}>
       <div
         style={{
           fontSize: 12,
@@ -223,20 +239,21 @@ export function PhotoCropSheet({
           textTransform: "uppercase",
         }}
       >
-        Crop · rotate · zoom
+        Crop · rotate
       </div>
+
       <div
         style={{
           display: "flex",
           justifyContent: "center",
-          padding: "8px 0",
+          padding: "4px 0",
         }}
       >
-        {!img || !frame ? (
+        {!img ? (
           <div
             style={{
-              width: FRAME_MAX,
-              height: FRAME_MAX,
+              width: container.w,
+              height: container.h,
               background: "#0a0a0a",
               border: `1px solid ${colors.border}`,
               borderRadius: 8,
@@ -251,18 +268,13 @@ export function PhotoCropSheet({
           </div>
         ) : (
           <div
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onTouchCancel={onTouchEnd}
             style={{
-              width: frame.w,
-              height: frame.h,
-              overflow: "hidden",
+              width: container.w,
+              height: container.h,
               position: "relative",
               background: "#000",
               borderRadius: 8,
-              border: `1px solid ${colors.border}`,
+              overflow: "hidden",
               touchAction: "none",
               userSelect: "none",
             }}
@@ -273,29 +285,88 @@ export function PhotoCropSheet({
               draggable={false}
               style={{
                 position: "absolute",
-                top: "50%",
-                left: "50%",
-                width: img.naturalWidth,
-                height: img.naturalHeight,
-                maxWidth: "none",
-                maxHeight: "none",
-                transform: `translate(calc(-50% + ${transform.offset.x}px), calc(-50% + ${transform.offset.y}px)) rotate(${transform.rotation}deg) scale(${transform.scale})`,
+                left: offsetX,
+                top: offsetY,
+                width:
+                  rotation === 90 || rotation === 270 ? display.h : display.w,
+                height:
+                  rotation === 90 || rotation === 270 ? display.w : display.h,
+                transform: `rotate(${rotation}deg)`,
                 transformOrigin: "center center",
+                // Position correction for 90/270: with transformOrigin
+                // at the centre of the natural (unrotated) bounding
+                // box, the rotated image's bounding box still sits at
+                // (offsetX, offsetY) once we apply the swapped W/H above.
+                ...(rotation === 90 || rotation === 270
+                  ? {
+                      left: offsetX - (display.h - display.w) / 2,
+                      top: offsetY - (display.w - display.h) / 2,
+                    }
+                  : {}),
                 pointerEvents: "none",
                 WebkitUserSelect: "none",
               }}
             />
-            {/* Subtle inner grid for composition reference */}
+
+            {/* Dim outside the crop rect with four CSS masks. */}
             <div
               aria-hidden
               style={{
                 position: "absolute",
                 inset: 0,
                 pointerEvents: "none",
-                background:
-                  "linear-gradient(to right, transparent 33%, rgba(255,255,255,0.12) 33%, rgba(255,255,255,0.12) 33.3%, transparent 33.3%, transparent 66.6%, rgba(255,255,255,0.12) 66.6%, rgba(255,255,255,0.12) 66.9%, transparent 66.9%), linear-gradient(to bottom, transparent 33%, rgba(255,255,255,0.12) 33%, rgba(255,255,255,0.12) 33.3%, transparent 33.3%, transparent 66.6%, rgba(255,255,255,0.12) 66.6%, rgba(255,255,255,0.12) 66.9%, transparent 66.9%)",
+                background: "rgba(0,0,0,0.45)",
+                clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${offsetX + rect.x}px ${offsetY + rect.y}px, ${offsetX + rect.x}px ${offsetY + rect.y + rect.height}px, ${offsetX + rect.x + rect.width}px ${offsetY + rect.y + rect.height}px, ${offsetX + rect.x + rect.width}px ${offsetY + rect.y}px, ${offsetX + rect.x}px ${offsetY + rect.y}px)`,
               }}
             />
+
+            {/* Crop rect with handles. */}
+            <div
+              onTouchStart={onTouchStart({ kind: "move" })}
+              onMouseDown={onTouchStart({ kind: "move" })}
+              style={{
+                position: "absolute",
+                left: offsetX + rect.x,
+                top: offsetY + rect.y,
+                width: rect.width,
+                height: rect.height,
+                border: `2px solid ${colors.accentBright}`,
+                boxSizing: "border-box",
+                cursor: "move",
+              }}
+            >
+              {(
+                [
+                  { c: "tl", style: { left: -HANDLE_SIZE / 2, top: -HANDLE_SIZE / 2 } },
+                  { c: "tr", style: { right: -HANDLE_SIZE / 2, top: -HANDLE_SIZE / 2 } },
+                  { c: "bl", style: { left: -HANDLE_SIZE / 2, bottom: -HANDLE_SIZE / 2 } },
+                  { c: "br", style: { right: -HANDLE_SIZE / 2, bottom: -HANDLE_SIZE / 2 } },
+                ] as const
+              ).map(({ c, style }) => (
+                <div
+                  key={c}
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    onTouchStart({ kind: "resize", corner: c })(e);
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onTouchStart({ kind: "resize", corner: c })(e);
+                  }}
+                  style={{
+                    position: "absolute",
+                    width: HANDLE_SIZE,
+                    height: HANDLE_SIZE,
+                    borderRadius: HANDLE_SIZE / 2,
+                    background: colors.accentBright,
+                    border: "2px solid #0a0a0a",
+                    boxSizing: "border-box",
+                    cursor: "nwse-resize",
+                    ...style,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -304,13 +375,11 @@ export function PhotoCropSheet({
         style={{
           display: "flex",
           gap: 8,
-          justifyContent: "center",
           alignItems: "center",
         }}
       >
         <button
-          onClick={onRotate}
-          aria-label="rotate 90 degrees"
+          onClick={() => setRotation((r) => rotateCW(r))}
           disabled={!img || busy}
           style={{
             background: "transparent",
@@ -319,22 +388,36 @@ export function PhotoCropSheet({
             borderRadius: 8,
             padding: "10px 14px",
             fontSize: 13,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
           }}
         >
           ↻ rotate
+        </button>
+        <button
+          onClick={() => {
+            if (display.w > 0 && display.h > 0)
+              setRect({ x: 0, y: 0, width: display.w, height: display.h });
+          }}
+          disabled={!img || busy}
+          style={{
+            background: "transparent",
+            color: colors.textMuted,
+            border: `1px solid ${colors.borderStrong}`,
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 13,
+          }}
+        >
+          reset
         </button>
         <div
           style={{
             fontSize: 10,
             color: colors.textFaint,
             letterSpacing: 0.3,
-            paddingLeft: 8,
+            marginLeft: 4,
           }}
         >
-          pinch to zoom · drag to pan
+          drag corners to crop · drag inside to move
         </div>
       </div>
 
