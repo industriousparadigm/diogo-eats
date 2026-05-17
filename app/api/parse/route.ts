@@ -5,6 +5,7 @@ import { uploadPhoto } from "@/lib/storage";
 import { createdAtFor } from "@/lib/date";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
+import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
 import crypto from "crypto";
 import sharp from "sharp";
 
@@ -164,9 +165,10 @@ export async function POST(req: Request) {
     const filename = `${id}.jpg`;
     await uploadPhoto(filename, buf, "image/jpeg");
 
-    const [known, recent] = await Promise.all([
+    const [known, recent, trainingBlock] = await Promise.all([
       knownFoodsFromMemory(userId),
       recentMealsForContext(userId),
+      getTrainingPromptBlock(userId).catch(() => ""),
     ]);
     const parsed = await parseMealPhoto(
       buf.toString("base64"),
@@ -174,7 +176,8 @@ export async function POST(req: Request) {
       caption ?? undefined,
       known,
       recent,
-      files.length > 1
+      files.length > 1,
+      trainingBlock || undefined
     );
     const totals = totalsFromItems(parsed.items);
 

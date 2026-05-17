@@ -4,6 +4,7 @@ import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { createdAtFor } from "@/lib/date";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
+import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -61,11 +62,12 @@ export async function POST(req: Request) {
         ? rawForDate
         : null;
 
-    const [known, recent] = await Promise.all([
+    const [known, recent, trainingBlock] = await Promise.all([
       knownFoodsFromMemory(userId),
       recentMealsForContext(userId),
+      getTrainingPromptBlock(userId).catch(() => ""),
     ]);
-    const parsed = await parseMealText(text, known, recent);
+    const parsed = await parseMealText(text, known, recent, trainingBlock || undefined);
     const totals = totalsFromItems(parsed.items);
     const id = crypto.randomBytes(8).toString("hex");
 
