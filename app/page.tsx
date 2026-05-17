@@ -11,8 +11,9 @@ import { PendingMealCard } from "./components/PendingMealCard";
 import { Pulse } from "./components/Pulse";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { HomeSkeleton } from "./components/Skeleton";
-import Link from "next/link";
+import { AccountSheet } from "./components/AccountSheet";
 import { TextSheet } from "./components/TextSheet";
+import { Topbar } from "./components/Topbar";
 import { CopyDayButton } from "./components/CopyDayButton";
 import { todayStart, ymd, isSameDay, dayLabel } from "@/lib/date";
 import {
@@ -87,6 +88,7 @@ function Home() {
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   // Bumped after any DB-changing action so the History calendar refetches
   // without us threading state through it.
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -317,7 +319,11 @@ function Home() {
 
   return (
     <main style={{ padding: "20px 16px 120px", maxWidth: 540, margin: "0 auto" }}>
-      <header
+      <Topbar
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenAccount={() => setAccountOpen(true)}
+      />
+      <div
         style={{
           marginBottom: 24,
           display: "flex",
@@ -326,13 +332,6 @@ function Home() {
           gap: 8,
         }}
       >
-        <Link
-          href="/overview"
-          aria-label="open overview"
-          style={overviewLinkStyle}
-        >
-          OVERVIEW
-        </Link>
         <button
           onClick={() => shiftDay(-1)}
           aria-label="previous day"
@@ -355,7 +354,7 @@ function Home() {
             margin: 0,
           }}
         >
-          EATS · {dayLabel(viewDate).toUpperCase()}
+          {dayLabel(viewDate).toUpperCase()}
         </h1>
         <button
           onClick={() => shiftDay(1)}
@@ -365,7 +364,7 @@ function Home() {
         >
           ›
         </button>
-      </header>
+      </div>
 
       {error && (
         <div style={{ background: "#7f1d1d", padding: 12, borderRadius: 8, margin: "16px 0", fontSize: 14 }}>
@@ -385,7 +384,6 @@ function Home() {
             version={historyVersion}
             selectedDate={ymd(viewDate)}
             onPickDate={(d) => setViewDate(new Date(d + "T00:00:00"))}
-            onOpenSettings={() => setSettingsOpen(true)}
           />
           <div
             style={{
@@ -465,7 +463,6 @@ function Home() {
               version={historyVersion}
               selectedDate={ymd(viewDate)}
               onPickDate={(d) => setViewDate(new Date(d + "T00:00:00"))}
-              onOpenSettings={() => setSettingsOpen(true)}
             />
           </div>
         </>
@@ -519,24 +516,10 @@ function Home() {
       )}
 
       {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
+      {accountOpen && <AccountSheet onClose={() => setAccountOpen(false)} />}
     </main>
   );
 }
-
-
-const overviewLinkStyle: React.CSSProperties = {
-  background: "rgba(132,204,22,0.10)",
-  color: "#bef264",
-  border: "1px solid rgba(132,204,22,0.30)",
-  borderRadius: 999,
-  padding: "5px 10px",
-  fontSize: 10,
-  fontWeight: 500,
-  letterSpacing: 0.5,
-  textDecoration: "none",
-  WebkitTapHighlightColor: "transparent",
-  whiteSpace: "nowrap",
-};
 
 const dayNavBtnStyle: React.CSSProperties = {
   background: "transparent",
