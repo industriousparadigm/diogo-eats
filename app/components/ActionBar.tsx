@@ -1,22 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import type React from "react";
 
-// Bottom-fixed action bar. Two equally-weighted buttons: photo and write.
-// Always available — even while previous logs are still being parsed.
-// The pending placeholder cards in the today list are the visible
-// "something is happening" signal; the bar stays out of their way.
-export function ActionBar({
-  inputId,
-  onType,
-  dayHint,
-}: {
-  inputId: string;
-  onType: () => void;
-  // When set, a small label renders above the buttons so the user knows
-  // the next log will land on a past day, not today.
-  dayHint?: string;
-}) {
+// Single-action floating bar at the bottom of the home page. One big
+// pill that links to /log — the unified capture screen where the user
+// can attach photos OR type, all in one flow. The old two-button
+// (camera vs pencil) split is gone; one entry point, less choice,
+// cleaner mental model.
+export function ActionBar({ dayHint, href }: { dayHint?: string; href: string }) {
   const wrap: React.CSSProperties = {
     position: "fixed",
     bottom: "max(28px, env(safe-area-inset-bottom))",
@@ -28,10 +20,6 @@ export function ActionBar({
     gap: 10,
     zIndex: 40,
   };
-  const row: React.CSSProperties = {
-    display: "flex",
-    gap: 14,
-  };
   const hint: React.CSSProperties = {
     fontSize: 11,
     color: "#a3a3a3",
@@ -42,34 +30,30 @@ export function ActionBar({
     backdropFilter: "blur(6px)",
     WebkitBackdropFilter: "blur(6px)",
   };
-  const btn: React.CSSProperties = {
-    width: 64,
-    height: 64,
-    borderRadius: "50%",
+  const cta: React.CSSProperties = {
     background: "#65a30d",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: 500,
+    letterSpacing: 0.5,
+    padding: "14px 28px",
+    borderRadius: 999,
     boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-    fontSize: 26,
     display: "flex",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 10,
     cursor: "pointer",
     WebkitTapHighlightColor: "transparent",
+    textDecoration: "none",
     userSelect: "none",
-    color: "#fff",
-    border: "none",
   };
-
   return (
     <div style={wrap}>
       {dayHint && <div style={hint}>Logging for {dayHint}</div>}
-      <div style={row}>
-        <label htmlFor={inputId} aria-label="snap meal" style={btn}>
-          📷
-        </label>
-        <button onClick={onType} aria-label="type a meal" style={btn}>
-          ✏️
-        </button>
-      </div>
+      <Link href={href} style={cta} aria-label="log a meal">
+        <span aria-hidden style={{ fontSize: 18 }}>＋</span>
+        LOG
+      </Link>
     </div>
   );
 }

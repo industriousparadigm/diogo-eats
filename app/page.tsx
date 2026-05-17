@@ -1,18 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ActionBar } from "./components/ActionBar";
-import { ConfirmSheet } from "./components/ConfirmSheet";
 import { DailyHeadline } from "./components/DailyHeadline";
 import { History } from "./components/History";
 import { MealCard } from "./components/MealCard";
 import { PendingMealCard } from "./components/PendingMealCard";
 import { Pulse } from "./components/Pulse";
-import { SettingsSheet } from "./components/SettingsSheet";
 import { HomeSkeleton } from "./components/Skeleton";
-import { AccountSheet } from "./components/AccountSheet";
-import { TextSheet } from "./components/TextSheet";
 import { Topbar } from "./components/Topbar";
 import { CopyDayButton } from "./components/CopyDayButton";
 import { todayStart, ymd, isSameDay, dayLabel } from "@/lib/date";
@@ -23,6 +19,11 @@ import {
   parseText,
 } from "@/lib/api";
 import type { Meal, PendingTask } from "@/lib/types";
+import {
+  removePendingTask,
+  updatePendingTask,
+  usePendingTasks,
+} from "@/lib/pendingStore";
 
 // useSearchParams pushes the page into the client-side bailout; Next 16
 // requires a Suspense boundary around it. The default export wraps the
@@ -53,7 +54,7 @@ function Home() {
   });
 
   // React to ?date= changing while the page is mounted (back/forward nav
-  // from /overview after a bar tap).
+  // from /overview after a bar tap, or after /log handed off).
   useEffect(() => {
     const q = searchParams?.get("date");
     if (q && /^\d{4}-\d{2}-\d{2}$/.test(q)) {
@@ -64,36 +65,17 @@ function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
-  // Mirrors `viewDate` for reading inside async closures (processTask
-  // resolves after the user may have navigated to a different day). The
-  // closure-captured `viewDate` would otherwise refer to the day at fire
-  // time, not the day they're looking at when the LLM call returns.
-  const viewDateRef = useRef(viewDate);
-  useEffect(() => {
-    viewDateRef.current = viewDate;
-  }, [viewDate]);
+
   // null = "haven't loaded yet for this view" → render skeleton.
   // [] = "loaded, day was empty" → render the empty-day surfaces.
   const [meals, setMeals] = useState<Meal[] | null>(null);
-  // In-flight log tasks. Each renders a PendingMealCard above today's
-  // real meals. Multiple can be processing in parallel — submitting a
-  // new photo/text while one is mid-flight just appends another card.
-  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  // Multi-photo support: a meal can be 1-4 images (e.g. plate + nutrition
-  // labels). The /api/parse route stitches them server-side into one
-  // composite before sending to Vision, so it's still one Vision call.
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [caption, setCaption] = useState("");
-  const [textMode, setTextMode] = useState(false);
-  const [textInput, setTextInput] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
+  // Pending tasks live in a module-level store now so /log can fire and
+  // route here without losing state. Hook subscribes to updates.
+  const pendingTasks = usePendingTasks();
   // Bumped after any DB-changing action so the History calendar refetches
   // without us threading state through it.
   const [historyVersion, setHistoryVersion] = useState(0);
   const isToday = isSameDay(viewDate, todayStart());
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadMeals(
     d: Date = viewDate,
@@ -109,17 +91,16 @@ function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewDate]);
 
-  // Revoke any leftover preview URLs when the page unmounts. In normal
-  // operation processTask() revokes them when it removes a task, but
-  // a hard refresh mid-flight would leak otherwise.
+  // When /log finishes a task it fires a window event so we reload.
   useEffect(() => {
-    return () => {
-      for (const t of pendingTasks) {
-        if (t.previewUrl) URL.revokeObjectURL(t.previewUrl);
-      }
-    };
+    function onSaved() {
+      loadMeals(viewDate, { silent: true });
+      setHistoryVersion((v) => v + 1);
+    }
+    window.addEventListener("eats:meal-saved", onSaved);
+    return () => window.removeEventListener("eats:meal-saved", onSaved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [viewDate]);
 
   function shiftDay(deltaDays: number) {
     const next = new Date(viewDate);
@@ -129,148 +110,32 @@ function Home() {
     setViewDate(next);
   }
 
-  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    setError(null);
-    setCaption("");
-    setPendingFiles(files.slice(0, 4));
-  }
-
-  function cancelPending() {
-    setPendingFiles([]);
-    setCaption("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function removePendingAt(idx: number) {
-    setPendingFiles((arr) => arr.filter((_, i) => i !== idx));
-  }
-
-  function replacePendingAt(idx: number, file: File) {
-    setPendingFiles((arr) => arr.map((f, i) => (i === idx ? file : f)));
-  }
-
-  // Drives one in-flight task to completion. Resolves silently — errors
-  // just flip the task's status. Kicked off from confirm/text submit
-  // and from the retry button on a failed pending card.
-  async function processTask(task: PendingTask) {
+  // Retry a failed pending task in place. Re-fires the original payload
+  // through the same /api/parse{,-text} endpoints used by /log.
+  async function retryPendingTask(id: string) {
+    const task = pendingTasks.find((t) => t.id === id);
+    if (!task) return;
+    updatePendingTask(id, (t) => ({
+      ...t,
+      status: "processing",
+      errorMessage: undefined,
+      startedAt: Date.now(),
+    }));
     try {
       if (task.kind === "photo") {
         await parsePhoto(task.files ?? [], task.caption, task.forDate);
       } else {
         await parseText(task.text ?? "", task.forDate);
       }
-      setPendingTasks((arr) => {
-        const idx = arr.findIndex((t) => t.id === task.id);
-        if (idx === -1) return arr;
-        const t = arr[idx];
-        if (t.previewUrl) URL.revokeObjectURL(t.previewUrl);
-        return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
-      });
-      // Silent reload of whatever day the user is currently on. The new
-      // meal lives on `task.forDate` (today if undefined); if that's the
-      // current view it'll appear, otherwise the history calendar bump
-      // below is enough — they'll see it next time they navigate there.
-      await loadMeals(viewDateRef.current, { silent: true });
-      setHistoryVersion((v) => v + 1);
+      removePendingTask(id);
+      window.dispatchEvent(new CustomEvent("eats:meal-saved"));
     } catch (err: any) {
-      setPendingTasks((arr) =>
-        arr.map((t) =>
-          t.id === task.id
-            ? {
-                ...t,
-                status: "error" as const,
-                errorMessage: err?.message ?? "something went wrong",
-              }
-            : t
-        )
-      );
-    }
-  }
-
-  function submitPending() {
-    if (pendingFiles.length === 0) return;
-    setError(null);
-    // Take a snapshot of the current pending sheet state. The sheet
-    // closes before the LLM resolves, so these have to be self-contained.
-    const files = pendingFiles.slice();
-    const cap = caption.trim();
-    const previewUrl = URL.createObjectURL(files[0]);
-    const forDate = isToday ? undefined : ymd(viewDate);
-    const task: PendingTask = {
-      id: crypto.randomUUID(),
-      kind: "photo",
-      files,
-      caption: cap || undefined,
-      previewUrl,
-      photoCount: files.length,
-      status: "processing",
-      startedAt: Date.now(),
-      forDate,
-    };
-    setPendingTasks((arr) => [...arr, task]);
-
-    setPendingFiles([]);
-    setCaption("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-
-    // Fire and forget. Errors flip the task to error state, not a toast.
-    void processTask(task);
-  }
-
-  function submitText() {
-    const text = textInput.trim();
-    if (!text) return;
-    setError(null);
-    const forDate = isToday ? undefined : ymd(viewDate);
-    const task: PendingTask = {
-      id: crypto.randomUUID(),
-      kind: "text",
-      text,
-      status: "processing",
-      startedAt: Date.now(),
-      forDate,
-    };
-    setPendingTasks((arr) => [...arr, task]);
-
-    setTextInput("");
-    setTextMode(false);
-
-    void processTask(task);
-  }
-
-  function retryPendingTask(id: string) {
-    setPendingTasks((arr) => {
-      const idx = arr.findIndex((t) => t.id === id);
-      if (idx === -1) return arr;
-      const t = arr[idx];
-      const reset: PendingTask = {
+      updatePendingTask(id, (t) => ({
         ...t,
-        status: "processing",
-        errorMessage: undefined,
-        startedAt: Date.now(),
-      };
-      // Re-fire with the same payload. The task object handed to
-      // processTask is stable; the array swap below replaces the entry.
-      void processTask(reset);
-      return [...arr.slice(0, idx), reset, ...arr.slice(idx + 1)];
-    });
-  }
-
-  function dismissPendingTask(id: string) {
-    setPendingTasks((arr) => {
-      const idx = arr.findIndex((t) => t.id === id);
-      if (idx === -1) return arr;
-      const t = arr[idx];
-      if (t.previewUrl) URL.revokeObjectURL(t.previewUrl);
-      return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
-    });
-  }
-
-  function cancelText() {
-    setTextMode(false);
-    setTextInput("");
+        status: "error",
+        errorMessage: err?.message ?? "something went wrong",
+      }));
+    }
   }
 
   async function deleteMealById(id: string) {
@@ -313,16 +178,15 @@ function Home() {
   const viewYmd = ymd(viewDate);
   const todayYmd = ymd(todayStart());
   const visiblePending = [...pendingTasks]
-    .filter((t) => (t.forDate ?? todayYmd) === viewYmd)
+    .filter((t: PendingTask) => (t.forDate ?? todayYmd) === viewYmd)
     .reverse();
   const hasContent = mealList.length > 0 || visiblePending.length > 0;
 
+  const logHref = isToday ? "/log" : `/log?date=${viewYmd}`;
+
   return (
     <main style={{ padding: "20px 16px 120px", maxWidth: 540, margin: "0 auto" }}>
-      <Topbar
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenAccount={() => setAccountOpen(true)}
-      />
+      <Topbar />
       <div
         style={{
           marginBottom: 24,
@@ -365,12 +229,6 @@ function Home() {
           ›
         </button>
       </div>
-
-      {error && (
-        <div style={{ background: "#7f1d1d", padding: 12, borderRadius: 8, margin: "16px 0", fontSize: 14 }}>
-          {error}
-        </div>
-      )}
 
       {/* Three-state render:
           - meals === null: still loading → skeleton.
@@ -430,12 +288,12 @@ function Home() {
             </h2>
             {!hasContent && isToday && (
               <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
-                Nothing yet. Snap something to start.
+                Nothing yet. Hit LOG to start.
               </p>
             )}
             {!hasContent && !isToday && (
               <p style={{ color: "#52525b", fontSize: 14, padding: "24px 0" }}>
-                Add one with the buttons below.
+                Add one with the LOG button below.
               </p>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -444,7 +302,7 @@ function Home() {
                   key={t.id}
                   task={t}
                   onRetry={() => retryPendingTask(t.id)}
-                  onDismiss={() => dismissPendingTask(t.id)}
+                  onDismiss={() => removePendingTask(t.id)}
                 />
               ))}
               {mealList.map((m) => (
@@ -469,54 +327,9 @@ function Home() {
       )}
 
       <ActionBar
-        inputId="photo-input"
-        onType={() => setTextMode(true)}
+        href={logHref}
         dayHint={isToday ? undefined : dayLabel(viewDate)}
       />
-
-      <input
-        ref={fileInputRef}
-        id="photo-input"
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={onPhoto}
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: -1,
-          overflow: "hidden",
-          clip: "rect(0,0,0,0)",
-          whiteSpace: "nowrap",
-          border: 0,
-        }}
-      />
-
-      {pendingFiles.length > 0 && (
-        <ConfirmSheet
-          files={pendingFiles}
-          onRemoveAt={removePendingAt}
-          onReplaceAt={replacePendingAt}
-          caption={caption}
-          setCaption={setCaption}
-          onCancel={cancelPending}
-          onSubmit={submitPending}
-        />
-      )}
-
-      {textMode && (
-        <TextSheet
-          value={textInput}
-          setValue={setTextInput}
-          onCancel={cancelText}
-          onSubmit={submitText}
-        />
-      )}
-
-      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
-      {accountOpen && <AccountSheet onClose={() => setAccountOpen(false)} />}
     </main>
   );
 }

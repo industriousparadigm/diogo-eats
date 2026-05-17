@@ -4,22 +4,10 @@ import Link from "next/link";
 import type React from "react";
 import { colors } from "@/lib/styles";
 
-// Persistent top-of-page nav. Sits above the date scroller and stays
-// non-sticky — it scrolls away with content. Three actions live here:
-//   - Overview → /overview (the looking-back surface, was buried at
-//     the bottom of the home History calendar in earlier iterations)
-//   - Settings → opens the SettingsSheet
-//   - Account → placeholder for the upcoming login + multi-user work;
-//     opens a small "coming soon" note for now
-//
-// Wordmark on the left, icons on the right.
-export function Topbar({
-  onOpenSettings,
-  onOpenAccount,
-}: {
-  onOpenSettings: () => void;
-  onOpenAccount: () => void;
-}) {
+// Persistent top-of-page nav. Sits above the date scroller, non-sticky.
+// Settings and Account are now full pages (no more modals), so the
+// icons just navigate. Overview stays a link too.
+export function Topbar() {
   return (
     <div
       style={{
@@ -35,39 +23,33 @@ export function Topbar({
       <Link href="/" aria-label="eats home" style={wordmarkStyle}>
         EATS
       </Link>
-      <nav
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
+      <nav style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Link href="/overview" style={overviewBtnStyle}>
           OVERVIEW
         </Link>
-        <IconButton onClick={onOpenSettings} label="settings">
+        <IconLink href="/settings" label="settings">
           <GearIcon />
-        </IconButton>
-        <IconButton onClick={onOpenAccount} label="account">
+        </IconLink>
+        <IconLink href="/account" label="account">
           <PersonIcon />
-        </IconButton>
+        </IconLink>
       </nav>
     </div>
   );
 }
 
-function IconButton({
-  onClick,
+function IconLink({
+  href,
   label,
   children,
 }: {
-  onClick: () => void;
+  href: string;
   label: string;
   children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <Link
+      href={href}
       aria-label={label}
       title={label}
       style={{
@@ -80,13 +62,12 @@ function IconButton({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        cursor: "pointer",
+        textDecoration: "none",
         WebkitTapHighlightColor: "transparent",
-        padding: 0,
       }}
     >
       {children}
-    </button>
+    </Link>
   );
 }
 
