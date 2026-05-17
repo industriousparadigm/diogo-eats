@@ -5,19 +5,13 @@ import { NextResponse, type NextRequest } from "next/server";
 //
 // - Refreshes the Supabase session on every request (token rotation).
 // - Redirects unauthenticated browsers to /login on protected UI routes.
-// - API routes still surface 401 themselves (more granular control over
-//   what protected vs not), so middleware doesn't 401 the API surface.
+// - Redirects authenticated-but-not-yet-onboarded users to /onboarding
+//   so they can set their starter targets before logging meals.
+// - API routes self-handle 401 in their handlers (more granularity
+//   than a one-size response from middleware).
 
-const PUBLIC_PATHS = new Set<string>([
-  "/login",
-  "/auth/callback",
-]);
-
-const PUBLIC_API_PREFIXES = [
-  "/api/auth/", // magic-link send, sign-out
-  "/api/cron/", // secret-gated, doesn't use session
-  "/api/admin/", // secret-gated
-];
+const PUBLIC_UI_PATHS = new Set<string>(["/login", "/auth/callback"]);
+const ONBOARDING_PATH = "/onboarding";
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
@@ -41,14 +35,14 @@ export async function middleware(req: NextRequest) {
   );
 
   const { data } = await supa.auth.getUser();
-  const isAuthed = !!data?.user;
+  const user = data?.user;
+  const isAuthed = !!user;
 
   const path = req.nextUrl.pathname;
-  const isPublicUi = PUBLIC_PATHS.has(path);
-  const isPublicApi = PUBLIC_API_PREFIXES.some((p) => path.startsWith(p));
+  const isPublicUi = PUBLIC_UI_PATHS.has(path);
   const isApi = path.startsWith("/api/");
+  const isOnboarding = path === ONBOARDING_PATH;
 
-  // Unauthenticated UI hit on a protected route → redirect to /login.
   if (!isAuthed && !isPublicUi && !isApi) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -56,8 +50,23 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Public APIs and authed traffic pass through normally.
-  void isPublicApi;
+  // Onboarding gate: only check for UI routes that aren't /onboarding
+  // itself, /api/*, or public auth pages. One extra DB call per
+  // request that we keep behind a session check.
+  if (isAuthed && !isApi && !isPublicUi && !isOnboarding) {
+    const { data: profile } = await supa
+      .from("user_profiles")
+      .select("onboarded_at")
+      .eq("user_id", user!.id)
+      .maybeSingle();
+    if (!profile || profile.onboarded_at == null) {
+      const url = req.nextUrl.clone();
+      url.pathname = ONBOARDING_PATH;
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return res;
 }
 
