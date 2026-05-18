@@ -21,20 +21,21 @@ export type SyncResult = {
 };
 
 function ymdLocal(iso: string): string {
-  // Whoop returns ISO timestamps in UTC. We bucket by the user's local
-  // day; for now assume Lisbon (the only TZ we serve). When we add
-  // global users, store the user's TZ on user_profiles and bucket
-  // accordingly.
-  const d = new Date(iso);
-  // Convert to Europe/Lisbon. Cheap approach: use toLocaleString
-  // formatted as YYYY-MM-DD.
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  // Whoop cycles are wake-to-wake (sleep-bounded), so `cycle.start` is
+  // bedtime, not the active day. A cycle starting 5/15 23:50 covers
+  // the user's *next* active day (5/16). Shift by +12h before reading
+  // the local calendar date so wake-day data lands on the right bucket.
+  //
+  // Concretely: an evening start (e.g. 23:50) + 12h = next-day noon →
+  // tomorrow's date. A morning start (e.g. 01:00) + 12h = same-day
+  // 13:00 → same date. Matches how Whoop's own UI labels cycles.
+  const shifted = new Date(new Date(iso).getTime() + 12 * 3600_000);
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Lisbon",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(d);
-  return parts;
+  }).format(shifted);
 }
 
 export async function syncUser(userId: string, daysBack = 7): Promise<SyncResult> {

@@ -36,27 +36,30 @@ export function niceMax(maxValue: number, target?: number): number {
   return bucket * base;
 }
 
-// 3-5 evenly-spaced ticks from 0 to max, inclusive.
+// 4-6 evenly-spaced ticks from 0 to max, inclusive. Tries to produce
+// "nice" step sizes (1, 2, 2.5, 5 × 10^n) so the labels read cleanly.
 export function niceTicks(max: number): number[] {
   if (max <= 0) return [0];
-  // Pick a step that yields 3-5 ticks at "nice" round multiples.
-  const candidates = [max / 4, max / 3, max / 2];
-  let step = candidates[0];
-  for (const c of candidates) {
-    // prefer the smaller step if it lands on a round number
-    const rounded = roundToNiceStep(c);
-    if (rounded * 4 >= max * 0.9 && rounded * 4 <= max * 1.1) {
-      step = rounded;
-      break;
-    }
-    step = rounded;
-  }
+  // Aim for ~5 intervals (6 ticks including 0 and max). Pick the
+  // nicest step size that lands on a clean multiple and keeps the
+  // last tick close to max.
+  const target = max / 5;
+  const exp = Math.floor(Math.log10(target));
+  const base = Math.pow(10, exp);
+  const norm = target / base;
+  let stepNorm: number;
+  if (norm <= 1) stepNorm = 1;
+  else if (norm <= 2) stepNorm = 2;
+  else if (norm <= 2.5) stepNorm = 2.5;
+  else if (norm <= 5) stepNorm = 5;
+  else stepNorm = 10;
+  const step = stepNorm * base;
   const ticks: number[] = [];
-  for (let v = 0; v <= max + 0.0001; v += step) {
+  for (let v = 0; v <= max + 0.001; v += step) {
     ticks.push(Math.round(v * 100) / 100);
-    if (ticks.length > 8) break; // hard cap on overflow
+    if (ticks.length > 10) break;
   }
-  if (ticks[ticks.length - 1] !== max) ticks.push(max);
+  if (ticks[ticks.length - 1] < max) ticks.push(max);
   return ticks;
 }
 

@@ -212,16 +212,30 @@ export function DayBarChart({
               );
             })}
             {prepped.targetRatio != null && (
-              <line
-                x1={yAxisGutter}
-                x2={W}
-                y1={H - (target! / effectiveMax) * H}
-                y2={H - (target! / effectiveMax) * H}
-                stroke={colors.accentBright}
-                strokeWidth={0.5}
-                strokeDasharray="2,2"
-                opacity={0.7}
-              />
+              <>
+                <line
+                  x1={yAxisGutter}
+                  x2={W}
+                  y1={H - (target! / effectiveMax) * H}
+                  y2={H - (target! / effectiveMax) * H}
+                  stroke={colors.accentBright}
+                  strokeWidth={0.5}
+                  strokeDasharray="2,2"
+                  opacity={0.7}
+                />
+                {/* Inline target value, right-aligned just above the
+                    dashed line so it doesn't sit on top of bars. */}
+                <text
+                  x={W - 0.5}
+                  y={H - (target! / effectiveMax) * H - 0.8}
+                  fontSize={3.2}
+                  fill={colors.accentBright}
+                  textAnchor="end"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  target {format(target!)}
+                </text>
+              </>
             )}
             {prepped.bars.map((b, i) => {
               const x = i * barSlot + (barSlot - barWidth) / 2;
