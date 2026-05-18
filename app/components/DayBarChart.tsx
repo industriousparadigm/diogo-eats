@@ -212,30 +212,16 @@ export function DayBarChart({
               );
             })}
             {prepped.targetRatio != null && (
-              <>
-                <line
-                  x1={yAxisGutter}
-                  x2={W}
-                  y1={H - (target! / effectiveMax) * H}
-                  y2={H - (target! / effectiveMax) * H}
-                  stroke={colors.accentBright}
-                  strokeWidth={0.5}
-                  strokeDasharray="2,2"
-                  opacity={0.7}
-                />
-                {/* Inline target value, right-aligned just above the
-                    dashed line so it doesn't sit on top of bars. */}
-                <text
-                  x={W - 0.5}
-                  y={H - (target! / effectiveMax) * H - 0.8}
-                  fontSize={3.2}
-                  fill={colors.accentBright}
-                  textAnchor="end"
-                  style={{ fontVariantNumeric: "tabular-nums" }}
-                >
-                  target {format(target!)}
-                </text>
-              </>
+              <line
+                x1={yAxisGutter}
+                x2={W}
+                y1={H - (target! / effectiveMax) * H}
+                y2={H - (target! / effectiveMax) * H}
+                stroke={colors.accentBright}
+                strokeWidth={0.5}
+                strokeDasharray="2,2"
+                opacity={0.7}
+              />
             )}
             {prepped.bars.map((b, i) => {
               const x = i * barSlot + (barSlot - barWidth) / 2;
@@ -301,6 +287,31 @@ export function DayBarChart({
                 );
               })}
           </svg>
+
+          {/* HTML overlay for the target label. SVG <text> warps under
+              preserveAspectRatio="none"; HTML doesn't, so the label
+              stays sharp at every aspect. */}
+          {prepped.targetRatio != null && target != null && (
+            <div
+              style={{
+                position: "absolute",
+                right: 4,
+                top: `calc(${(1 - target / effectiveMax) * 100}% - 14px)`,
+                fontSize: 9,
+                color: colors.accentBright,
+                background: "rgba(10,10,10,0.85)",
+                padding: "1px 6px",
+                borderRadius: 4,
+                fontWeight: 500,
+                letterSpacing: 0.2,
+                fontVariantNumeric: "tabular-nums",
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              target {format(target)}
+            </div>
+          )}
 
           <div
             style={{
