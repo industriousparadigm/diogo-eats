@@ -155,6 +155,8 @@ export default function OverviewPage() {
                 target={targets.calories}
                 direction="below_good"
                 format={(v) => `${Math.round(v)}`}
+                secondaryAccessor={(a) => a.kcal_burn}
+                secondaryLabel="Whoop kcal burn (when connected)"
               />
               <DayBarChart
                 aggregates={visible}
@@ -163,6 +165,8 @@ export default function OverviewPage() {
                 target={14}
                 direction="below_good"
                 format={(v) => `${v.toFixed(1)}g`}
+                amberAt={14}
+                redAt={42}
               />
             </div>
           )}

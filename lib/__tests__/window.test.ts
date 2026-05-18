@@ -22,6 +22,7 @@ function mkAggs(days: number, loggedIndices: number[] = []): DayAggregate[] {
       protein_g: 0,
       carbs_g: 0,
       alcohol_g: 0,
+    kcal_burn: null,
     };
   });
 }

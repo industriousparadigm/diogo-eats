@@ -33,6 +33,7 @@ function day(
     protein_g: 0,
     carbs_g: 0,
     alcohol_g: 0,
+    kcal_burn: null,
     ...fields,
   };
 }

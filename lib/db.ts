@@ -212,6 +212,9 @@ export type DayAggregate = {
   protein_g: number;
   carbs_g: number;
   alcohol_g: number;
+  // Whoop-estimated total daily energy expenditure (kcal). null when
+  // the user has no Whoop connection or no data for that day.
+  kcal_burn: number | null;
 };
 
 // Build local-day buckets for the requested range, then aggregate meals into
@@ -237,6 +240,21 @@ export async function getDailyAggregates(
     .gte("created_at", start.getTime())
     .order("created_at", { ascending: true });
   if (error) throw new Error(`getDailyAggregates: ${error.message}`);
+
+  // Whoop kcal burn per day (when the user has a connection + a synced
+  // cycle for that day). NULL when missing so the chart can render the
+  // day's bar without a misleading 0-burn line.
+  const startYmd = localYmd(start);
+  const { data: whoopRows } = await getSupabase()
+    .from("whoop_cycles")
+    .select("day, kcal")
+    .eq("user_id", userId)
+    .gte("day", startYmd);
+  const burnByDay = new Map<string, number | null>();
+  for (const r of whoopRows ?? []) {
+    const row = r as { day: string; kcal: number | null };
+    burnByDay.set(row.day, row.kcal);
+  }
 
   // Initialize every day in the range with zeros.
   const days = new Map<
@@ -301,6 +319,7 @@ export async function getDailyAggregates(
 
   const out: DayAggregate[] = [];
   for (const [date, b] of days.entries()) {
+    const burn = burnByDay.get(date);
     out.push({
       date,
       meal_count: b.meal_count,
@@ -312,6 +331,7 @@ export async function getDailyAggregates(
       protein_g: round1(b.protein_g),
       carbs_g: round1(b.carbs_g),
       alcohol_g: round1(b.alcohol_g),
+      kcal_burn: burn != null ? Math.round(burn) : null,
     });
   }
   // Map iteration is insertion order, so chronological ascending.

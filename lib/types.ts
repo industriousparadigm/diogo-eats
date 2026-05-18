@@ -54,6 +54,8 @@ export type DayAggregate = {
   protein_g: number;
   carbs_g: number;
   alcohol_g: number;
+  // Whoop-estimated daily kcal burn. null when no Whoop data for that day.
+  kcal_burn: number | null;
 };
 
 // Daily targets — reference numbers, not gates. Calibrated to Diogo's

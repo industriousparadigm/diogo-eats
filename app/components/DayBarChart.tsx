@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { colors, radii } from "@/lib/styles";
-import { prepDayBars, niceTicks } from "@/lib/chartData";
+import { prepDayBars, niceTicks, niceMax } from "@/lib/chartData";
 import type { DayAggregate } from "@/lib/types";
 
 type Direction = "above_good" | "below_good";
@@ -17,19 +17,12 @@ const AMBER_UNDER = 0.5;
 const RED_UNDER = 0.25;
 
 // Per-day bar chart with a labeled Y-axis and target reference line.
-// Replaces the 7-day-rolling line that washed out actual variation.
 //
-// Layout:
-//   - Header row: title + latest value vs target (OR active bar's date
-//     + exact value when one is selected)
-//   - Plot: bars (one per day) with Y-axis ticks on the left and a
-//     dashed target line if a target is supplied
-//   - X-axis micro labels show the first / middle / last day for context
-//
-// Interaction: bars are tap-to-inspect only. Tapping a bar selects it
-// and surfaces its exact date + value above the chart. Tapping the
-// same bar again deselects. No navigation away from /overview —
-// leaving the page is intentional via the page's back buttons.
+// Optional `secondaryAccessor` renders a horizontal tick mark per bar
+// at the secondary value's height — used to overlay Whoop kcal burn
+// on the calories chart so the user can compare consumed vs burned at
+// a glance. The chart's Y-max grows to include the secondary peak so
+// nothing gets clipped.
 export function DayBarChart({
   aggregates,
   title,
@@ -37,6 +30,10 @@ export function DayBarChart({
   target,
   direction,
   format,
+  secondaryAccessor,
+  secondaryLabel,
+  amberAt,
+  redAt,
 }: {
   aggregates: DayAggregate[];
   title: string;
@@ -44,15 +41,43 @@ export function DayBarChart({
   target?: number;
   direction: Direction;
   format: (v: number) => string;
+  secondaryAccessor?: (a: DayAggregate) => number | null;
+  secondaryLabel?: string;
+  // Explicit thresholds for the bar color tiers, in the same units as
+  // `accessor`. Override the generic multiplier-based defaults. Useful
+  // when the chart's "red" should align with a domain-specific tier
+  // boundary that isn't a clean multiple of the target — e.g. the
+  // alcohol chart whose tiers (0 / >0 / >14 / >42) are tied to the
+  // standard-drink scale and shouldn't move with the daily target.
+  amberAt?: number;
+  redAt?: number;
 }) {
   const prepped = useMemo(
     () => prepDayBars(aggregates, accessor, target),
     [aggregates, accessor, target]
   );
-  const ticks = useMemo(() => niceTicks(prepped.max), [prepped.max]);
-  // Tap-to-inspect: which bar (if any) is currently selected? Tapping a
-  // bar surfaces its exact date + value above the chart; tapping it
-  // again navigates to that day via `onPickDate`.
+
+  // Secondary series values per bar. null = no data for that day; we
+  // skip rendering a tick rather than show a misleading zero.
+  const secondaryValues = useMemo(() => {
+    if (!secondaryAccessor) return null;
+    return aggregates.map((a) => secondaryAccessor(a));
+  }, [aggregates, secondaryAccessor]);
+
+  // Adjust the chart's Y-max to fit the secondary peak too, otherwise
+  // a high-burn day with a low-consumption day would render the tick
+  // OUTSIDE the SVG viewBox.
+  const effectiveMax = useMemo(() => {
+    if (!secondaryValues) return prepped.max;
+    const peak = secondaryValues.reduce<number>(
+      (m, v) => (v != null && v > m ? v : m),
+      0
+    );
+    if (peak <= prepped.max) return prepped.max;
+    return niceMax(peak, target);
+  }, [secondaryValues, prepped.max, target]);
+
+  const ticks = useMemo(() => niceTicks(effectiveMax), [effectiveMax]);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
   if (!prepped.hasData) return null;
@@ -65,17 +90,20 @@ export function DayBarChart({
         : prepped.latest <= target;
   const valueColor = onGoodSide ? colors.accentLight : colors.warn;
 
-  // Chart geometry (viewBox units; the SVG itself stretches via width=100%).
   const W = 100;
   const H = 60;
-  const yAxisGutter = 0; // ticks drawn outside the plot area via labels overlay
+  const yAxisGutter = 0;
   const barCount = prepped.bars.length;
   const barSlot = W / barCount;
-  // Slim bars with gap; tweak gap ratio so 7-day windows feel chunkier
-  // than 90-day ones automatically (fewer bars = thicker visual).
   const gapRatio = barCount > 30 ? 0.35 : barCount > 14 ? 0.3 : 0.22;
   const barWidth = barSlot * (1 - gapRatio);
-  const minBarHeight = 0.6; // px in viewBox — keeps unlogged days visible
+  const minBarHeight = 0.6;
+
+  // Active-bar readout: show both consumed and burned when secondary
+  // exists.
+  const activeBar = activeIdx != null ? prepped.bars[activeIdx] : null;
+  const activeSecondary =
+    activeIdx != null && secondaryValues ? secondaryValues[activeIdx] : null;
 
   return (
     <div
@@ -115,14 +143,17 @@ export function DayBarChart({
             fontWeight: 500,
           }}
         >
-          {activeIdx != null ? (
+          {activeBar ? (
             <>
               <span style={{ color: colors.textFaint, marginRight: 6, fontWeight: 400 }}>
-                {longDay(prepped.bars[activeIdx]?.date)}
+                {longDay(activeBar.date)}
               </span>
-              {prepped.bars[activeIdx]?.logged
-                ? format(prepped.bars[activeIdx].value)
-                : "no log"}
+              {activeBar.logged ? format(activeBar.value) : "no log"}
+              {activeSecondary != null && (
+                <span style={{ color: SECONDARY_COLOR, marginLeft: 6, fontWeight: 400 }}>
+                  · burn {format(activeSecondary)}
+                </span>
+              )}
             </>
           ) : (
             <>
@@ -166,9 +197,8 @@ export function DayBarChart({
             style={{ width: "100%", height: 110, display: "block" }}
             aria-label={`${title} per-day chart`}
           >
-            {/* Faint horizontal gridlines at each tick (skip 0) */}
             {ticks.slice(1, -1).map((t, i) => {
-              const y = H - (t / prepped.max) * H;
+              const y = H - (t / effectiveMax) * H;
               return (
                 <line
                   key={`grid-${i}`}
@@ -181,44 +211,40 @@ export function DayBarChart({
                 />
               );
             })}
-            {/* Target reference line — solid + accent-tinted so it reads
-                as a real "you want to be here" marker, not a decoration. */}
             {prepped.targetRatio != null && (
-              <>
-                <line
-                  x1={yAxisGutter}
-                  x2={W}
-                  y1={H - prepped.targetRatio * H}
-                  y2={H - prepped.targetRatio * H}
-                  stroke={colors.accentBright}
-                  strokeWidth={0.5}
-                  strokeDasharray="2,2"
-                  opacity={0.7}
-                />
-              </>
+              <line
+                x1={yAxisGutter}
+                x2={W}
+                y1={H - (target! / effectiveMax) * H}
+                y2={H - (target! / effectiveMax) * H}
+                stroke={colors.accentBright}
+                strokeWidth={0.5}
+                strokeDasharray="2,2"
+                opacity={0.7}
+              />
             )}
-            {/* Bars */}
             {prepped.bars.map((b, i) => {
               const x = i * barSlot + (barSlot - barWidth) / 2;
-              const rawH = b.ratio * H;
+              const ratio = effectiveMax > 0 ? b.value / effectiveMax : 0;
+              const rawH = ratio * H;
               const h = b.logged && b.value > 0 ? Math.max(rawH, 0.6) : minBarHeight;
               const y = H - h;
-              // Three-tone semantic fill. Tightened red threshold per
-              // Diogo's feedback: 2k cal target → 4k+ shouldn't read as
-              // "just a little over" amber; it should read alarming.
               let fill: string;
               if (!b.logged) {
                 fill = colors.border;
               } else if (target == null) {
                 fill = colors.accent;
               } else if (direction === "below_good") {
-                if (b.value > target * RED_OVER) fill = colors.badStrong;
-                else if (b.value > target * AMBER_OVER) fill = colors.warn;
+                const amberCutoff = amberAt ?? target * AMBER_OVER;
+                const redCutoff = redAt ?? target * RED_OVER;
+                if (b.value > redCutoff) fill = colors.badStrong;
+                else if (b.value > amberCutoff) fill = colors.warn;
                 else fill = colors.accent;
               } else {
-                // above_good — fiber/plant: undershooting is bad
-                if (b.value > 0 && b.value < target * RED_UNDER) fill = colors.badStrong;
-                else if (b.value > 0 && b.value < target * AMBER_UNDER) fill = colors.warn;
+                const amberCutoff = amberAt ?? target * AMBER_UNDER;
+                const redCutoff = redAt ?? target * RED_UNDER;
+                if (b.value > 0 && b.value < redCutoff) fill = colors.badStrong;
+                else if (b.value > 0 && b.value < amberCutoff) fill = colors.warn;
                 else fill = colors.accent;
               }
               const isActive = activeIdx === i;
@@ -237,9 +263,31 @@ export function DayBarChart({
                 />
               );
             })}
+            {/* Secondary series: small horizontal tick per bar at the
+                burn value's y position. Rendered AFTER bars so it sits
+                on top. Skip when null (no Whoop data that day). */}
+            {secondaryValues &&
+              prepped.bars.map((b, i) => {
+                const v = secondaryValues[i];
+                if (v == null) return null;
+                const y = H - (v / effectiveMax) * H;
+                const tickW = Math.min(barSlot * 0.95, barWidth + 1.2);
+                const cx = i * barSlot + barSlot / 2;
+                return (
+                  <line
+                    key={`tick-${i}`}
+                    x1={cx - tickW / 2}
+                    x2={cx + tickW / 2}
+                    y1={y}
+                    y2={y}
+                    stroke={SECONDARY_COLOR}
+                    strokeWidth={1}
+                    strokeLinecap="round"
+                  />
+                );
+              })}
           </svg>
 
-          {/* X-axis day labels: first / middle / last only — keeps it readable */}
           <div
             style={{
               display: "flex",
@@ -258,20 +306,43 @@ export function DayBarChart({
           </div>
         </div>
       </div>
+
+      {secondaryValues && secondaryLabel && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 10,
+            color: colors.textFaint,
+            letterSpacing: 0.3,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: "inline-block",
+              width: 12,
+              height: 2,
+              background: SECONDARY_COLOR,
+              borderRadius: 1,
+            }}
+          />
+          <span>{secondaryLabel}</span>
+        </div>
+      )}
     </div>
   );
 }
 
 function shortDay(ymd: string | undefined): string {
   if (!ymd) return "";
-  // "2026-05-14" → "5/14"
   const [, m, d] = ymd.split("-");
   return `${Number(m)}/${Number(d)}`;
 }
 
 function longDay(ymd: string | undefined): string {
   if (!ymd) return "";
-  // "2026-05-14" → "Thu May 14"
   const [yy, mm, dd] = ymd.split("-").map(Number);
   const d = new Date(yy, mm - 1, dd);
   return d
@@ -282,3 +353,8 @@ function longDay(ymd: string | undefined): string {
     })
     .toUpperCase();
 }
+
+// Cyan-ish — distinct from bar fills (green/yellow/red) and the target
+// line (accent bright). Reads as "energy / activity" without competing
+// for attention.
+const SECONDARY_COLOR = "#67e8f9";
