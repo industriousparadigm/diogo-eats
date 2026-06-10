@@ -10,6 +10,7 @@ import { useEffect, type ReactNode } from "react";
 import { AppState, type AppStateStatus, Platform, View, StyleSheet } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { colors } from "@/lib/colors";
@@ -43,6 +44,13 @@ function DesktopShell({ children }: { children: ReactNode }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+});
 
 const shellStyles = StyleSheet.create({
   page: {
@@ -100,11 +108,13 @@ export default function RootLayout() {
   }, [segments]);
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      <DesktopShell>
-        <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
-      </DesktopShell>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <DesktopShell>
+          <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+        </DesktopShell>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
