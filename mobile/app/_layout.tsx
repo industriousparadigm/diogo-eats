@@ -42,7 +42,7 @@ export default function RootLayout() {
         router.replace("/(auth)/sign-in");
       } else if (session && inAuthGroup) {
         // Signed in — go to the main screen.
-        router.replace("/(app)/today");
+        router.replace("/(app)/(tabs)");
       }
     });
 

@@ -27,6 +27,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Image } from "expo-image";
 import { colors, radii } from "@/lib/colors";
+import { fmtDayLabel } from "@/lib/format";
 
 export type CaptureMode = "photo" | "text";
 
@@ -38,17 +39,22 @@ export type CaptureResult = {
   caption?: string;
   text?: string;
   photoCount?: number;
+  // Backfill target day (YYYY-MM-DD). Undefined = today.
+  forDate?: string;
 };
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onSubmit: (result: CaptureResult) => void;
+  // When set, captures log INTO this past day via the parse endpoints'
+  // for_date param. The sheet shows which day it's logging for.
+  forDate?: string;
 };
 
 const MAX_PHOTOS = 4;
 
-export function CaptureSheet({ visible, onClose, onSubmit }: Props) {
+export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
   const [mode, setMode] = useState<CaptureMode>("photo");
   const [pickedPhotos, setPickedPhotos] = useState<
     Array<{ uri: string; name: string; type: string }>
@@ -159,6 +165,7 @@ export function CaptureSheet({ visible, onClose, onSubmit }: Props) {
       photoUris: pickedPhotos,
       caption: caption.trim() || undefined,
       photoCount: pickedPhotos.length,
+      forDate,
     });
     reset();
     onClose();
@@ -175,6 +182,7 @@ export function CaptureSheet({ visible, onClose, onSubmit }: Props) {
       pendingId: id,
       kind: "text",
       text,
+      forDate,
     });
     reset();
     onClose();
@@ -197,7 +205,12 @@ export function CaptureSheet({ visible, onClose, onSubmit }: Props) {
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>Log a meal</Text>
+            <View style={styles.titleWrap}>
+              <Text style={styles.title}>Log a meal</Text>
+              {forDate && (
+                <Text style={styles.titleHint}>for {fmtDayLabel(forDate)}</Text>
+              )}
+            </View>
             <View style={styles.closeBtn} />
           </View>
 
@@ -370,10 +383,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textMuted,
   },
+  titleWrap: {
+    alignItems: "center",
+    gap: 1,
+  },
   title: {
     fontSize: 17,
     fontWeight: "600",
     color: colors.text,
+  },
+  titleHint: {
+    fontSize: 11,
+    color: colors.warn,
+    fontWeight: "500",
   },
   modeRow: {
     flexDirection: "row",

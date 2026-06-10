@@ -9,6 +9,8 @@ import {
   fmtDayLabel,
   todayYmd,
   totalGrams,
+  shiftYmd,
+  dayNavLabel,
 } from "../lib/format";
 
 describe("fmt", () => {
@@ -119,6 +121,54 @@ describe("todayYmd", () => {
     const d = new Date();
     const expected = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d.getDate().toString().padStart(2, "0")}`;
     expect(todayYmd()).toBe(expected);
+  });
+});
+
+describe("shiftYmd", () => {
+  it("shifts backward by one day", () => {
+    expect(shiftYmd("2026-06-10", -1)).toBe("2026-06-09");
+  });
+
+  it("shifts forward by one day", () => {
+    expect(shiftYmd("2026-06-09", 1)).toBe("2026-06-10");
+  });
+
+  it("crosses month boundaries", () => {
+    expect(shiftYmd("2026-06-01", -1)).toBe("2026-05-31");
+    expect(shiftYmd("2026-05-31", 1)).toBe("2026-06-01");
+  });
+
+  it("crosses year boundaries", () => {
+    expect(shiftYmd("2026-01-01", -1)).toBe("2025-12-31");
+  });
+
+  it("handles leap days", () => {
+    expect(shiftYmd("2028-03-01", -1)).toBe("2028-02-29");
+    expect(shiftYmd("2026-03-01", -1)).toBe("2026-02-28");
+  });
+
+  it("round-trips", () => {
+    expect(shiftYmd(shiftYmd("2026-06-10", -7), 7)).toBe("2026-06-10");
+  });
+});
+
+describe("dayNavLabel", () => {
+  it("labels today as Today", () => {
+    expect(dayNavLabel("2026-06-10", "2026-06-10")).toBe("Today");
+  });
+
+  it("labels the previous day as Yesterday", () => {
+    expect(dayNavLabel("2026-06-09", "2026-06-10")).toBe("Yesterday");
+  });
+
+  it("labels older days with weekday and date", () => {
+    const label = dayNavLabel("2026-06-08", "2026-06-10");
+    expect(label).toContain("Jun");
+    expect(label).toContain("8");
+  });
+
+  it("handles yesterday across a month boundary", () => {
+    expect(dayNavLabel("2026-05-31", "2026-06-01")).toBe("Yesterday");
   });
 });
 

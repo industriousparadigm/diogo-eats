@@ -14,6 +14,8 @@ export type PendingState = {
   caption?: string;
   text?: string;
   photoCount?: number;
+  // When backfilling into a past day: the YYYY-MM-DD the parse targets.
+  forDate?: string;
   status: "processing" | "error";
   errorMessage?: string;
 };

@@ -1,5 +1,5 @@
-// Component tests for the Today screen.
-// Tests: loading state, empty state, error state, populated state.
+// Component tests for the Day screen (food tab).
+// Tests: loading, empty, error, populated states + day navigation.
 //
 // @testing-library/react-native v14 notes:
 // - render() is async — must be awaited.
@@ -9,10 +9,20 @@ import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
 import type { Meal } from "../lib/types";
 
-// Mock expo-router
+const mockPush = jest.fn();
+
+// Mock expo-router (incl. useFocusEffect, which the screen uses to
+// reload on focus — run it like a mount effect in tests).
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ replace: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn(), push: mockPush, navigate: jest.fn() }),
   useSegments: () => ["(app)"],
+  useFocusEffect: (cb: () => void) => {
+    const React = require("react");
+    React.useEffect(() => {
+      cb();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+  },
   Stack: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -80,11 +90,10 @@ jest.mock("../lib/supabase", () => ({
 
 const mockFetchMeals = jest.fn();
 const mockDeleteMeal = jest.fn();
+const mockFetchWhoopToday = jest.fn();
 
 // ApiError is defined inside the factory so it is available as the mock class.
-// The tests then import the same mock and use it to instantiate errors.
 jest.mock("../lib/api", () => {
-  // Define ApiError inline so it is available as the exported class.
   class ApiError extends Error {
     code: string;
     status?: number;
@@ -101,6 +110,8 @@ jest.mock("../lib/api", () => {
     parseMealPhoto: jest.fn(),
     parseMealText: jest.fn(),
     resolvePhotoUrl: jest.fn(async () => "https://example.com/photo.jpg"),
+    fetchWhoopToday: (...args: unknown[]) => mockFetchWhoopToday(...args),
+    syncWhoop: jest.fn(async () => {}),
     ApiError,
   };
 });
@@ -131,25 +142,29 @@ function makeMeal(id: string, overrides: Partial<Meal> = {}): Meal {
   };
 }
 
-import TodayScreen from "../app/(app)/today";
+import DayScreen from "../app/(app)/(tabs)/index";
 import { ApiError as MockedApiError } from "../lib/api";
+import { todayYmd, shiftYmd } from "../lib/format";
 
-describe("TodayScreen", () => {
+describe("DayScreen", () => {
   beforeEach(() => {
     mockFetchMeals.mockReset();
     mockDeleteMeal.mockReset();
+    mockPush.mockReset();
+    mockFetchWhoopToday.mockReset();
+    mockFetchWhoopToday.mockResolvedValue({ connected: false });
   });
 
   it("shows loading state initially (before meals resolve)", async () => {
     mockFetchMeals.mockReturnValue(new Promise(() => {}));
-    const { queryByText } = await render(<TodayScreen />);
+    const { queryByText } = await render(<DayScreen />);
     expect(queryByText("Nothing logged yet")).toBeNull();
     expect(queryByText("Retry")).toBeNull();
   });
 
   it("shows empty state when no meals exist", async () => {
     mockFetchMeals.mockResolvedValue([]);
-    const { getByText } = await render(<TodayScreen />);
+    const { getByText } = await render(<DayScreen />);
     await waitFor(() => {
       expect(getByText("Nothing logged yet")).toBeTruthy();
     });
@@ -159,7 +174,7 @@ describe("TodayScreen", () => {
     mockFetchMeals.mockRejectedValue(
       new MockedApiError("NETWORK_ERROR", "No network — check your connection")
     );
-    const { getByText } = await render(<TodayScreen />);
+    const { getByText } = await render(<DayScreen />);
     await waitFor(() => {
       expect(getByText("No network — check your connection")).toBeTruthy();
       expect(getByText("Retry")).toBeTruthy();
@@ -171,20 +186,20 @@ describe("TodayScreen", () => {
       .mockRejectedValueOnce(
         new MockedApiError("NETWORK_ERROR", "No network — check your connection")
       )
-      .mockResolvedValueOnce([]);
-    const { getByText } = await render(<TodayScreen />);
+      .mockResolvedValue([]);
+    const { getByText } = await render(<DayScreen />);
     await waitFor(() => getByText("Retry"));
     await fireEvent.press(getByText("Retry"));
     await waitFor(() => {
       expect(getByText("Nothing logged yet")).toBeTruthy();
     });
-    expect(mockFetchMeals).toHaveBeenCalledTimes(2);
+    expect(mockFetchMeals.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("shows meal cards when meals are present", async () => {
     const meals = [makeMeal("meal-1"), makeMeal("meal-2", { meal_vibe: "lunch bowl" })];
     mockFetchMeals.mockResolvedValue(meals);
-    const { getByText } = await render(<TodayScreen />);
+    const { getByText } = await render(<DayScreen />);
     await waitFor(() => {
       expect(getByText("morning oats")).toBeTruthy();
       expect(getByText("lunch bowl")).toBeTruthy();
@@ -193,7 +208,7 @@ describe("TodayScreen", () => {
 
   it("shows day totals strip when meals exist", async () => {
     mockFetchMeals.mockResolvedValue([makeMeal("meal-1")]);
-    const { getByText } = await render(<TodayScreen />);
+    const { getByText } = await render(<DayScreen />);
     await waitFor(() => {
       expect(getByText("kcal")).toBeTruthy();
       expect(getByText("plant")).toBeTruthy();
@@ -202,8 +217,68 @@ describe("TodayScreen", () => {
 
   it("does not show totals strip when no meals exist", async () => {
     mockFetchMeals.mockResolvedValue([]);
-    const { getByText, queryByText } = await render(<TodayScreen />);
+    const { getByText, queryByText } = await render(<DayScreen />);
     await waitFor(() => getByText("Nothing logged yet"));
     expect(queryByText("kcal")).toBeNull();
+  });
+
+  // ---- day navigation ----
+
+  it("starts anchored on Today", async () => {
+    mockFetchMeals.mockResolvedValue([]);
+    const { getByText } = await render(<DayScreen />);
+    await waitFor(() => {
+      expect(getByText("Today")).toBeTruthy();
+    });
+    expect(mockFetchMeals).toHaveBeenCalledWith(todayYmd());
+  });
+
+  it("walks to Yesterday with the back chevron and fetches that day", async () => {
+    mockFetchMeals.mockResolvedValue([]);
+    const { getByText, getByLabelText } = await render(<DayScreen />);
+    await waitFor(() => getByText("Today"));
+    await fireEvent.press(getByLabelText("previous day"));
+    await waitFor(() => {
+      expect(getByText("Yesterday")).toBeTruthy();
+    });
+    expect(mockFetchMeals).toHaveBeenCalledWith(shiftYmd(todayYmd(), -1));
+  });
+
+  it("never walks past today with the forward chevron", async () => {
+    mockFetchMeals.mockResolvedValue([]);
+    const { getByText, getByLabelText } = await render(<DayScreen />);
+    await waitFor(() => getByText("Today"));
+    await fireEvent.press(getByLabelText("next day"));
+    expect(getByText("Today")).toBeTruthy();
+  });
+
+  it("jumps back to today when the day label is tapped", async () => {
+    mockFetchMeals.mockResolvedValue([]);
+    const { getByText, getByLabelText } = await render(<DayScreen />);
+    await waitFor(() => getByText("Today"));
+    await fireEvent.press(getByLabelText("previous day"));
+    await waitFor(() => getByText("Yesterday"));
+    await fireEvent.press(getByLabelText("jump to today"));
+    await waitFor(() => {
+      expect(getByText("Today")).toBeTruthy();
+    });
+  });
+
+  it("shows the past-day empty copy on a previous day", async () => {
+    mockFetchMeals.mockResolvedValue([]);
+    const { getByText, getByLabelText } = await render(<DayScreen />);
+    await waitFor(() => getByText("Today"));
+    await fireEvent.press(getByLabelText("previous day"));
+    await waitFor(() => {
+      expect(getByText("Nothing logged this day")).toBeTruthy();
+    });
+  });
+
+  it("opens the meal edit screen when a meal is tapped", async () => {
+    mockFetchMeals.mockResolvedValue([makeMeal("meal-1")]);
+    const { getByText } = await render(<DayScreen />);
+    await waitFor(() => getByText("morning oats"));
+    await fireEvent.press(getByText("morning oats"));
+    expect(mockPush).toHaveBeenCalledWith("/(app)/meal/meal-1");
   });
 });

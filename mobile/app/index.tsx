@@ -44,5 +44,5 @@ export default function Index() {
     );
   }
 
-  return <Redirect href={hasSession ? "/(app)/today" : "/(auth)/sign-in"} />;
+  return <Redirect href={hasSession ? "/(app)/(tabs)" : "/(auth)/sign-in"} />;
 }

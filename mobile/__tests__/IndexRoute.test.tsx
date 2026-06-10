@@ -24,10 +24,10 @@ describe("Index entry route", () => {
     mockRedirect.mockReset();
   });
 
-  it("redirects to today when a session exists", async () => {
+  it("redirects to the tabs when a session exists", async () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
     await render(<Index />);
-    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith("/(app)/today"));
+    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith("/(app)/(tabs)"));
   });
 
   it("redirects to sign-in when there is no session", async () => {

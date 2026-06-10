@@ -60,6 +60,25 @@ export function todayYmd(): string {
   return `${y}-${mo}-${day}`;
 }
 
+// Shift a YYYY-MM-DD day string by deltaDays (local-time safe — date
+// parts only, no UTC parsing pitfalls). Used by the day navigation.
+export function shiftYmd(ymd: string, deltaDays: number): string {
+  const [y, mo, d] = ymd.split("-").map(Number);
+  const date = new Date(y, mo - 1, d + deltaDays);
+  const yy = date.getFullYear();
+  const mm = (date.getMonth() + 1).toString().padStart(2, "0");
+  const dd = date.getDate().toString().padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+// Human header label for a day: Today / Yesterday for the close cases,
+// "Monday, 8 Jun" for older. Mirrors the web's dayLabel.
+export function dayNavLabel(ymd: string, todayYmdStr: string = todayYmd()): string {
+  if (ymd === todayYmdStr) return "Today";
+  if (ymd === shiftYmd(todayYmdStr, -1)) return "Yesterday";
+  return fmtDayLabel(ymd);
+}
+
 // Parse a meal's items_json and return total grams for a quick size hint.
 export function totalGrams(items_json: string): number {
   try {

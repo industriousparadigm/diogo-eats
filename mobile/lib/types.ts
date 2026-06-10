@@ -41,6 +41,20 @@ export type Meal = {
   meal_vibe: string | null;
 };
 
+// One day's aggregate from GET /api/stats — mirrors the backend shape.
+export type DayAggregate = {
+  date: string; // YYYY-MM-DD
+  meal_count: number;
+  plant_pct: number;
+  sat_fat_g: number;
+  soluble_fiber_g: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  alcohol_g: number;
+  kcal_burn: number | null;
+};
+
 export type DayTotals = {
   calories: number;
   protein_g: number;
@@ -51,14 +65,19 @@ export type DayTotals = {
 
 // Default targets, calibrated to Diogo's phenotype.
 // These are reference numbers, not gates.
-export const DEFAULT_TARGETS = {
+export type Targets = {
+  sat_fat_g: number;
+  soluble_fiber_g: number;
+  calories: number;
+  protein_g: number;
+};
+
+export const DEFAULT_TARGETS: Targets = {
   sat_fat_g: 18,
   soluble_fiber_g: 10,
   calories: 2000,
   protein_g: 90,
-} as const;
-
-export type Targets = typeof DEFAULT_TARGETS;
+};
 
 // Parse items_json safely — returns empty array on any failure.
 export function parseItems(items_json: string): Item[] {

@@ -34,7 +34,40 @@ export const colors = {
   accentBright: "#a3e635",
   accentLight: "#bef264",
   brand: "#84cc16",
+
+  // Strength scoreboard — a deliberately different emotional contract
+  // from food. Food stays celebration-free (identity language, single
+  // green hue); strength IS a scoreboard: beats, streaks, bold
+  // color-per-exercise cards. Amber is the scoreboard's brand hue so it
+  // never reads as the food green.
+  strength: {
+    brand: "#f59e0b",
+    brandBright: "#fbbf24",
+    brandDim: "rgba(245,158,11,0.14)",
+  },
 } as const;
+
+// Bold per-exercise accents for the strength cards (the day-1 PDF look:
+// color-per-exercise, chunky borders). Keyed by exercise id with a
+// stable rotation fallback for anything beyond the seeded five.
+const EXERCISE_ACCENTS: Record<string, string> = {
+  "leg-press": "#f59e0b", // amber
+  "back-extension": "#38bdf8", // sky
+  "chest-press": "#f472b6", // pink
+  "seated-row": "#a78bfa", // violet
+  "farmers-carry": "#2dd4bf", // teal
+};
+
+const ACCENT_ROTATION = ["#f59e0b", "#38bdf8", "#f472b6", "#a78bfa", "#2dd4bf"];
+
+export function exerciseAccent(exerciseId: string): string {
+  if (EXERCISE_ACCENTS[exerciseId]) return EXERCISE_ACCENTS[exerciseId];
+  let hash = 0;
+  for (let i = 0; i < exerciseId.length; i++) {
+    hash = (hash * 31 + exerciseId.charCodeAt(i)) >>> 0;
+  }
+  return ACCENT_ROTATION[hash % ACCENT_ROTATION.length];
+}
 
 export const radii = { sm: 8, md: 12, lg: 14, xl: 16 } as const;
 

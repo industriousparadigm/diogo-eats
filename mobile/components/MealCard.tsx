@@ -21,9 +21,11 @@ import type { Meal } from "@/lib/types";
 type Props = {
   meal: Meal;
   onDelete: (id: string) => void;
+  // Tap → meal detail/edit screen. Long-press keeps the quick-delete.
+  onOpen?: () => void;
 };
 
-export function MealCard({ meal, onDelete }: Props) {
+export function MealCard({ meal, onDelete, onOpen }: Props) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [showDelete, setShowDelete] = useState(false);
 
@@ -63,7 +65,14 @@ export function MealCard({ meal, onDelete }: Props) {
   return (
     <Pressable
       onLongPress={() => setShowDelete(true)}
-      onPress={() => showDelete && setShowDelete(false)}
+      onPress={() => {
+        if (showDelete) {
+          setShowDelete(false);
+        } else {
+          onOpen?.();
+        }
+      }}
+      accessibilityLabel={`open meal ${meal.meal_vibe ?? meal.caption ?? ""}`.trim()}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <View style={styles.inner}>

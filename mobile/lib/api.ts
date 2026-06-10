@@ -10,9 +10,23 @@
 
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
-import type { Meal } from "./types";
+import type { DayAggregate, Item, Meal, Per100g, Targets } from "./types";
+import type {
+  CompleteSessionResult,
+  SessionPayload,
+  StrengthOverview,
+} from "./strengthTypes";
+import { mockCompleteSession, mockStrengthOverview } from "./strengthFixtures";
+
+// Dev-only escape hatches, resolved at bundle time:
+// - EXPO_PUBLIC_API_URL points the app at a local Next dev server.
+// - EXPO_PUBLIC_STRENGTH_MOCK=1 serves typed strength fixtures while the
+//   strength backend hasn't landed on prod yet. Neither is set when
+//   publishing, so production bundles always hit the live API.
+const STRENGTH_MOCK = process.env.EXPO_PUBLIC_STRENGTH_MOCK === "1";
 
 const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
   (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
   "https://diogo-eats.vercel.app";
 
@@ -180,6 +194,132 @@ export async function parseMealText(params: {
       }),
     },
     60_000
+  );
+}
+
+// PATCH /api/meals/[id] with { items } — saves edited items, recomputes
+// totals server-side, upserts food memory. Returns the updated meal.
+export async function patchMealItems(id: string, items: Item[]): Promise<Meal> {
+  const data = await request<{ meal: Meal }>(
+    `/api/meals/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    },
+    30_000
+  );
+  return data.meal;
+}
+
+// POST /api/meals/[id]/talk with { message } — Claude rewrites the items
+// array from a plain-English correction. Returns the rewritten items;
+// nothing is saved until the user confirms with a PATCH.
+export async function talkFixMeal(id: string, message: string): Promise<Item[]> {
+  const data = await request<{ items: Item[] }>(
+    `/api/meals/${encodeURIComponent(id)}/talk`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+    60_000
+  );
+  return data.items ?? [];
+}
+
+// POST /api/lookup with { name } — nutrition lookup for the add-item flow.
+export async function lookupFood(
+  name: string
+): Promise<{ is_plant: boolean; per_100g: Per100g }> {
+  return request<{ is_plant: boolean; per_100g: Per100g }>(
+    "/api/lookup",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    },
+    30_000
+  );
+}
+
+// GET /api/stats?days=N — per-day aggregates for the looking-back surface.
+export async function fetchStats(days = 84): Promise<DayAggregate[]> {
+  const data = await request<{ aggregates: DayAggregate[] }>(
+    `/api/stats?days=${days}`,
+    { method: "GET" },
+    30_000
+  );
+  return data.aggregates ?? [];
+}
+
+// GET /api/profile — the user's profile row (targets live here).
+export type Profile = Targets & { email?: string };
+
+export async function fetchProfile(): Promise<Profile> {
+  const data = await request<{ profile: Profile }>(
+    "/api/profile",
+    { method: "GET" },
+    30_000
+  );
+  return data.profile;
+}
+
+// PATCH /api/profile — update the 4 daily targets.
+export async function saveTargets(targets: Targets): Promise<void> {
+  await request<{ profile: Profile }>(
+    "/api/profile",
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(targets),
+    },
+    30_000
+  );
+}
+
+// GET /api/whoop/status — connection state + today's strain/recovery.
+export type WhoopToday = {
+  connected: boolean;
+  last_sync_at?: number | null;
+  today?: { strain: number | null; recovery_pct: number | null } | null;
+};
+
+export async function fetchWhoopToday(): Promise<WhoopToday> {
+  return request<WhoopToday>("/api/whoop/status", { method: "GET" }, 15_000);
+}
+
+// POST /api/whoop/sync — fire-and-forget freshness sync. Failures are
+// the caller's problem to ignore (the chip shows last-known data).
+export async function syncWhoop(): Promise<void> {
+  await request<unknown>("/api/whoop/sync", { method: "POST" }, 30_000);
+}
+
+// GET /api/strength/overview — the strength feature's home payload.
+export async function fetchStrengthOverview(): Promise<StrengthOverview> {
+  if (STRENGTH_MOCK) return mockStrengthOverview();
+  return request<StrengthOverview>(
+    "/api/strength/overview",
+    { method: "GET" },
+    30_000
+  );
+}
+
+// POST /api/strength/sessions — submit a completed session in one shot.
+// Returns the persisted session + the highlights payload, rendered
+// verbatim by the client.
+export async function completeStrengthSession(
+  payload: SessionPayload
+): Promise<CompleteSessionResult> {
+  if (STRENGTH_MOCK) return mockCompleteSession(payload);
+  return request<CompleteSessionResult>(
+    "/api/strength/sessions",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    30_000
   );
 }
 
