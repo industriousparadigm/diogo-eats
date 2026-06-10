@@ -96,7 +96,9 @@ const LOOKUP_SCHEMA = {
   additionalProperties: false,
 };
 
-const PARSE_SYSTEM = `You identify foods in a photo of a meal and return per-item nutrition for a personal food log.
+// Exported for tests: prompt invariants (e.g. the no-double-counting rule)
+// are load-bearing daily behavior and must not silently regress.
+export const PARSE_SYSTEM = `You identify foods in a photo of a meal and return per-item nutrition for a personal food log.
 
 The user is on a vegan-leaning, low-saturated-fat protocol aimed at lowering LDL cholesterol — but they are not strict vegan. They want a useful coach, not a calorie counter. **Get the vibe right; don't obsess about precision.** A meal is a choice; your job is to characterize that choice honestly and helpfully.
 
@@ -108,6 +110,7 @@ For each item:
   - Sauces and condiments typical for the prepared dish
   - Hidden cheese, mayo, butter on bread, oil on pasta
   Mark these "low" confidence — you're inferring from cooking style. The user shouldn't have to add them manually.
+- **One representation only — never both.** When a cooking fat or hidden ingredient becomes its own item, the host dish's name and per_100g must EXCLUDE it. "scrambled eggs" (plain egg nutrition) + "butter (cooking)" is correct; "eggs made with butter" PLUS a separate "butter used in the eggs" counts the same butter twice — never do that. Same rule for oil on roasted vegetables, cream in soup, dressing on salad: if it's a separate item, the host item is the plain food.
 - **Composite foods (cakes, breads, pastries, mixed dishes, sandwiches):** when a dish has BOTH plant and non-plant components, **decompose** into 2-4 constituent items whose grams sum to the realistic total. Do NOT name the whole dish *plus* its hidden ingredients separately (that double-counts mass and tanks plant_pct). Example: peanut butter cake → "peanut butter cake batter (peanut butter, flour, sugar)" ~145g plant=true + "butter (in cake)" ~20g plant=false + "eggs (in cake)" ~15g plant=false. The plant base usually dominates by mass even when the dish isn't vegan. Use "low" confidence on inferred component grams.
 - Estimate portion in grams: ballpark from plate diameter, food depth, density. Default to typical home portions, not restaurant servings, unless the caption signals otherwise. Don't be micro-precise — the user wants a vibe read, not a calorie audit.
 - Flag confidence honestly: "high" only when food + portion are both obvious; "medium" if reasonable; "low" if guessing OR inferring an implicit ingredient. Err toward low rather than overconfident.
@@ -220,13 +223,14 @@ function recentMealsBlock(meals: RecentMeal[]): string {
 
 const LOOKUP_SYSTEM = `Return standard nutrition per 100 grams (as eaten) for the food the user names, and whether it's wholly from plants. Be a normal, accurate reference — not pessimistic, not generous. If the name is ambiguous, pick the most common interpretation and reflect that in your numbers.`;
 
-const TEXT_SYSTEM = `The user is telling you in plain language what they ate. There is NO photo. Translate the description into a structured meal log entry, the same shape you'd produce from a photo, using all the rules below.
+export const TEXT_SYSTEM = `The user is telling you in plain language what they ate. There is NO photo. Translate the description into a structured meal log entry, the same shape you'd produce from a photo, using all the rules below.
 
 The user is on a vegan-leaning, low-saturated-fat protocol aimed at lowering LDL cholesterol — but they are not strict vegan. They want a useful coach, not a calorie counter. **Get the vibe right; don't obsess about precision.** A meal is a choice; your job is to characterize that choice honestly and helpfully.
 
 For each item:
 - Name it specifically.
 - **Include implicit ingredients the user wouldn't think to mention but are clearly present** given the dish: cooking fats (olive oil, butter), dressings, sauces, hidden cheese/cream/butter typical for the named dish. Mark "low" confidence — they're inferred.
+- **One representation only — never both.** When a cooking fat or hidden ingredient becomes its own item, the host dish's name and per_100g must EXCLUDE it. "scrambled eggs" (plain egg nutrition) + "butter (cooking)" is correct; "eggs made with butter" PLUS a separate "butter used in the eggs" counts the same butter twice — never do that. If it's a separate item, the host item is the plain food.
 - **Composite foods (cakes, breads, pastries, mixed dishes, sandwiches):** when a dish has BOTH plant and non-plant components, decompose into 2-4 constituent items whose grams sum to the realistic total. Do NOT name the whole dish *plus* its hidden ingredients separately (that double-counts mass and tanks plant_pct). Example: peanut butter cake → "peanut butter cake batter (peanut butter, flour, sugar)" ~145g plant=true + "butter (in cake)" ~20g plant=false + "eggs (in cake)" ~15g plant=false. The plant base usually dominates by mass even when the dish isn't vegan.
 - Estimate portion in grams. Use any size hints in the text ("two slices", "a small bowl", "a handful"). Without size hints, use typical adult-hungry portions for that dish — not restaurant-sized, but not "disciplined small" either.
 - Confidence "high" only when the food + portion are both well-described; "medium" if reasonable; "low" if guessing or inferring.

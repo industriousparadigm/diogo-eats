@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PrimaryButton, SecondaryButton, SheetShell } from "./sheet";
 import {
-  clampRectToBox,
   containedDisplayDims,
+  cropOutputGeometry,
   displayRectToSourcePixels,
   effectiveDims,
+  moveRectWithin,
+  resizeRectFromCorner,
   rotateCW,
   type Rect,
   type Rotation,
@@ -60,6 +62,7 @@ export function PhotoCropSheet({
     h: Math.min(CONTAINER_MAX_H, typeof window !== "undefined" ? Math.round(window.innerHeight * 0.6) : CONTAINER_MAX_H),
   });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const i = new Image();
@@ -85,14 +88,28 @@ export function PhotoCropSheet({
   }, [display.w, display.h]);
 
   const dragRef = useRef<{
-    mode: DragMode | null;
+    mode: DragMode;
     startX: number;
     startY: number;
     startRect: Rect;
   } | null>(null);
 
+  // Latest-value refs so the gesture closures created at drag-start
+  // always see the current display dims without re-attaching listeners.
+  const displayRef = useRef(display);
+  displayRef.current = display;
+
+  const endDragRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => endDragRef.current?.(), []);
+
+  // Listeners exist only for the duration of a gesture. A non-passive
+  // window touchmove handler alive for the sheet's whole lifetime makes
+  // every scroll on the sheet wait on JS (iOS jank), and a missed
+  // touchend (iOS fires touchcancel on system interruptions) used to
+  // leave the drag stuck — the next touch anywhere kept resizing.
   const onTouchStart = useCallback(
     (mode: DragMode) => (e: React.TouchEvent | React.MouseEvent) => {
+      endDragRef.current?.();
       const t = "touches" in e ? e.touches[0] : (e as React.MouseEvent);
       dragRef.current = {
         mode,
@@ -100,75 +117,51 @@ export function PhotoCropSheet({
         startY: t.clientY,
         startRect: { ...rect },
       };
+
+      const move = (ev: TouchEvent | MouseEvent) => {
+        const ds = dragRef.current;
+        if (!ds) return;
+        ev.preventDefault();
+        const p = "touches" in ev ? ev.touches[0] : (ev as MouseEvent);
+        if (!p) return;
+        const dx = p.clientX - ds.startX;
+        const dy = p.clientY - ds.startY;
+        const next =
+          ds.mode.kind === "move"
+            ? moveRectWithin(ds.startRect, dx, dy, displayRef.current)
+            : resizeRectFromCorner(
+                ds.startRect,
+                ds.mode.corner,
+                dx,
+                dy,
+                displayRef.current,
+                MIN_RECT
+              );
+        setRect(next);
+      };
+      const end = () => {
+        dragRef.current = null;
+        endDragRef.current = null;
+        window.removeEventListener("touchmove", move);
+        window.removeEventListener("touchend", end);
+        window.removeEventListener("touchcancel", end);
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", end);
+      };
+      endDragRef.current = end;
+      window.addEventListener("touchmove", move, { passive: false });
+      window.addEventListener("touchend", end);
+      window.addEventListener("touchcancel", end);
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", end);
     },
     [rect]
   );
 
-  const onTouchMove = useCallback(
-    (e: TouchEvent | MouseEvent) => {
-      const ds = dragRef.current;
-      if (!ds || !ds.mode) return;
-      e.preventDefault();
-      const t = "touches" in e ? e.touches[0] : (e as MouseEvent);
-      const dx = t.clientX - ds.startX;
-      const dy = t.clientY - ds.startY;
-      const s = ds.startRect;
-      let next: Rect = s;
-      if (ds.mode.kind === "move") {
-        next = { x: s.x + dx, y: s.y + dy, width: s.width, height: s.height };
-      } else {
-        const c = ds.mode.corner;
-        const minX = c === "tl" || c === "bl" ? s.x + s.width - MIN_RECT : s.x;
-        const minY = c === "tl" || c === "tr" ? s.y + s.height - MIN_RECT : s.y;
-        const maxX = c === "tr" || c === "br" ? s.x + MIN_RECT : 0;
-        const maxY = c === "bl" || c === "br" ? s.y + MIN_RECT : 0;
-        if (c === "tl") {
-          const nx = Math.min(minX, Math.max(0, s.x + dx));
-          const ny = Math.min(minY, Math.max(0, s.y + dy));
-          next = { x: nx, y: ny, width: s.width + (s.x - nx), height: s.height + (s.y - ny) };
-        } else if (c === "tr") {
-          const nw = Math.max(MIN_RECT, s.width + dx);
-          const ny = Math.min(minY, Math.max(0, s.y + dy));
-          next = { x: s.x, y: ny, width: nw, height: s.height + (s.y - ny) };
-          void maxX;
-        } else if (c === "bl") {
-          const nx = Math.min(minX, Math.max(0, s.x + dx));
-          const nh = Math.max(MIN_RECT, s.height + dy);
-          next = { x: nx, y: s.y, width: s.width + (s.x - nx), height: nh };
-          void maxY;
-        } else {
-          const nw = Math.max(MIN_RECT, s.width + dx);
-          const nh = Math.max(MIN_RECT, s.height + dy);
-          next = { x: s.x, y: s.y, width: nw, height: nh };
-        }
-      }
-      setRect(clampRectToBox(next, display, MIN_RECT));
-    },
-    [display]
-  );
-
-  const onTouchEnd = useCallback(() => {
-    dragRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    const move = (e: TouchEvent | MouseEvent) => onTouchMove(e);
-    const end = () => onTouchEnd();
-    window.addEventListener("touchmove", move, { passive: false });
-    window.addEventListener("touchend", end);
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", end);
-    return () => {
-      window.removeEventListener("touchmove", move);
-      window.removeEventListener("touchend", end);
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", end);
-    };
-  }, [onTouchMove, onTouchEnd]);
-
   async function apply() {
     if (!img || busy) return;
     setBusy(true);
+    setError(null);
     try {
       const src = displayRectToSourcePixels(
         rect,
@@ -177,28 +170,27 @@ export function PhotoCropSheet({
         img.naturalHeight,
         rotation
       );
-      const k = Math.min(1, OUTPUT_MAX_DIM / Math.max(src.width, src.height));
-      const outW = Math.max(1, Math.round(src.width * k));
-      const outH = Math.max(1, Math.round(src.height * k));
+      // Canvas = the crop as displayed (rotated); draw box = source
+      // aspect at uniform scale. The ctx rotation maps one onto the
+      // other — see cropOutputGeometry for why both matter.
+      const { canvasW, canvasH, drawW, drawH } = cropOutputGeometry(
+        src,
+        rotation,
+        OUTPUT_MAX_DIM
+      );
 
       const canvas = document.createElement("canvas");
-      canvas.width = outW;
-      canvas.height = outH;
+      canvas.width = canvasW;
+      canvas.height = canvasH;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("no ctx");
 
       ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, outW, outH);
+      ctx.fillRect(0, 0, canvasW, canvasH);
 
-      // Apply rotation around the canvas centre + then drawImage from
-      // the requested SOURCE rectangle.
       ctx.save();
-      ctx.translate(outW / 2, outH / 2);
+      ctx.translate(canvasW / 2, canvasH / 2);
       ctx.rotate((rotation * Math.PI) / 180);
-      // After rotation, the source rect goes onto a -outW/2..outW/2 box.
-      // For 90/270, swap output dims for the drawImage step.
-      const drawW = rotation === 90 || rotation === 270 ? outH : outW;
-      const drawH = rotation === 90 || rotation === 270 ? outW : outH;
       ctx.drawImage(
         img,
         src.x,
@@ -218,7 +210,8 @@ export function PhotoCropSheet({
       if (!blob) throw new Error("toBlob failed");
       const name = file.name.replace(/\.[^.]+$/, "") + "-cropped.jpg";
       onApply(new File([blob], name, { type: "image/jpeg" }));
-    } catch {
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "crop failed");
       setBusy(false);
     }
   }
@@ -420,6 +413,12 @@ export function PhotoCropSheet({
           drag corners to crop · drag inside to move
         </div>
       </div>
+
+      {error && (
+        <div style={{ fontSize: 12, color: colors.badStrong }}>
+          crop failed ({error}) — try again or cancel
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8 }}>
         <SecondaryButton onClick={onCancel}>cancel</SecondaryButton>

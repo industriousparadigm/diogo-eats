@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseMealText, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
-import { createdAtFor } from "@/lib/date";
+import { createdAtForTz } from "@/lib/tz";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
 import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     const meal = {
       id,
       user_id: userId,
-      created_at: createdAtFor(forDate),
+      created_at: createdAtForTz(forDate),
       photo_filename: null,
       items_json: JSON.stringify(parsed.items),
       ...totals,
@@ -83,7 +83,9 @@ export async function POST(req: Request) {
       meal_vibe: parsed.meal_vibe,
     };
     await insertMeal(meal);
-    void recordParseEvent(userId);
+    // Awaited: a fire-and-forget insert can be dropped when the
+    // serverless instance freezes after the response flushes.
+    await recordParseEvent(userId);
 
     return NextResponse.json({ meal });
   } catch (err: any) {

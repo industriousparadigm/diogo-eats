@@ -1,4 +1,5 @@
 import { getSupabase } from "./db";
+import { todayYmd, tzDayBounds } from "./tz";
 
 // Per-user daily Vision-parse quota. Each /api/parse or /api/parse-text
 // call counts as one event. Defends against runaway loops, share-link
@@ -15,32 +16,26 @@ export type QuotaState = {
   used: number;
   limit: number;
   ok: boolean; // true if the caller can proceed (used < limit)
-  resetsAt: number; // ms epoch, next local-midnight
+  resetsAt: number; // ms epoch, next Lisbon midnight
 };
 
-function startOfToday(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function startOfTomorrow(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 1);
-  return d.getTime();
+// Day window in the app timezone — NOT server-local. On Vercel (UTC)
+// the old setHours(0,0,0,0) reset the quota at 01:00 Lisbon in summer.
+function todayBounds(): [number, number] {
+  return tzDayBounds(todayYmd());
 }
 
 // Look up today's count of parse events for this user. Doesn't
 // increment — callers must call recordParseEvent() on success.
 export async function getParseQuota(userId: string): Promise<QuotaState> {
   const supa = getSupabase();
+  const [dayStart, dayEnd] = todayBounds();
   const { count, error } = await supa
     .from("usage_events")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("kind", PARSE_EVENT_KIND)
-    .gte("created_at", startOfToday());
+    .gte("created_at", dayStart);
   if (error) {
     // Fail open — better to allow the parse than to block on a
     // counter glitch. We log and let it through.
@@ -49,7 +44,7 @@ export async function getParseQuota(userId: string): Promise<QuotaState> {
       used: 0,
       limit: PARSE_QUOTA_PER_DAY,
       ok: true,
-      resetsAt: startOfTomorrow(),
+      resetsAt: dayEnd,
     };
   }
   const used = count ?? 0;
@@ -57,7 +52,7 @@ export async function getParseQuota(userId: string): Promise<QuotaState> {
     used,
     limit: PARSE_QUOTA_PER_DAY,
     ok: used < PARSE_QUOTA_PER_DAY,
-    resetsAt: startOfTomorrow(),
+    resetsAt: dayEnd,
   };
 }
 

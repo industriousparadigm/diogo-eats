@@ -3,7 +3,10 @@ import {
   effectiveDims,
   containedDisplayDims,
   clampRectToBox,
+  cropOutputGeometry,
   displayRectToSourcePixels,
+  moveRectWithin,
+  resizeRectFromCorner,
   rotateCW,
   rotateCCW,
 } from "../cropMath";
@@ -118,6 +121,97 @@ describe("displayRectToSourcePixels", () => {
     expect(r.y).toBe(600 - 200); // 400
     expect(r.width).toBe(200);
     expect(r.height).toBe(200);
+  });
+});
+
+describe("resizeRectFromCorner", () => {
+  const bounds = { w: 400, h: 300 };
+  const start = { x: 100, y: 100, width: 100, height: 100 };
+
+  it("br drag grows toward the boundary and stops there — anchored edges never move", () => {
+    // The old clampRectToBox path let width grow to bounds.w and then
+    // relocated x — dragging the bottom-right handle shoved the rect left.
+    const r = resizeRectFromCorner(start, "br", 9999, 9999, bounds, 48);
+    expect(r.x).toBe(100); // anchored
+    expect(r.y).toBe(100); // anchored
+    expect(r.width).toBe(300); // bounds.w - x
+    expect(r.height).toBe(200); // bounds.h - y
+  });
+
+  it("tl drag past the opposite corner stops at min size", () => {
+    const r = resizeRectFromCorner(start, "tl", 9999, 9999, bounds, 48);
+    expect(r.x + r.width).toBe(200); // right edge anchored
+    expect(r.y + r.height).toBe(200); // bottom edge anchored
+    expect(r.width).toBe(48);
+    expect(r.height).toBe(48);
+  });
+
+  it("tl drag toward origin stops at 0,0", () => {
+    const r = resizeRectFromCorner(start, "tl", -9999, -9999, bounds, 48);
+    expect(r).toEqual({ x: 0, y: 0, width: 200, height: 200 });
+  });
+
+  it("tr drag moves top and right edges only", () => {
+    const r = resizeRectFromCorner(start, "tr", 50, -30, bounds, 48);
+    expect(r).toEqual({ x: 100, y: 70, width: 150, height: 130 });
+  });
+
+  it("bl drag moves bottom and left edges only", () => {
+    const r = resizeRectFromCorner(start, "bl", -50, 30, bounds, 48);
+    expect(r).toEqual({ x: 50, y: 100, width: 150, height: 130 });
+  });
+});
+
+describe("moveRectWithin", () => {
+  it("moves freely inside bounds without resizing", () => {
+    const r = moveRectWithin({ x: 10, y: 10, width: 50, height: 50 }, 20, 30, {
+      w: 400,
+      h: 300,
+    });
+    expect(r).toEqual({ x: 30, y: 40, width: 50, height: 50 });
+  });
+  it("clamps to edges, never resizes", () => {
+    const r = moveRectWithin({ x: 10, y: 10, width: 50, height: 50 }, -999, 999, {
+      w: 400,
+      h: 300,
+    });
+    expect(r).toEqual({ x: 0, y: 250, width: 50, height: 50 });
+  });
+});
+
+describe("cropOutputGeometry", () => {
+  it("rotation 0: canvas matches the source rect, draw box identical", () => {
+    const g = cropOutputGeometry({ width: 1000, height: 500 }, 0, 2048);
+    expect(g).toEqual({ canvasW: 1000, canvasH: 500, drawW: 1000, drawH: 500 });
+  });
+
+  it("rotation 90: canvas dims swap, draw box keeps source aspect", () => {
+    // The pre-fix bug: canvas stayed at source dims AND the draw box was
+    // swapped — output was stretched by (w/h)² and had the wrong aspect.
+    const g = cropOutputGeometry({ width: 400, height: 200 }, 90, 2048);
+    expect(g.canvasW).toBe(200);
+    expect(g.canvasH).toBe(400);
+    expect(g.drawW).toBe(400);
+    expect(g.drawH).toBe(200);
+  });
+
+  it("rotation 270 scales down to maxDim with uniform k", () => {
+    const g = cropOutputGeometry({ width: 4000, height: 2000 }, 270, 2048);
+    expect(g.drawW).toBe(2048);
+    expect(g.drawH).toBe(1024);
+    expect(g.canvasW).toBe(1024);
+    expect(g.canvasH).toBe(2048);
+  });
+
+  it("rotation 180 keeps dims unswapped", () => {
+    const g = cropOutputGeometry({ width: 300, height: 600 }, 180, 2048);
+    expect(g).toEqual({ canvasW: 300, canvasH: 600, drawW: 300, drawH: 600 });
+  });
+
+  it("never collapses below 1px", () => {
+    const g = cropOutputGeometry({ width: 0.4, height: 0.4 }, 0, 2048);
+    expect(g.canvasW).toBeGreaterThanOrEqual(1);
+    expect(g.canvasH).toBeGreaterThanOrEqual(1);
   });
 });
 

@@ -20,3 +20,14 @@ export function isAllowedEmail(
   if (!email) return false;
   return allowed.includes(email.trim().toLowerCase());
 }
+
+// Extract the token from an Authorization: Bearer header. The mobile
+// client authenticates this way (no cookies in native HTTP stacks);
+// the web app keeps using the SSR cookie session.
+export function parseBearerToken(
+  header: string | undefined | null
+): string | null {
+  if (!header) return null;
+  const m = header.match(/^Bearer\s+(\S+)\s*$/i);
+  return m ? m[1] : null;
+}

@@ -10,6 +10,14 @@ export async function uploadPhoto(filename: string, buf: Buffer, contentType: st
   if (error) throw new Error(`uploadPhoto: ${error.message}`);
 }
 
+// Compensation path: when a meal insert fails after its photo was
+// uploaded, the photo must come back out or it orphans forever (no
+// meal row references it, so deleteMeal's cleanup never sees it).
+export async function deletePhoto(filename: string) {
+  const { error } = await getSupabase().storage.from(BUCKET).remove([filename]);
+  if (error) throw new Error(`deletePhoto: ${error.message}`);
+}
+
 // Short-lived signed URL — bucket is private, so we hand out 5-minute
 // links from the /api/photo/[filename] route on demand.
 export async function signedPhotoUrl(filename: string, expiresInSec = 300): Promise<string> {

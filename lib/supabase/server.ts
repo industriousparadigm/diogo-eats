@@ -1,5 +1,7 @@
 import { createServerClient, type CookieMethodsServer } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
+import { cookies, headers } from "next/headers";
+import { parseBearerToken } from "../auth";
 
 // Server-side Supabase client bound to the request cookies. Use this in
 // Route Handlers, Server Components, and Server Actions to read the
@@ -32,9 +34,31 @@ export async function getSupabaseServer() {
   );
 }
 
+// Bearer-token path: the mobile client has no cookie jar — it sends
+// its Supabase access token as `Authorization: Bearer <jwt>`. The
+// token is validated against Supabase Auth (signature + expiry +
+// revocation), exactly as trustworthy as the cookie session: both are
+// minted by the same sign-in, behind the same ALLOWED_EMAILS gate.
+async function getBearerUser() {
+  const h = await headers();
+  const token = parseBearerToken(h.get("authorization"));
+  if (!token) return null;
+  const supa = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { data, error } = await supa.auth.getUser(token);
+  if (error || !data?.user) return null;
+  return data.user;
+}
+
 // Read the currently authenticated user. Returns null if no session.
-// Thin wrapper so callers don't need to drill into auth.getUser().
+// An explicit Bearer token wins over the ambient cookie session; web
+// requests without the header skip straight to the cookie path.
 export async function getCurrentUser() {
+  const bearerUser = await getBearerUser();
+  if (bearerUser) return bearerUser;
   const supa = await getSupabaseServer();
   const { data, error } = await supa.auth.getUser();
   if (error || !data?.user) return null;

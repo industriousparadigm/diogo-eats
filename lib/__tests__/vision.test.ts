@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { totalsFromItems } from "../vision";
+import { totalsFromItems, PARSE_SYSTEM, TEXT_SYSTEM } from "../vision";
 import type { Item } from "../vision";
 
 const oats: Item = {
@@ -58,5 +58,26 @@ describe("totalsFromItems (server)", () => {
   it("computes plant_pct mass-weighted across mixed items", () => {
     const t = totalsFromItems([oats, banana, beef]); // 50 + 110 = 160 plant of 220 total
     expect(t.plant_pct).toBe(73);
+  });
+});
+
+describe("prompt invariants", () => {
+  // The double-counting failure mode this guards: "eggs made with butter"
+  // as one item PLUS "butter used in the eggs" as another — the same
+  // butter counted twice. Both parse prompts must carry the rule.
+  it.each([
+    ["PARSE_SYSTEM", PARSE_SYSTEM],
+    ["TEXT_SYSTEM", TEXT_SYSTEM],
+  ])("%s forbids double-representing separated ingredients", (_name, prompt) => {
+    expect(prompt).toContain("One representation only — never both.");
+    expect(prompt).toContain("must EXCLUDE it");
+  });
+
+  it.each([
+    ["PARSE_SYSTEM", PARSE_SYSTEM],
+    ["TEXT_SYSTEM", TEXT_SYSTEM],
+  ])("%s keeps the composite-decomposition rule", (_name, prompt) => {
+    expect(prompt).toContain("decompose");
+    expect(prompt).toContain("double-counts mass");
   });
 });

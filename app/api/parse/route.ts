@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { parseMealPhoto, totalsFromItems, KnownFood, RecentMeal } from "@/lib/vision";
 import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
-import { uploadPhoto } from "@/lib/storage";
-import { createdAtFor } from "@/lib/date";
+import { uploadPhoto, deletePhoto } from "@/lib/storage";
+import { createdAtForTz } from "@/lib/tz";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
 import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
@@ -161,10 +161,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const id = crypto.randomBytes(8).toString("hex");
-    const filename = `${id}.jpg`;
-    await uploadPhoto(filename, buf, "image/jpeg");
-
     const [known, recent, trainingBlock] = await Promise.all([
       knownFoodsFromMemory(userId),
       recentMealsForContext(userId),
@@ -181,10 +177,17 @@ export async function POST(req: Request) {
     );
     const totals = totalsFromItems(parsed.items);
 
+    // Upload only after a successful parse — the Vision call is the
+    // step most likely to fail (timeout, overload), and uploading first
+    // left an orphaned object in the bucket on every failed parse.
+    const id = crypto.randomBytes(8).toString("hex");
+    const filename = `${id}.jpg`;
+    await uploadPhoto(filename, buf, "image/jpeg");
+
     const meal = {
       id,
       user_id: userId,
-      created_at: createdAtFor(forDate),
+      created_at: createdAtForTz(forDate),
       photo_filename: filename,
       items_json: JSON.stringify(parsed.items),
       ...totals,
@@ -192,8 +195,15 @@ export async function POST(req: Request) {
       caption,
       meal_vibe: parsed.meal_vibe,
     };
-    await insertMeal(meal);
-    void recordParseEvent(userId);
+    try {
+      await insertMeal(meal);
+    } catch (err) {
+      await deletePhoto(filename).catch(() => {});
+      throw err;
+    }
+    // Awaited: a fire-and-forget insert can be dropped when the
+    // serverless instance freezes after the response flushes.
+    await recordParseEvent(userId);
 
     return NextResponse.json({ meal });
   } catch (err: any) {

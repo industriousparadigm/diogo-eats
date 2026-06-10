@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { addDaysYmd, todayYmd, tzDayStart, tzYmd } from "./tz";
 
 // Server-side admin client. Service role key bypasses RLS, which is what
 // we want — all reads/writes go through Next.js API routes that already
@@ -224,12 +225,12 @@ export async function getDailyAggregates(
   userId: string,
   daysBack: number = 84
 ): Promise<DayAggregate[]> {
-  const now = new Date();
-  // Start from local-midnight of (daysBack-1) days ago so we get exactly
-  // `daysBack` cells including today.
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (daysBack - 1));
+  // App-timezone day cells: start at Lisbon-midnight of (daysBack-1)
+  // days ago so we get exactly `daysBack` cells including today. The
+  // old server-local Date math ran in UTC on Vercel and mis-bucketed
+  // late-evening meals.
+  const startYmd = addDaysYmd(todayYmd(), -(daysBack - 1));
+  const startTs = tzDayStart(startYmd);
 
   const { data, error } = await getSupabase()
     .from("meals")
@@ -237,14 +238,13 @@ export async function getDailyAggregates(
       "created_at, items_json, plant_pct, sat_fat_g, soluble_fiber_g, calories, protein_g, carbs_g, alcohol_g"
     )
     .eq("user_id", userId)
-    .gte("created_at", start.getTime())
+    .gte("created_at", startTs)
     .order("created_at", { ascending: true });
   if (error) throw new Error(`getDailyAggregates: ${error.message}`);
 
   // Whoop kcal burn per day (when the user has a connection + a synced
   // cycle for that day). NULL when missing so the chart can render the
   // day's bar without a misleading 0-burn line.
-  const startYmd = localYmd(start);
   const { data: whoopRows } = await getSupabase()
     .from("whoop_cycles")
     .select("day, kcal")
@@ -273,9 +273,7 @@ export async function getDailyAggregates(
     }
   >();
   for (let i = 0; i < daysBack; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    days.set(localYmd(d), {
+    days.set(addDaysYmd(startYmd, i), {
       meal_count: 0,
       plant_grams: 0,
       total_grams: 0,
@@ -289,7 +287,7 @@ export async function getDailyAggregates(
   }
 
   for (const m of data ?? []) {
-    const key = localYmd(new Date((m as any).created_at));
+    const key = tzYmd((m as any).created_at);
     const bucket = days.get(key);
     if (!bucket) continue; // shouldn't happen given the gte filter
     bucket.meal_count += 1;
@@ -340,15 +338,6 @@ export async function getDailyAggregates(
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
-}
-
-function localYmd(d: Date): string {
-  // We use the device's local time. Fine for a single user in one timezone;
-  // would need TZ-aware bucketing for travel-heavy use cases later.
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 export async function getRecentMealsForContext(

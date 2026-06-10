@@ -132,6 +132,83 @@ export function displayRectToSourcePixels(
   }
 }
 
+export type Corner = "tl" | "tr" | "bl" | "br";
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+// Resize from one corner, anchoring the opposite corner. The dragged
+// edges are clamped to the bounds and the minimum size; the anchored
+// edges NEVER move. (The previous clampRectToBox-after-resize approach
+// could relocate the whole rect when a corner was dragged past the
+// boundary — dragging the bottom-right handle shoved the rect left.)
+export function resizeRectFromCorner(
+  start: Rect,
+  corner: Corner,
+  dx: number,
+  dy: number,
+  bounds: { w: number; h: number },
+  min: number = 24
+): Rect {
+  const right = start.x + start.width;
+  const bottom = start.y + start.height;
+  let { x, y, width, height } = start;
+
+  if (corner === "tl" || corner === "bl") {
+    x = clamp(start.x + dx, 0, right - min);
+    width = right - x;
+  } else {
+    width = clamp(start.width + dx, min, bounds.w - start.x);
+  }
+  if (corner === "tl" || corner === "tr") {
+    y = clamp(start.y + dy, 0, bottom - min);
+    height = bottom - y;
+  } else {
+    height = clamp(start.height + dy, min, bounds.h - start.y);
+  }
+  return { x, y, width, height };
+}
+
+// Translate a rect inside bounds; size never changes.
+export function moveRectWithin(
+  start: Rect,
+  dx: number,
+  dy: number,
+  bounds: { w: number; h: number }
+): Rect {
+  return {
+    x: clamp(start.x + dx, 0, bounds.w - start.width),
+    y: clamp(start.y + dy, 0, bounds.h - start.height),
+    width: start.width,
+    height: start.height,
+  };
+}
+
+// Canvas geometry for rendering a crop. The canvas takes the dimensions
+// of the crop AS DISPLAYED (rotated), while the drawImage destination
+// box keeps the SOURCE aspect — uniform scale — and the ctx rotation
+// maps one onto the other. Getting either side wrong stretches the
+// output: the pre-June-2026 code kept the canvas at source dims and
+// swapped the draw box instead, so every 90°/270° crop shipped
+// distorted with the wrong aspect.
+export function cropOutputGeometry(
+  srcRect: { width: number; height: number },
+  rotation: Rotation,
+  maxDim: number
+): { canvasW: number; canvasH: number; drawW: number; drawH: number } {
+  const k = Math.min(1, maxDim / Math.max(srcRect.width, srcRect.height));
+  const drawW = Math.max(1, Math.round(srcRect.width * k));
+  const drawH = Math.max(1, Math.round(srcRect.height * k));
+  const swap = rotation === 90 || rotation === 270;
+  return {
+    canvasW: swap ? drawH : drawW,
+    canvasH: swap ? drawW : drawH,
+    drawW,
+    drawH,
+  };
+}
+
 export function rotateCW(r: Rotation): Rotation {
   return ((r + 90) % 360) as Rotation;
 }

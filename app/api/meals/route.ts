@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { getMeal, getMealsBetween, deleteMeal } from "@/lib/db";
 import { requireUser } from "@/lib/user";
+import { todayYmd, tzDayBounds } from "@/lib/tz";
 
 export const runtime = "nodejs";
 
+// Day bounds in the app timezone. The old server-local Date math ran in
+// UTC on Vercel, so a 00:30-Lisbon meal showed under the previous day.
 function dayBoundsFromQuery(req: Request): [number, number] {
   const url = new URL(req.url);
   const dayStr = url.searchParams.get("day");
-  const day = dayStr ? new Date(dayStr) : new Date();
-  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-  return [start, start + 24 * 60 * 60 * 1000];
+  const ymd =
+    dayStr && /^\d{4}-\d{2}-\d{2}$/.test(dayStr) ? dayStr : todayYmd();
+  return tzDayBounds(ymd);
 }
 
 export async function GET(req: Request) {

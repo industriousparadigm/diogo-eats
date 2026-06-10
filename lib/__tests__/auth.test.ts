@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isAllowedEmail, parseAllowedEmails } from "../auth";
+import { isAllowedEmail, parseAllowedEmails, parseBearerToken } from "../auth";
 
 describe("parseAllowedEmails", () => {
   it("splits comma-separated list and lowercases each entry", () => {
@@ -40,5 +40,24 @@ describe("isAllowedEmail", () => {
   });
   it("rejects when allowlist is empty (no one's invited)", () => {
     expect(isAllowedEmail("diogo@okrasolar.com", [])).toBe(false);
+  });
+});
+
+describe("parseBearerToken", () => {
+  it("extracts the token from a well-formed header", () => {
+    expect(parseBearerToken("Bearer abc.def.ghi")).toBe("abc.def.ghi");
+  });
+  it("is case-insensitive on the scheme and tolerates trailing space", () => {
+    expect(parseBearerToken("bearer tok123 ")).toBe("tok123");
+    expect(parseBearerToken("BEARER tok123")).toBe("tok123");
+  });
+  it("rejects missing/malformed headers", () => {
+    expect(parseBearerToken(null)).toBeNull();
+    expect(parseBearerToken(undefined)).toBeNull();
+    expect(parseBearerToken("")).toBeNull();
+    expect(parseBearerToken("Bearer")).toBeNull();
+    expect(parseBearerToken("Bearer ")).toBeNull();
+    expect(parseBearerToken("Basic dXNlcjpwYXNz")).toBeNull();
+    expect(parseBearerToken("Bearer two tokens")).toBeNull();
   });
 });

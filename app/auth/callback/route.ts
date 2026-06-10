@@ -24,8 +24,17 @@ export async function GET(req: Request) {
       );
     }
   } else if (tokenHash && type) {
+    // Whitelist the OTP type instead of forwarding a query param as
+    // `any` — a malformed link should fail loudly, not reach Supabase.
+    const validTypes = ["email", "magiclink", "signup", "recovery", "invite"] as const;
+    const otpType = validTypes.find((t) => t === type);
+    if (!otpType) {
+      return NextResponse.redirect(
+        new URL(`/login?error=callback_failed`, url.origin)
+      );
+    }
     const { error } = await supa.auth.verifyOtp({
-      type: type as any,
+      type: otpType,
       token_hash: tokenHash,
     });
     if (error) {
