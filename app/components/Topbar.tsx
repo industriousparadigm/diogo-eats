@@ -24,6 +24,9 @@ export function Topbar() {
         EATS
       </Link>
       <nav style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Link href="/foods" style={navPillStyle}>
+          FOODS
+        </Link>
         <Link href="/overview" style={overviewBtnStyle}>
           OVERVIEW
         </Link>
@@ -111,6 +114,21 @@ const overviewBtnStyle: React.CSSProperties = {
   background: "rgba(132,204,22,0.10)",
   color: "#bef264",
   border: "1px solid rgba(132,204,22,0.30)",
+  borderRadius: 999,
+  padding: "5px 11px",
+  fontSize: 10,
+  fontWeight: 500,
+  letterSpacing: 0.5,
+  textDecoration: "none",
+  WebkitTapHighlightColor: "transparent",
+  whiteSpace: "nowrap",
+};
+
+// Quieter than OVERVIEW — FOODS is a utility surface, not the hero.
+const navPillStyle: React.CSSProperties = {
+  background: "transparent",
+  color: colors.textMuted,
+  border: `1px solid ${colors.border}`,
   borderRadius: 999,
   padding: "5px 11px",
   fontSize: 10,

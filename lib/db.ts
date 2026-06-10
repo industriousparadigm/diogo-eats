@@ -135,6 +135,10 @@ export async function updateMealCreatedAt(id: string, createdAt: number) {
 
 // ---- food memory ----
 
+export type Provenance = "label_verified" | "user_corrected" | "ai_inferred";
+
+export type PortionPreset = { label: string; grams: number };
+
 export type FoodMemory = {
   name_key: string;
   display_name: string;
@@ -142,9 +146,13 @@ export type FoodMemory = {
   per_100g_json: string;
   times_seen: number;
   last_seen: number;
+  // Added 2026-06-10 (foods library). provenance ranks data authority;
+  // portion_presets is reserved for a later quick-portion surface.
+  provenance: Provenance;
+  portion_presets: PortionPreset[] | null;
 };
 
-function normalizeFoodName(name: string): string {
+export function normalizeFoodName(name: string): string {
   return name.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
@@ -178,6 +186,14 @@ export async function upsertFoodMemory(userId: string, items: UpsertableItem[]) 
   );
 }
 
+// Foods injected into parse prompts. Provenance-ranked: label_verified
+// and user_corrected entries (authoritative — the user vouched for them)
+// come before ai_inferred, then by times_seen so the user's staples lead.
+// Bounded by `limit` to keep the prompt block size in check.
+//
+// PostgREST can't order by a CASE expression, so we rank in JS after
+// pulling a generous candidate set (user-scale food_memory is small —
+// hundreds of rows, not millions).
 export async function topFoodMemory(
   userId: string,
   limit: number = 30
@@ -186,10 +202,192 @@ export async function topFoodMemory(
     .from("food_memory")
     .select("*")
     .eq("user_id", userId)
+    .order("times_seen", { ascending: false })
     .order("last_seen", { ascending: false })
-    .limit(limit);
+    .limit(500);
   if (error) throw new Error(`topFoodMemory: ${error.message}`);
-  return (data as FoodMemory[]) ?? [];
+  const rows = (data as FoodMemory[]) ?? [];
+  return rankFoodsForPrompt(rows).slice(0, limit);
+}
+
+// Pure ranker (exported for tests): authority tier first, then times_seen
+// desc, then last_seen desc as the final tiebreak.
+const PROVENANCE_RANK: Record<Provenance, number> = {
+  label_verified: 0,
+  user_corrected: 1,
+  ai_inferred: 2,
+};
+export function rankFoodsForPrompt(rows: FoodMemory[]): FoodMemory[] {
+  return [...rows].sort((a, b) => {
+    const ra = PROVENANCE_RANK[a.provenance] ?? 2;
+    const rb = PROVENANCE_RANK[b.provenance] ?? 2;
+    if (ra !== rb) return ra - rb;
+    if (b.times_seen !== a.times_seen) return b.times_seen - a.times_seen;
+    return b.last_seen - a.last_seen;
+  });
+}
+
+// ---- foods library CRUD (the /api/foods surface) ----
+
+export type FoodRow = FoodMemory; // alias: library rows are food_memory rows
+
+// Search by display_name (case-insensitive substring), ordered by
+// times_seen desc. Empty query returns the most-seen foods. Paged.
+export async function searchFoods(
+  userId: string,
+  query: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<FoodRow[]> {
+  let q = getSupabase()
+    .from("food_memory")
+    .select("*")
+    .eq("user_id", userId)
+    .order("times_seen", { ascending: false })
+    .order("last_seen", { ascending: false })
+    .range(offset, offset + limit - 1);
+  const trimmed = query.trim();
+  if (trimmed) {
+    // Escape PostgREST ilike wildcards in user input.
+    const safe = trimmed.replace(/[%_]/g, (m) => `\\${m}`);
+    q = q.ilike("display_name", `%${safe}%`);
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(`searchFoods: ${error.message}`);
+  return (data as FoodRow[]) ?? [];
+}
+
+export async function getFood(
+  userId: string,
+  nameKey: string
+): Promise<FoodRow | null> {
+  const { data, error } = await getSupabase()
+    .from("food_memory")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("name_key", nameKey)
+    .maybeSingle();
+  if (error) throw new Error(`getFood: ${error.message}`);
+  return (data as FoodRow) ?? null;
+}
+
+export type FoodPatch = {
+  display_name?: string;
+  is_plant?: number;
+  per_100g_json?: string;
+  provenance?: Provenance;
+  portion_presets?: PortionPreset[] | null;
+};
+
+export async function updateFood(
+  userId: string,
+  nameKey: string,
+  patch: FoodPatch
+): Promise<FoodRow> {
+  const { data, error } = await getSupabase()
+    .from("food_memory")
+    .update(patch)
+    .eq("user_id", userId)
+    .eq("name_key", nameKey)
+    .select("*")
+    .maybeSingle();
+  if (error) throw new Error(`updateFood: ${error.message}`);
+  if (!data) throw new Error("food not found");
+  return data as FoodRow;
+}
+
+export async function deleteFood(userId: string, nameKey: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("food_memory")
+    .delete()
+    .eq("user_id", userId)
+    .eq("name_key", nameKey);
+  if (error) throw new Error(`deleteFood: ${error.message}`);
+}
+
+export type NewFood = {
+  display_name: string;
+  is_plant: number;
+  per_100g_json: string;
+  provenance: Provenance;
+  portion_presets?: PortionPreset[] | null;
+};
+
+// Insert a food directly into the library. Conflicts on (user_id,
+// name_key) update in place (a manual add of an existing food just
+// refreshes its data). Returns the resulting row.
+export async function insertFood(
+  userId: string,
+  food: NewFood
+): Promise<FoodRow> {
+  const nameKey = normalizeFoodName(food.display_name);
+  const { data, error } = await getSupabase()
+    .from("food_memory")
+    .upsert(
+      {
+        user_id: userId,
+        name_key: nameKey,
+        display_name: food.display_name.trim(),
+        is_plant: food.is_plant,
+        per_100g_json: food.per_100g_json,
+        times_seen: 1,
+        last_seen: Date.now(),
+        provenance: food.provenance,
+        portion_presets: food.portion_presets ?? null,
+      },
+      { onConflict: "user_id,name_key" }
+    )
+    .select("*")
+    .maybeSingle();
+  if (error) throw new Error(`insertFood: ${error.message}`);
+  return data as FoodRow;
+}
+
+// Merge duplicate library entries (Vision's messy naming produces these).
+// Sums times_seen onto keep_id, keeps keep_id's nutrition/name/provenance,
+// then deletes the merged rows. All scoped to one user. Returns the
+// surviving row with its bumped times_seen.
+export async function mergeFoods(
+  userId: string,
+  keepKey: string,
+  mergeKeys: string[]
+): Promise<FoodRow> {
+  const toMerge = mergeKeys.filter((k) => k && k !== keepKey);
+  const keep = await getFood(userId, keepKey);
+  if (!keep) throw new Error("keep food not found");
+  if (toMerge.length === 0) return keep;
+
+  const { data: mergeRows, error: selErr } = await getSupabase()
+    .from("food_memory")
+    .select("name_key, times_seen")
+    .eq("user_id", userId)
+    .in("name_key", toMerge);
+  if (selErr) throw new Error(`mergeFoods select: ${selErr.message}`);
+  const summed = (mergeRows ?? []).reduce(
+    (acc, r) => acc + ((r as { times_seen: number }).times_seen || 0),
+    0
+  );
+
+  const newTimesSeen = keep.times_seen + summed;
+  const { data: updated, error: upErr } = await getSupabase()
+    .from("food_memory")
+    .update({ times_seen: newTimesSeen, last_seen: Date.now() })
+    .eq("user_id", userId)
+    .eq("name_key", keepKey)
+    .select("*")
+    .maybeSingle();
+  if (upErr) throw new Error(`mergeFoods update: ${upErr.message}`);
+
+  const presentKeys = (mergeRows ?? []).map((r) => (r as { name_key: string }).name_key);
+  if (presentKeys.length > 0) {
+    const { error: delErr } = await getSupabase()
+      .from("food_memory")
+      .delete()
+      .eq("user_id", userId)
+      .in("name_key", presentKeys);
+    if (delErr) throw new Error(`mergeFoods delete: ${delErr.message}`);
+  }
+  return updated as FoodRow;
 }
 
 // ---- recent meals as parse context ----

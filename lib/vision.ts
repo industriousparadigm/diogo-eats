@@ -96,6 +96,17 @@ const LOOKUP_SCHEMA = {
   additionalProperties: false,
 };
 
+const LABEL_SCHEMA = {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    is_plant: { type: "boolean" },
+    per_100g: PER_100G_SCHEMA,
+  },
+  required: ["name", "is_plant", "per_100g"],
+  additionalProperties: false,
+};
+
 // Exported for tests: prompt invariants (e.g. the no-double-counting rule)
 // are load-bearing daily behavior and must not silently regress.
 export const PARSE_SYSTEM = `You identify foods in a photo of a meal and return per-item nutrition for a personal food log.
@@ -222,6 +233,21 @@ function recentMealsBlock(meals: RecentMeal[]): string {
 }
 
 const LOOKUP_SYSTEM = `Return standard nutrition per 100 grams (as eaten) for the food the user names, and whether it's wholly from plants. Be a normal, accurate reference — not pessimistic, not generous. If the name is ambiguous, pick the most common interpretation and reflect that in your numbers.`;
+
+// Label parsing is deterministic by design: read the printed panel, do
+// NOT estimate. Exported so the "read off the panel, never guess" rule is
+// pinned by a prompt-invariant test the same way PARSE/TEXT are.
+export const LABEL_SYSTEM = `You are reading a packaged-food NUTRITION LABEL from a photo to create one authoritative library entry. This is deterministic transcription, not estimation.
+
+Rules:
+- **Read the printed values off the panel. Do NOT estimate or infer from typical foods.** If the panel prints per-100g values, use them verbatim. If the panel ONLY prints per-serving values, convert to per-100g using the printed serving size (e.g. "per 30g serving: 120 kcal" → 400 kcal per 100g). Always normalize to per 100 GRAMS (not per serving, not per 100mL — if the product is a liquid measured in mL, treat 100mL ≈ 100g unless a density is printed).
+- If a required nutrient is genuinely absent from the label, use 0 — do not invent a plausible number.
+- **soluble_fiber_g:** labels print TOTAL fiber, rarely the soluble fraction. If only total fiber is shown, estimate the soluble portion conservatively (typically 20-40% of total for most foods; higher for oats/psyllium/legumes). This is the one field where a printed total must be apportioned — note nothing about it, just produce a reasonable soluble number.
+- **salt_g vs sodium:** labels print either salt or sodium. If sodium (mg) is printed, convert: salt_g = sodium_mg × 2.5 ÷ 1000. If salt is printed directly, use it.
+- **alcohol_g:** 0 unless the label is an alcoholic product with an ABV; then per_100g ethanol ≈ ABV% × 0.789 (e.g. 5% ABV beer ≈ 4g/100g).
+- **name:** a clear, specific display name for the library — prefer the product/brand name printed on the package (e.g. "Chocapic cereal", "Provamel oat milk", "Celeiro chickpea spread"). Keep it short.
+- **is_plant:** true if the product is wholly from plants (check the ingredients list if visible: dairy, egg, gelatin, meat, fish, honey → not plant).
+- If the image is NOT a readable nutrition label (a plate of food, a blurry photo, no panel), set every per_100g field to 0, name to "unreadable label", is_plant false. The caller will reject it.`;
 
 export const TEXT_SYSTEM = `The user is telling you in plain language what they ate. There is NO photo. Translate the description into a structured meal log entry, the same shape you'd produce from a photo, using all the rules below.
 
@@ -420,6 +446,46 @@ export async function lookupFood(name: string): Promise<LookupResult> {
     throw new Error("No text response from model");
   }
   return JSON.parse(textBlock.text) as LookupResult;
+}
+
+export type LabelResult = { name: string; is_plant: boolean; per_100g: Per100g };
+
+// Read a nutrition label photo into one authoritative per-100g library
+// entry. Deterministic transcription — see LABEL_SYSTEM. Mirrors the
+// model + structured-output style of the other Vision calls.
+export async function parseLabel(
+  imageBase64: string,
+  mediaType: "image/jpeg" | "image/png" | "image/webp"
+): Promise<LabelResult> {
+  const response = await client.messages.create({
+    model: "claude-opus-4-7",
+    max_tokens: 1024,
+    output_config: {
+      format: { type: "json_schema", schema: LABEL_SCHEMA },
+    },
+    system: LABEL_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text: "Read this nutrition label and return one per-100g library entry.",
+          },
+        ],
+      },
+    ],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("No text response from model");
+  }
+  return JSON.parse(textBlock.text) as LabelResult;
 }
 
 // Pure helpers — exported for the API routes and any future client-side use.

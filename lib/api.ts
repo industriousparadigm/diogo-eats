@@ -163,6 +163,87 @@ export async function lookupFood(name: string): Promise<LookupResult> {
   return jsonOrThrow<LookupResult>(r, "lookup failed");
 }
 
+// ---- foods library ----
+
+export type Provenance = "label_verified" | "user_corrected" | "ai_inferred";
+
+export type Food = {
+  name_key: string;
+  display_name: string;
+  is_plant: number;
+  per_100g_json: string;
+  times_seen: number;
+  last_seen: number;
+  provenance: Provenance;
+  portion_presets: { label: string; grams: number }[] | null;
+};
+
+export async function fetchFoods(
+  query: string = "",
+  opts: { limit?: number; offset?: number } = {}
+): Promise<Food[]> {
+  const p = new URLSearchParams();
+  if (query.trim()) p.set("q", query.trim());
+  if (opts.limit != null) p.set("limit", String(opts.limit));
+  if (opts.offset != null) p.set("offset", String(opts.offset));
+  const r = await fetch(`/api/foods?${p.toString()}`);
+  const j = await jsonOrThrow<{ foods: Food[] }>(r, "load foods failed");
+  return j.foods ?? [];
+}
+
+export async function createFood(input: {
+  display_name: string;
+  is_plant: boolean;
+  per_100g: Per100g;
+}): Promise<Food> {
+  const r = await fetch("/api/foods", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const j = await jsonOrThrow<{ food: Food }>(r, "add food failed");
+  return j.food;
+}
+
+export async function updateFood(
+  nameKey: string,
+  patch: { display_name?: string; is_plant?: boolean; per_100g?: Per100g }
+): Promise<Food> {
+  const r = await fetch(`/api/foods/${encodeURIComponent(nameKey)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const j = await jsonOrThrow<{ food: Food }>(r, "update food failed");
+  return j.food;
+}
+
+export async function deleteFood(nameKey: string): Promise<void> {
+  const r = await fetch(`/api/foods/${encodeURIComponent(nameKey)}`, {
+    method: "DELETE",
+  });
+  await jsonOrThrow<{ ok: true }>(r, "delete food failed");
+}
+
+export async function mergeFoods(keepKey: string, mergeKeys: string[]): Promise<Food> {
+  const r = await fetch("/api/foods/merge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keep_id: keepKey, merge_ids: mergeKeys }),
+  });
+  const j = await jsonOrThrow<{ food: Food }>(r, "merge failed");
+  return j.food;
+}
+
+export async function foodFromLabel(file: File): Promise<Food> {
+  const blob = await resizeForUpload(file);
+  const fd = new FormData();
+  fd.append("photo", blob, "label.jpg");
+  const r = await fetch("/api/foods/from-label", { method: "POST", body: fd });
+  const j = await jsonOrThrow<{ food: Food }>(r, "label read failed");
+  return j.food;
+}
+
 // ---- stats ----
 
 export async function fetchStats(days: number = 84): Promise<DayAggregate[]> {
