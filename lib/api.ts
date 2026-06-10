@@ -53,6 +53,25 @@ export async function patchMealItems(
   return j.meal;
 }
 
+// Deterministic lane: re-log a known meal verbatim, no Vision call.
+// `scale` multiplies every portion (default 1×); `forDate` backfills to a
+// past day (default today, server-side). Returns the freshly inserted copy.
+export async function repeatMeal(
+  id: string,
+  opts: { scale?: number; forDate?: string } = {}
+): Promise<Meal> {
+  const body: { scale?: number; for_date?: string } = {};
+  if (opts.scale != null) body.scale = opts.scale;
+  if (opts.forDate) body.for_date = opts.forDate;
+  const r = await fetch(`/api/meals/${id}/repeat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const j = await jsonOrThrow<{ meal: Meal }>(r, "repeat failed");
+  return j.meal;
+}
+
 export async function talkFixMeal(id: string, message: string): Promise<Item[]> {
   const r = await fetch(`/api/meals/${id}/talk`, {
     method: "POST",

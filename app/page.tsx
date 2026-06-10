@@ -18,6 +18,7 @@ import {
   fetchMealsForDay,
   parsePhoto,
   parseText,
+  repeatMeal as apiRepeatMeal,
 } from "@/lib/api";
 import type { Meal, PendingTask } from "@/lib/types";
 import {
@@ -141,6 +142,18 @@ function Home() {
 
   async function deleteMealById(id: string) {
     await apiDeleteMeal(id);
+    await loadMeals(viewDate, { silent: true });
+    setHistoryVersion((v) => v + 1);
+  }
+
+  // Deterministic re-log. Repeats land on the day currently in view
+  // (today when viewing today, the past day when backfilling), so the
+  // copy shows up where the user expects it.
+  async function repeatMealById(id: string, scale: number) {
+    await apiRepeatMeal(id, {
+      scale,
+      forDate: isToday ? undefined : viewYmd,
+    });
     await loadMeals(viewDate, { silent: true });
     setHistoryVersion((v) => v + 1);
   }
@@ -318,6 +331,7 @@ function Home() {
                   meal={m}
                   onDelete={() => deleteMealById(m.id)}
                   onEdit={() => router.push(`/meal/${m.id}`)}
+                  onRepeat={(scale) => repeatMealById(m.id, scale)}
                 />
               ))}
             </div>

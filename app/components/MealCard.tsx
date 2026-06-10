@@ -2,6 +2,7 @@
 
 import type { Item, Meal } from "@/lib/types";
 import { isBackfillCreatedAt } from "@/lib/dayReport";
+import { RepeatButton } from "./RepeatButton";
 
 function safeParseItems(raw: string): Item[] {
   try {
@@ -23,10 +24,12 @@ export function MealCard({
   meal,
   onDelete,
   onEdit,
+  onRepeat,
 }: {
   meal: Meal;
   onDelete: () => void;
   onEdit: () => void;
+  onRepeat?: (scale: number) => Promise<void>;
 }) {
   const items = safeParseItems(meal.items_json);
   const isBackfill = isBackfillCreatedAt(meal.created_at);
@@ -90,17 +93,20 @@ export function MealCard({
               </span>
             )}
           </div>
-          <button
-            data-stop-card-click
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            style={{ fontSize: 11, color: "#52525b", padding: "2px 6px" }}
-            aria-label="delete"
-          >
-            ✕
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {onRepeat && !isLegacy && <RepeatButton onRepeat={onRepeat} />}
+            <button
+              data-stop-card-click
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              style={{ fontSize: 11, color: "#52525b", padding: "2px 6px" }}
+              aria-label="delete"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         {meal.meal_vibe && (
           <div

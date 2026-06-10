@@ -5,10 +5,17 @@ import { useRouter } from "next/navigation";
 import type { Item, Meal } from "@/lib/types";
 import { colors, inputStyle, radii } from "@/lib/styles";
 import { computeTotals } from "@/lib/computeTotals";
-import { deleteMeal, lookupFood, patchMealItems, talkFixMeal } from "@/lib/api";
+import {
+  deleteMeal,
+  lookupFood,
+  patchMealItems,
+  repeatMeal,
+  talkFixMeal,
+} from "@/lib/api";
 import { AutoGrowTextarea } from "@/app/components/AutoGrowTextarea";
 import { ItemRow } from "@/app/components/ItemRow";
 import { PhotoLightbox } from "@/app/components/PhotoLightbox";
+import { RepeatButton } from "@/app/components/RepeatButton";
 import { useKeyboardInset } from "@/lib/useKeyboardInset";
 
 function safeParseItems(raw: string): Item[] {
@@ -142,6 +149,15 @@ export function EditPage({ meal }: { meal: Meal }) {
       setError(err.message);
       setBusy(false);
     }
+  }
+
+  // Deterministic re-log of this exact meal for today, no Vision call.
+  // Routes home so the fresh copy is visible in the day list. Errors are
+  // surfaced by the RepeatButton itself (it shows "try again").
+  async function onRepeat(scale: number) {
+    await repeatMeal(meal.id, { scale });
+    router.push("/");
+    router.refresh();
   }
 
   async function onDelete() {
@@ -278,6 +294,7 @@ export function EditPage({ meal }: { meal: Meal }) {
             {editingTime ? "revert" : "edit"}
           </button>
         </div>
+        {!isLegacy && <RepeatButton onRepeat={onRepeat} variant="detail" />}
         <button
           onClick={onDelete}
           disabled={busy}
