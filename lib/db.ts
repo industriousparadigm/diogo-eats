@@ -100,6 +100,25 @@ export async function getMealsBetween(
   return (data as Meal[]) ?? [];
 }
 
+// Recent meals across days (full rows), newest-first, for the mobile
+// capture sheet's repeat row. `sinceMs` is the lower bound (inclusive),
+// computed by the route from a days window in the app timezone.
+export async function getRecentMeals(
+  userId: string,
+  sinceMs: number,
+  limit: number
+): Promise<Meal[]> {
+  const { data, error } = await getSupabase()
+    .from("meals")
+    .select("*")
+    .eq("user_id", userId)
+    .gte("created_at", sinceMs)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`getRecentMeals: ${error.message}`);
+  return (data as Meal[]) ?? [];
+}
+
 export type MealTotals = {
   sat_fat_g: number;
   soluble_fiber_g: number;

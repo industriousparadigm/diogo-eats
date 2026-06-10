@@ -11,6 +11,7 @@
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import type { DayAggregate, Item, Meal, Per100g, Targets } from "./types";
+import type { Food } from "./foods";
 import type {
   CompleteSessionResult,
   SessionPayload,
@@ -154,6 +155,45 @@ export async function deleteMeal(id: string): Promise<void> {
   );
 }
 
+// GET /api/meals/recent?days=N&limit=M — recent meals across days,
+// newest-first. Powers the capture-sheet repeat row (discover known meals
+// at logging time, not only via day browsing).
+export async function fetchRecentMeals(
+  opts: { days?: number; limit?: number } = {}
+): Promise<Meal[]> {
+  const p = new URLSearchParams();
+  if (opts.days != null) p.set("days", String(opts.days));
+  if (opts.limit != null) p.set("limit", String(opts.limit));
+  const qs = p.toString();
+  const data = await request<{ meals: Meal[] }>(
+    `/api/meals/recent${qs ? `?${qs}` : ""}`,
+    { method: "GET" },
+    30_000
+  );
+  return data.meals ?? [];
+}
+
+// POST /api/meals/[id]/repeat — deterministic re-log of a known meal at a
+// scale (½/1×/2×), no Vision call. for_date backfills onto a past day.
+export async function repeatMeal(
+  id: string,
+  opts: { scale?: number; forDate?: string } = {}
+): Promise<Meal> {
+  const body: { scale?: number; for_date?: string } = {};
+  if (opts.scale != null) body.scale = opts.scale;
+  if (opts.forDate) body.for_date = opts.forDate;
+  const data = await request<{ meal: Meal }>(
+    `/api/meals/${encodeURIComponent(id)}/repeat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    30_000
+  );
+  return data.meal;
+}
+
 // POST /api/parse — multipart with 1-4 photos + optional caption + optional for_date
 export async function parseMealPhoto(params: {
   photos: Array<{ uri: string; name: string; type: string }>;
@@ -241,6 +281,126 @@ export async function lookupFood(
     },
     30_000
   );
+}
+
+// ---- foods library ----
+
+// GET /api/foods?q=&limit=&offset= — search the user's foods library.
+// Empty q returns the most-seen foods, provenance/times_seen ranked.
+export async function fetchFoods(
+  query = "",
+  opts: { limit?: number; offset?: number } = {}
+): Promise<Food[]> {
+  const p = new URLSearchParams();
+  if (query.trim()) p.set("q", query.trim());
+  if (opts.limit != null) p.set("limit", String(opts.limit));
+  if (opts.offset != null) p.set("offset", String(opts.offset));
+  const data = await request<{ foods: Food[] }>(
+    `/api/foods?${p.toString()}`,
+    { method: "GET" },
+    30_000
+  );
+  return data.foods ?? [];
+}
+
+// POST /api/foods — manual add (provenance forced server-side to user_corrected).
+export async function createFood(input: {
+  display_name: string;
+  is_plant: boolean;
+  per_100g: Per100g;
+}): Promise<Food> {
+  const data = await request<{ food: Food }>(
+    "/api/foods",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+    30_000
+  );
+  return data.food;
+}
+
+// PATCH /api/foods/[id] — id is the url-encoded name_key.
+export async function updateFood(
+  nameKey: string,
+  patch: { display_name?: string; is_plant?: boolean; per_100g?: Per100g }
+): Promise<Food> {
+  const data = await request<{ food: Food }>(
+    `/api/foods/${encodeURIComponent(nameKey)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+    30_000
+  );
+  return data.food;
+}
+
+// DELETE /api/foods/[id].
+export async function deleteFood(nameKey: string): Promise<void> {
+  await request<{ ok: boolean }>(
+    `/api/foods/${encodeURIComponent(nameKey)}`,
+    { method: "DELETE" },
+    15_000
+  );
+}
+
+// POST /api/foods/merge — fold merge_ids into keep_id.
+export async function mergeFoods(keepKey: string, mergeKeys: string[]): Promise<Food> {
+  const data = await request<{ food: Food }>(
+    "/api/foods/merge",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keep_id: keepKey, merge_ids: mergeKeys }),
+    },
+    30_000
+  );
+  return data.food;
+}
+
+// POST /api/foods/from-label — multipart label photo → label_verified food.
+// 422 = no readable panel. NOTE: consumes a daily Vision parse quota.
+export async function foodFromLabel(photo: {
+  uri: string;
+  name: string;
+  type: string;
+}): Promise<Food> {
+  const form = new FormData();
+  form.append("photo", {
+    uri: photo.uri,
+    name: photo.name,
+    type: photo.type,
+  } as unknown as Blob);
+  const data = await request<{ food: Food }>(
+    "/api/foods/from-label",
+    { method: "POST", body: form },
+    60_000
+  );
+  return data.food;
+}
+
+// POST /api/meals/compose — build a meal from known library foods (zero
+// AI). items are { food_id (a name_key), grams }. for_date backfills.
+export async function composeMeal(
+  items: { food_id: string; grams: number }[],
+  opts: { forDate?: string; caption?: string } = {}
+): Promise<Meal> {
+  const body: { items: typeof items; for_date?: string; caption?: string } = { items };
+  if (opts.forDate) body.for_date = opts.forDate;
+  if (opts.caption?.trim()) body.caption = opts.caption.trim();
+  const data = await request<{ meal: Meal }>(
+    "/api/meals/compose",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    30_000
+  );
+  return data.meal;
 }
 
 // GET /api/stats?days=N — per-day aggregates for the looking-back surface.

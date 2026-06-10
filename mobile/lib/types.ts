@@ -79,6 +79,58 @@ export const DEFAULT_TARGETS: Targets = {
   protein_g: 90,
 };
 
+export function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+// Full per-item nutrition arithmetic — the native mirror of the web's
+// lib/totals.ts (totalsFromItems). One place portion math lives for the
+// composer and any other items→totals consumer; computeTotals (editTotals)
+// stays the lighter live-edit variant and computeDayTotals sums whole
+// meals. Same rounding the server persists, so previews match what saves.
+export function totalsFromItems(items: Item[]) {
+  let sat_fat_g = 0;
+  let soluble_fiber_g = 0;
+  let calories = 0;
+  let protein_g = 0;
+  let fat_g = 0;
+  let carbs_g = 0;
+  let sugar_g = 0;
+  let salt_g = 0;
+  let alcohol_g = 0;
+  let plant_grams = 0;
+  let total_grams = 0;
+  for (const i of items) {
+    if (!i.per_100g) continue;
+    const f = i.grams / 100;
+    const p = i.per_100g;
+    sat_fat_g += p.sat_fat_g * f;
+    soluble_fiber_g += p.soluble_fiber_g * f;
+    calories += p.calories * f;
+    protein_g += p.protein_g * f;
+    if (typeof p.fat_g === "number") fat_g += p.fat_g * f;
+    if (typeof p.carbs_g === "number") carbs_g += p.carbs_g * f;
+    if (typeof p.sugar_g === "number") sugar_g += p.sugar_g * f;
+    if (typeof p.salt_g === "number") salt_g += p.salt_g * f;
+    if (typeof p.alcohol_g === "number") alcohol_g += p.alcohol_g * f;
+    total_grams += i.grams;
+    if (i.is_plant) plant_grams += i.grams;
+  }
+  const plant_pct = total_grams > 0 ? Math.round((plant_grams / total_grams) * 100) : 0;
+  return {
+    sat_fat_g: round1(sat_fat_g),
+    soluble_fiber_g: round1(soluble_fiber_g),
+    calories: Math.round(calories),
+    protein_g: round1(protein_g),
+    fat_g: round1(fat_g),
+    carbs_g: round1(carbs_g),
+    sugar_g: round1(sugar_g),
+    salt_g: round1(salt_g),
+    alcohol_g: round1(alcohol_g),
+    plant_pct,
+  };
+}
+
 // Parse items_json safely — returns empty array on any failure.
 export function parseItems(items_json: string): Item[] {
   try {

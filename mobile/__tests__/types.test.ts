@@ -1,7 +1,7 @@
 // Unit tests for lib/types.ts — pure data functions.
 
-import { parseItems, computeDayTotals } from "../lib/types";
-import type { Meal } from "../lib/types";
+import { parseItems, computeDayTotals, totalsFromItems, round1 } from "../lib/types";
+import type { Item, Meal } from "../lib/types";
 
 function makeMeal(overrides: Partial<Meal> = {}): Meal {
   return {
@@ -90,5 +90,60 @@ describe("computeDayTotals", () => {
     const totals = computeDayTotals([meal]);
     expect(Number.isInteger(totals.calories)).toBe(true);
     expect(totals.calories).toBe(500);
+  });
+});
+
+function item(overrides: Partial<Item> = {}): Item {
+  return {
+    name: "Oats",
+    grams: 100,
+    confidence: "high",
+    is_plant: true,
+    per_100g: { sat_fat_g: 1.2, soluble_fiber_g: 4, calories: 380, protein_g: 13 },
+    ...overrides,
+  };
+}
+
+describe("round1", () => {
+  it("rounds to one decimal", () => {
+    expect(round1(1.234)).toBe(1.2);
+    expect(round1(1.25)).toBe(1.3);
+    expect(round1(10)).toBe(10);
+  });
+});
+
+describe("totalsFromItems", () => {
+  it("scales per-100g by grams across the full nutrient set", () => {
+    const t = totalsFromItems([
+      item({ grams: 200, per_100g: { sat_fat_g: 1, soluble_fiber_g: 4, calories: 380, protein_g: 13, fat_g: 7, carbs_g: 66 } }),
+    ]);
+    expect(t.calories).toBe(760);
+    expect(t.sat_fat_g).toBe(2);
+    expect(t.soluble_fiber_g).toBe(8);
+    expect(t.protein_g).toBe(26);
+    expect(t.fat_g).toBe(14);
+    expect(t.carbs_g).toBe(132);
+    expect(t.plant_pct).toBe(100);
+  });
+
+  it("computes mass-weighted plant percent", () => {
+    const t = totalsFromItems([
+      item({ grams: 100, is_plant: true }),
+      item({ name: "Chicken", grams: 50, is_plant: false }),
+    ]);
+    expect(t.plant_pct).toBe(67); // 100/150
+  });
+
+  it("skips items without per_100g (legacy rows)", () => {
+    const legacy = { name: "Old", grams: 100, confidence: "high", is_plant: true } as unknown as Item;
+    const t = totalsFromItems([legacy, item({ grams: 100 })]);
+    expect(t.calories).toBe(380);
+    expect(t.plant_pct).toBe(100);
+  });
+
+  it("matches what the server persists (rounded calories, 1dp macros)", () => {
+    const t = totalsFromItems([item({ grams: 33 })]);
+    expect(Number.isInteger(t.calories)).toBe(true);
+    expect(t.soluble_fiber_g).toBe(round1(t.soluble_fiber_g));
   });
 });
