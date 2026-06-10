@@ -85,16 +85,32 @@ export async function exchangeCodeForTokens(
   return (await r.json()) as WhoopTokenPayload;
 }
 
+// Exported for tests. Whoop's refresh grant takes scope=offline ONLY —
+// sending the full scope list (as the authorize step does) gets a 400
+// invalid_request back. Surfaced 10 Jun 2026 by the first real cron
+// run; every token refresh had been failing with it.
+export function refreshTokenRequestBody(
+  refreshToken: string,
+  clientId: string,
+  clientSecret: string
+): URLSearchParams {
+  return new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: "offline",
+  });
+}
+
 async function refreshAccessToken(
   refreshToken: string
 ): Promise<WhoopTokenPayload> {
-  const body = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: refreshToken,
-    client_id: envOrThrow("WHOOP_CLIENT_ID"),
-    client_secret: envOrThrow("WHOOP_CLIENT_SECRET"),
-    scope: WHOOP_SCOPES.join(" "),
-  });
+  const body = refreshTokenRequestBody(
+    refreshToken,
+    envOrThrow("WHOOP_CLIENT_ID"),
+    envOrThrow("WHOOP_CLIENT_SECRET")
+  );
   const r = await fetch(WHOOP_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
