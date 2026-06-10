@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Eats",
+    "slug": "eats",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0a0a",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "pt.thunderfusion.eats"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0a",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "package": "pt.thunderfusion.eats"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Eats to access your photos to log meals.",
+          "cameraPermission": "Allow Eats to use your camera to capture meals."
+        }
+      ],
+      "expo-status-bar"
+    ],
+    "scheme": "eats",
+    "extra": {
+      "supabaseUrl": "https://lqkvykbohpoemcggwcuk.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxa3Z5a2JvaHBvZW1jZ2d3Y3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTk5MjQsImV4cCI6MjA5MzU5NTkyNH0.rJFPoJTKB2_qz_33nPBQwFEpXDiw6gV10eg4EiRYiNg",
+      "apiBaseUrl": "https://diogo-eats.vercel.app"
+    }
+  }
+}
