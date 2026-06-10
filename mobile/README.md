@@ -1,8 +1,18 @@
 # Eats Mobile
 
-Native mobile client for the Eats food-logging app. Built with Expo SDK 54, TypeScript strict, expo-router file-based navigation.
+Native mobile client for the Eats food-logging app + the strength-training scoreboard. Built with Expo SDK 54, TypeScript strict, expo-router file-based navigation.
 
 **Distribution:** Expo Go (no Apple Developer Program required). EAS Update for OTA patches.
+
+**Surfaces** (4 tabs + pushed screens):
+
+- **Today** (default) — the daily food loop. Day navigation (chevrons walk back, label taps home to today), totals strip, Whoop chip, meal cards, capture FAB. Viewing a past day makes the FAB backfill INTO that day (`for_date`).
+- **Meal detail/edit** (tap a card) — mirrors the web edit page: confidence dots, gram/name tweaks with live totals, add item via `/api/lookup`, remove, talk-to-fix via `/api/meals/[id]/talk` (rewrite lands for review; only `save` persists).
+- **Looking back** — rolling headline (rule-based, ported from the web's `lib/rolling-headline.ts`), calendar heatmap (single-hue plant scale, tap a day to jump the food tab there), coverage-honest averages (logged days only, says so), fiber + sat fat 7-day trends.
+- **Strength** — the scoreboard. Per-exercise last/best, session history with beats counts, Start/Resume session. Deliberately a different emotional contract from food (amber, bold color-per-exercise cards, beats language) in the same design system.
+- **Strength session** (capture flow) — picker ordered "most likely next" (done cards sink), per-series steppers pre-filled from the API's prefill payload, confirm-or-nudge, add-series, optional note, explicit Session complete. **The in-progress draft lives in AsyncStorage and survives app kill/backgrounding** — the server only sees completed sessions. Network failure on complete keeps the draft.
+- **Highlights** (post-complete) — renders the API's highlight lines verbatim; beats line leads.
+- **Settings** — the 4 daily targets, DB-backed via `/api/profile` (same row the web reads), reset to defaults, signed-in email + sign out.
 
 ---
 
@@ -72,32 +82,64 @@ These features require a paid Apple Developer Program account ($99/yr) or are in
 ```
 mobile/
   app/
-    _layout.tsx          # Root layout: AppState wiring, auth redirect
-    (auth)/
-      _layout.tsx
-      sign-in.tsx        # Email OTP sign-in screen
+    _layout.tsx              # Root layout: AppState wiring, auth redirect
+    index.tsx                # Cold-start entry: resolve session, redirect
+    dev-signin.tsx           # __DEV__-only deep-link session injection (simulator agents)
+    (auth)/sign-in.tsx       # Email OTP sign-in screen
     (app)/
-      _layout.tsx
-      today.tsx          # Today screen: meals list + FAB + pending cards
+      _layout.tsx            # Stack: tabs + pushed screens
+      (tabs)/
+        _layout.tsx          # Tab bar (Today / Looking back / Strength / Settings)
+        index.tsx            # Day screen: day nav + meals + FAB + pending cards
+        overview.tsx         # Looking back: headline, heatmap, averages, trends
+        strength.tsx         # Strength overview: start/resume, last/best, history
+        settings.tsx         # Targets (DB-backed) + account
+      meal/[id].tsx          # Meal detail/edit (items, talk-to-fix, live totals)
+      strength/
+        session.tsx          # Live capture flow (picker <-> entry, draft persisted)
+        highlights.tsx       # Post-session highlights, rendered verbatim
   components/
-    MealCard.tsx         # Individual meal card with photo, vibe, badges
-    PendingCard.tsx      # Optimistic card shown during parse
-    DayTotalsStrip.tsx   # Horizontal strip: kcal, protein, sat fat, fiber, plant%
-    CaptureSheet.tsx     # Bottom sheet: photo picker + text entry + resize
+    MealCard.tsx             # Meal card: photo, vibe, badges; tap=edit, long-press=delete
+    PendingCard.tsx          # Optimistic card shown during parse
+    DayTotalsStrip.tsx       # kcal, protein, sat fat, fiber, plant%
+    CaptureSheet.tsx         # Photo/text capture; shows backfill day when not today
+    WhoopChip.tsx            # Strain + recovery chip (hidden when not connected)
+    EditItemRow.tsx          # Item row in the meal editor (confidence dot, grams)
+    Heatmap.tsx              # Calendar heatmap (grid math in lib/heatmap.ts)
+    TrendChart.tsx           # 7-day rolling trend (react-native-svg)
+    SeriesRow.tsx            # Strength series row: steppers + confirm
   lib/
-    api.ts               # HTTP client: fetchMeals, deleteMeal, parseMealPhoto, parseMealText
-    colors.ts            # Design tokens (dark theme, plant scale, accent green)
-    format.ts            # Pure display-formatting functions (testable)
-    storage.ts           # SecureStore chunked adapter for Supabase sessions
-    supabase.ts          # Supabase client with storage adapter wired
-    types.ts             # Shared types + computeDayTotals + parseItems
-  __tests__/
-    api.test.ts          # ApiError class
-    colors.test.ts       # plantColor function
-    format.test.ts       # All format.ts functions
-    storage.test.ts      # Chunked SecureStore adapter
-    types.test.ts        # parseItems + computeDayTotals
-    SignIn.test.tsx       # Sign-in screen component (8 tests)
-    TodayScreen.test.tsx  # Today screen component (7 tests)
-    simple.test.tsx       # RTLRN v14 smoke test
+    api.ts                   # HTTP client for every endpoint the app touches
+    colors.ts                # Design tokens + exerciseAccent (strength palette)
+    format.ts                # Display formatting + day-nav date math
+    headline.ts              # Rolling headline rules + window/averages (web port)
+    heatmap.ts               # Week-grid assembly for the calendar
+    editTotals.ts            # Live totals math during meal editing
+    strengthTypes.ts         # MIRROR of backend lib/strength/types.ts (frozen contract)
+    strengthSession.ts       # Session draft state machine (pure, serializable)
+    strengthFormat.ts        # One vocabulary for strength numbers
+    strengthFixtures.ts      # Typed day-1 fixtures (tests + EXPO_PUBLIC_STRENGTH_MOCK)
+    draftStorage.ts          # AsyncStorage persistence for the session draft
+    stores.ts                # Module stores: meal handoff, picked day, session result
+    exerciseImages.ts        # Bundled exercise images keyed by image_key
+    storage.ts               # SecureStore chunked adapter for Supabase sessions
+    supabase.ts              # Supabase client with storage adapter wired
+    types.ts                 # Shared types + computeDayTotals + parseItems
+  assets/exercises/          # The five exercise images (free-exercise-db, committed)
+  __tests__/                 # 204 tests: pure logic + component tests per screen
 ```
+
+## Simulator verification (for agents)
+
+Interactive OTP sign-in is impossible for an agent. Instead: mint a session
+(supabase admin `generateLink` -> `verifyOtp` in a throwaway script), then
+deep-link it into the __DEV__-only route:
+
+```
+exp://127.0.0.1:8081/--/dev-signin?access_token=...&refresh_token=...
+```
+
+Navigation is deep-linkable too (`/--/(app)/(tabs)/strength`, etc.).
+For taps, `idb` (`brew install facebook/fb/idb-companion` + `pip install fb-idb`)
+taps in device-point coordinates and is far more reliable than window-coordinate
+mouse clicks. Published bundles run production-mode, so `dev-signin` is inert there.
