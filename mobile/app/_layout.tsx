@@ -6,12 +6,61 @@
 // expo-router handles file-based routing. This file owns the
 // "shell" — any authenticated screen lives as a child route.
 
-import { useEffect } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { useEffect, type ReactNode } from "react";
+import { AppState, type AppStateStatus, Platform, View, StyleSheet } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import { colors } from "@/lib/colors";
+
+const IS_WEB = Platform.OS === "web";
+
+// Desktop shell (web only). Eats is a phone-shaped app; in a browser it
+// should sit in a centered, phone-width column against a dark page
+// rather than stretch edge-to-edge. On native this wrapper is a no-op
+// passthrough so the layout is byte-identical to before.
+function DesktopShell({ children }: { children: ReactNode }) {
+  // Paint the page (html/body) dark so the gutter around the column
+  // matches the app instead of flashing white. Web-only DOM touch.
+  useEffect(() => {
+    if (!IS_WEB || typeof document === "undefined") return;
+    const prevBody = document.body.style.backgroundColor;
+    const prevHtml = document.documentElement.style.backgroundColor;
+    document.body.style.backgroundColor = "#000";
+    document.documentElement.style.backgroundColor = "#000";
+    return () => {
+      document.body.style.backgroundColor = prevBody;
+      document.documentElement.style.backgroundColor = prevHtml;
+    };
+  }, []);
+
+  if (!IS_WEB) return <>{children}</>;
+
+  return (
+    <View style={shellStyles.page}>
+      <View style={shellStyles.column}>{children}</View>
+    </View>
+  );
+}
+
+const shellStyles = StyleSheet.create({
+  page: {
+    flex: 1,
+    backgroundColor: "#000",
+    alignItems: "center",
+  },
+  column: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: colors.bg,
+    // A faint seam so the phone column reads as intentional on a wide screen.
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+});
 
 export default function RootLayout() {
   const router = useRouter();
@@ -53,7 +102,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+      <DesktopShell>
+        <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+      </DesktopShell>
     </SafeAreaProvider>
   );
 }

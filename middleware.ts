@@ -71,7 +71,13 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // `app` is excluded: /app is the Expo web app — a self-contained SPA
+  // that does its own auth client-side (Supabase JS + localStorage),
+  // exactly like the native build. The cookie-based session gate below
+  // is for the legacy server-rendered UI only; if it ran on /app it
+  // would redirect the unauthenticated browser to /login before the SPA
+  // ever loaded, and the static bundle/assets would 302 too.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|gif|woff2|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|app|app/.*|.*\\.(?:svg|png|jpg|jpeg|webp|gif|woff2|ico)$).*)",
   ],
 };

@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "build:webapp": "node scripts/build-webapp.mjs",
     "dump-meals": "node scripts/dump-meals.mjs"
   },
   "dependencies": {

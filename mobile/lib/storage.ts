@@ -15,10 +15,60 @@
 //
 // This is the documented pattern from the Supabase React Native docs.
 // Each chunk is ≤1800 bytes (well inside the 2048 limit).
+//
+// WEB: none of the above applies. expo-secure-store has no browser
+// implementation (importing/calling it throws), and browsers have no
+// 2KB-per-key limit. On web we delegate straight to localStorage with
+// no chunking. The native path below stays byte-identical.
 
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 const CHUNK_SIZE = 1800;
+
+// --- Web branch: plain localStorage, no chunking, no SecureStore. ---
+// Guarded so the module is safe to import in any environment; if
+// localStorage is somehow unavailable (SSR, private-mode quirks) the
+// adapter degrades to no-op reads rather than throwing.
+const IS_WEB = Platform.OS === "web";
+
+function webStorage(): Storage | null {
+  try {
+    return typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+async function webGet(key: string): Promise<string | null> {
+  const ls = webStorage();
+  if (!ls) return null;
+  try {
+    return ls.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+async function webSet(key: string, value: string): Promise<void> {
+  const ls = webStorage();
+  if (!ls) return;
+  try {
+    ls.setItem(key, value);
+  } catch {
+    // Quota / private-mode failures are best-effort — swallow.
+  }
+}
+
+async function webRemove(key: string): Promise<void> {
+  const ls = webStorage();
+  if (!ls) return;
+  try {
+    ls.removeItem(key);
+  } catch {
+    // Best-effort.
+  }
+}
 
 function chunkCountKey(key: string): string {
   return `${key}_chunk_count`;
@@ -29,6 +79,7 @@ function chunkKey(key: string, i: number): string {
 }
 
 export async function secureStoreGet(key: string): Promise<string | null> {
+  if (IS_WEB) return webGet(key);
   try {
     // Try reading the chunk count first to determine if this was stored chunked.
     const countRaw = await SecureStore.getItemAsync(chunkCountKey(key));
@@ -50,6 +101,7 @@ export async function secureStoreGet(key: string): Promise<string | null> {
 }
 
 export async function secureStoreSet(key: string, value: string): Promise<void> {
+  if (IS_WEB) return webSet(key, value);
   // Remove any prior chunked data for this key before writing.
   await secureStoreRemove(key);
 
@@ -68,6 +120,7 @@ export async function secureStoreSet(key: string, value: string): Promise<void> 
 }
 
 export async function secureStoreRemove(key: string): Promise<void> {
+  if (IS_WEB) return webRemove(key);
   try {
     const countRaw = await SecureStore.getItemAsync(chunkCountKey(key));
     if (countRaw !== null) {
