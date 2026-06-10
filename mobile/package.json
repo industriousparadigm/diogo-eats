@@ -14,20 +14,19 @@
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "expo-updates": "~29.0.18",
-    "react": "^19.1.0",
-    "react-native": "^0.81.5",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
-    "@react-native/jest-preset": "^0.85.3",
     "@testing-library/react-native": "^14.0.0",
     "@types/jest": "^29.5.0",
     "@types/react": "~19.1.10",
     "jest": "^29.7.0",
     "jest-expo": "~54.0.17",
-    "react-test-renderer": "19.2.3",
+    "react-test-renderer": "19.1.0",
     "test-renderer": "^1.2.0",
     "typescript": "~5.9.2"
   },
@@ -42,11 +41,11 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "setupFilesAfterFramework": [
-      "./jest.setup.ts"
-    ],
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@supabase/.*)"
+    ],
+    "setupFilesAfterEnv": [
+      "./jest.setup.ts"
     ]
   },
   "private": true
