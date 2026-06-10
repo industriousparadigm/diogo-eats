@@ -51,6 +51,44 @@ export async function getSessions(userId: string): Promise<StrengthSession[]> {
   return sessions.map((s) => ({ ...s, sets: setsBySession.get(s.id) ?? [] }));
 }
 
+// One session by id, ownership-scoped, with its sets in logged order
+// (DB `position`) — the shape the engine consumes. Returns null when the
+// id doesn't exist OR belongs to another user (the caller can't tell the
+// difference apart, which is the right answer for an ownership miss).
+export async function getSession(
+  userId: string,
+  sessionId: string
+): Promise<StrengthSession | null> {
+  const { data: sessionRow, error: sErr } = await getSupabase()
+    .from("strength_sessions")
+    .select("id, started_at, completed_at, note")
+    .eq("user_id", userId)
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (sErr) throw new Error(`getSession: ${sErr.message}`);
+  if (!sessionRow) return null;
+  const session = sessionRow as Omit<StrengthSession, "sets">;
+
+  const { data: setRows, error: setErr } = await getSupabase()
+    .from("strength_sets")
+    .select("exercise_id, series_index, weight_kg, reps, position")
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .order("position", { ascending: true });
+  if (setErr) throw new Error(`getSession sets: ${setErr.message}`);
+
+  const sets: StrengthSet[] = ((setRows ?? []) as Array<
+    StrengthSet & { position: number }
+  >).map((row) => ({
+    exercise_id: row.exercise_id,
+    series_index: row.series_index,
+    weight_kg: row.weight_kg,
+    reps: row.reps,
+  }));
+
+  return { ...session, sets };
+}
+
 // Insert a completed session + its sets. Two inserts (supabase-js has no
 // client-side transactions); on a sets failure the orphan session row is
 // best-effort removed so a retry can't double-log.

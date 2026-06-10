@@ -160,6 +160,24 @@ export function computeSessionBeats(
   return beats;
 }
 
+// The beats achieved IN a given session, computed against everything that
+// came strictly before it chronologically — the per-session-detail view.
+// `target` must be one of `history` (matched by id). Reuses
+// computeSessionBeats; never reimplements the beat rule. Unknown id (not
+// in history) yields []. The session is excluded from its own "prior" so
+// it can't beat itself, and any sessions completed AFTER it are excluded
+// too (they aren't "previous").
+export function beatsForSession(
+  exercises: Exercise[],
+  history: StrengthSession[],
+  sessionId: string
+): Beat[] {
+  const sorted = sortSessions(history);
+  const idx = sorted.findIndex((s) => s.id === sessionId);
+  if (idx === -1) return [];
+  return computeSessionBeats(exercises, sorted.slice(0, idx), sorted[idx]);
+}
+
 // ---- per-exercise summaries ----
 
 export function lastForExercise(
