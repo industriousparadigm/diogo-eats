@@ -390,6 +390,58 @@ export async function mergeFoods(
   return updated as FoodRow;
 }
 
+// Fetch several library foods by their name_keys in one round trip
+// (composer needs to resolve every line at once). Returns a map keyed by
+// name_key for O(1) lookup. Missing keys simply don't appear in the map.
+export async function getFoodsByKeys(
+  userId: string,
+  nameKeys: string[]
+): Promise<Map<string, FoodRow>> {
+  const map = new Map<string, FoodRow>();
+  const unique = Array.from(new Set(nameKeys.filter(Boolean)));
+  if (unique.length === 0) return map;
+  const { data, error } = await getSupabase()
+    .from("food_memory")
+    .select("*")
+    .eq("user_id", userId)
+    .in("name_key", unique);
+  if (error) throw new Error(`getFoodsByKeys: ${error.message}`);
+  for (const row of (data as FoodRow[]) ?? []) map.set(row.name_key, row);
+  return map;
+}
+
+// Increment times_seen + refresh last_seen on the foods a composed meal
+// actually used (real usage signal). One RPC-less update per food via the
+// existing per-user upsert path would re-write nutrition; instead we bump
+// the counters directly. Errors are swallowed per-key so one bad row
+// can't fail a save (the meal is already inserted).
+export async function bumpFoodsSeen(userId: string, nameKeys: string[]) {
+  const now = Date.now();
+  const unique = Array.from(new Set(nameKeys.filter(Boolean)));
+  await Promise.all(
+    unique.map(async (key) => {
+      // Read-modify-write: small per-user scale, no concurrent composer
+      // for the same user, so a non-atomic bump is fine here.
+      const { data } = await getSupabase()
+        .from("food_memory")
+        .select("times_seen")
+        .eq("user_id", userId)
+        .eq("name_key", key)
+        .maybeSingle();
+      const seen = (data as { times_seen?: number } | null)?.times_seen;
+      if (typeof seen !== "number") return;
+      await getSupabase()
+        .from("food_memory")
+        .update({ times_seen: seen + 1, last_seen: now })
+        .eq("user_id", userId)
+        .eq("name_key", key)
+        .then(({ error }) => {
+          if (error) console.error("bumpFoodsSeen failed:", key, error.message);
+        });
+    })
+  );
+}
+
 // ---- recent meals as parse context ----
 
 export type MealSummary = {

@@ -1,4 +1,4 @@
-import type { Item } from "./vision";
+import type { Item } from "./totals";
 
 // Pure helper for the deterministic "repeat a meal" lane. Scales an
 // items array by a multiplier: grams × scale, per_100g untouched (it's

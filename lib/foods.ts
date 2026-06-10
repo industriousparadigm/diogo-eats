@@ -1,4 +1,4 @@
-import type { Per100g } from "./vision";
+import type { Per100g } from "./totals";
 import type { Provenance } from "./db";
 
 // Pure helpers for the foods-library surface. Kept here (no I/O) so the

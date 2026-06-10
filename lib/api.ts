@@ -235,6 +235,24 @@ export async function mergeFoods(keepKey: string, mergeKeys: string[]): Promise<
   return j.food;
 }
 
+// Deterministic lane: build a meal from known library foods, zero AI.
+// `items` are { food_id (a library name_key), grams }. Returns the meal.
+export async function composeMeal(
+  items: { food_id: string; grams: number }[],
+  opts: { forDate?: string; caption?: string } = {}
+): Promise<Meal> {
+  const body: { items: typeof items; for_date?: string; caption?: string } = { items };
+  if (opts.forDate) body.for_date = opts.forDate;
+  if (opts.caption?.trim()) body.caption = opts.caption.trim();
+  const r = await fetch("/api/meals/compose", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const j = await jsonOrThrow<{ meal: Meal }>(r, "compose failed");
+  return j.meal;
+}
+
 export async function foodFromLabel(file: File): Promise<Food> {
   const blob = await resizeForUpload(file);
   const fd = new FormData();

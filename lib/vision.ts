@@ -1,32 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { totalsFromItems, type Item, type Per100g } from "./totals";
 
 const client = new Anthropic();
 
-export type Per100g = {
-  sat_fat_g: number;
-  soluble_fiber_g: number;
-  calories: number;
-  protein_g: number;
-  // Silent-capture nutrients: stored but not currently surfaced in the UI.
-  // Vision returns them so future surfaces (carb-aware suggestions, salt
-  // tracking, etc.) can light up without re-parsing existing meals.
-  fat_g?: number;
-  carbs_g?: number;
-  sugar_g?: number;
-  salt_g?: number;
-  // Pure ethanol grams per 100g of the as-served item. 0 for non-
-  // alcoholic foods. Reference: wine ~10g/100mL, beer ~4g/100mL,
-  // spirits ~32g/100mL, fortified wine / liqueurs ~16g/100mL.
-  alcohol_g?: number;
-};
-
-export type Item = {
-  name: string;
-  grams: number;
-  confidence: "low" | "medium" | "high";
-  is_plant: boolean;
-  per_100g: Per100g;
-};
+// Re-export the arithmetic heart + item shapes from the client-safe
+// module so the many server callers that import `from "@/lib/vision"`
+// don't have to change. totalsFromItems lives in lib/totals.ts because
+// this file instantiates the Anthropic SDK at import time (browser-fatal).
+export { totalsFromItems, type Item, type Per100g };
 
 export type ParsedMeal = {
   items: Item[];
@@ -488,50 +469,3 @@ export async function parseLabel(
   return JSON.parse(textBlock.text) as LabelResult;
 }
 
-// Pure helpers — exported for the API routes and any future client-side use.
-export function totalsFromItems(items: Item[]) {
-  let sat_fat_g = 0;
-  let soluble_fiber_g = 0;
-  let calories = 0;
-  let protein_g = 0;
-  let fat_g = 0;
-  let carbs_g = 0;
-  let sugar_g = 0;
-  let salt_g = 0;
-  let alcohol_g = 0;
-  let plant_grams = 0;
-  let total_grams = 0;
-  for (const i of items) {
-    const f = i.grams / 100;
-    const p = i.per_100g;
-    sat_fat_g += p.sat_fat_g * f;
-    soluble_fiber_g += p.soluble_fiber_g * f;
-    calories += p.calories * f;
-    protein_g += p.protein_g * f;
-    // Silent-capture totals: skip if missing (older items pre-schema bump).
-    if (typeof p.fat_g === "number") fat_g += p.fat_g * f;
-    if (typeof p.carbs_g === "number") carbs_g += p.carbs_g * f;
-    if (typeof p.sugar_g === "number") sugar_g += p.sugar_g * f;
-    if (typeof p.salt_g === "number") salt_g += p.salt_g * f;
-    if (typeof p.alcohol_g === "number") alcohol_g += p.alcohol_g * f;
-    total_grams += i.grams;
-    if (i.is_plant) plant_grams += i.grams;
-  }
-  const plant_pct = total_grams > 0 ? Math.round((plant_grams / total_grams) * 100) : 0;
-  return {
-    sat_fat_g: round1(sat_fat_g),
-    soluble_fiber_g: round1(soluble_fiber_g),
-    calories: Math.round(calories),
-    protein_g: round1(protein_g),
-    fat_g: round1(fat_g),
-    carbs_g: round1(carbs_g),
-    sugar_g: round1(sugar_g),
-    salt_g: round1(salt_g),
-    alcohol_g: round1(alcohol_g),
-    plant_pct,
-  };
-}
-
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
-}

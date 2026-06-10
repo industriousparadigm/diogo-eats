@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { AutoGrowTextarea } from "../components/AutoGrowTextarea";
 import { PhotoCropSheet } from "../components/PhotoCropSheet";
 import { colors } from "@/lib/styles";
@@ -203,6 +204,32 @@ function LogInner() {
         </div>
         <div style={{ width: 36 }} />
       </header>
+
+      {/* Deterministic alternative to the AI lanes: build a meal from
+          known library foods, no Vision call. Sits above the photo/text
+          capture as a peer path. */}
+      <div style={{ padding: "12px 16px 0" }}>
+        <Link
+          href={forDateYmd ? `/compose?date=${forDateYmd}` : "/compose"}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            padding: "10px 14px",
+            border: `1px solid ${colors.borderStrong}`,
+            borderRadius: 10,
+            color: colors.textMuted,
+            background: colors.surfaceAlt,
+            fontSize: 13,
+            textDecoration: "none",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <span>🧩</span>
+          <span>build from your foods — no AI</span>
+        </Link>
+      </div>
 
       <form
         onSubmit={submit}
