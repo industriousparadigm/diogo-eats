@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Eats",
-    "slug": "eats",
+    "slug": "diogo-eats",
+    "owner": "diogo-native",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +17,11 @@
         "backgroundColor": "#0a0a0a",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "pt.thunderfusion.eats"
+      "package": "pt.thunderfusion.eats",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -30,14 +35,23 @@
           "photosPermission": "Allow Eats to access your photos to log meals.",
           "cameraPermission": "Allow Eats to use your camera to capture meals."
         }
-      ],
-      "expo-status-bar"
+      ]
     ],
     "scheme": "eats",
     "extra": {
       "supabaseUrl": "https://lqkvykbohpoemcggwcuk.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxa3Z5a2JvaHBvZW1jZ2d3Y3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMTk5MjQsImV4cCI6MjA5MzU5NTkyNH0.rJFPoJTKB2_qz_33nPBQwFEpXDiw6gV10eg4EiRYiNg",
-      "apiBaseUrl": "https://diogo-eats.vercel.app"
+      "apiBaseUrl": "https://diogo-eats.vercel.app",
+      "router": {},
+      "eas": {
+        "projectId": "d8e655c7-a6c9-440e-9c1e-fe785b75000c"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d8e655c7-a6c9-440e-9c1e-fe785b75000c"
     }
   }
 }

@@ -1,6 +1,6 @@
 # Eats Mobile
 
-Native mobile client for the Eats food-logging app. Built with Expo SDK 56, TypeScript strict, expo-router file-based navigation.
+Native mobile client for the Eats food-logging app. Built with Expo SDK 54, TypeScript strict, expo-router file-based navigation.
 
 **Distribution:** Expo Go (no Apple Developer Program required). EAS Update for OTA patches.
 
@@ -34,21 +34,23 @@ Sign-in is a two-step OTP email code flow:
 
 ---
 
-## EAS Update (future OTA)
+## EAS Update (wired 10 Jun 2026 — this is the daily-driver distribution)
 
-When EAS Update is configured, OTA patches can be pushed without an App Store review:
+Linked to `@diogo-native/diogo-eats` (project ID `d8e655c7-a6c9-440e-9c1e-fe785b75000c`), channel `main` → branch `main`, runtime policy `sdkVersion`.
+
+**The app's permanent URL (no dev server needed):**
+
+exp://u.expo.dev/d8e655c7-a6c9-440e-9c1e-fe785b75000c?channel-name=main
+
+Open it in Expo Go (or via a home-screen Shortcut that opens this URL). Expo Go caches the last update, so the app opens offline-tolerant and picks up new updates when it can.
+
+**Publish an update** (JS/assets only — that's everything in this app):
 
 ```bash
-# One-time setup
-npm install -g eas-cli
-eas login
-eas update:configure
-
-# Publish an update
-eas update --branch production --message "fix: photo loading on iOS 17"
+cd mobile && npx eas-cli update --branch main --message "what changed"
 ```
 
-The app already uses `expo-router` and Expo SDK 56, which support EAS Update natively. Updates are scoped to JS/assets — native code changes still require a store build.
+**SDK version is pinned by Expo Go, not by us.** Expo Go on the App Store is v54 (supports `exposdk:54.0.0` only). The project was downgraded SDK 56 → 54 on 10 Jun 2026 for exactly this reason (the store's Expo Go rejected 56). When Expo ships a newer Expo Go, upgrade the SDK and republish — until then, `npx expo install --check` must stay clean against SDK 54.
 
 ---
 
