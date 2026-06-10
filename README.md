@@ -111,6 +111,9 @@ To use from your iPhone on the same wifi: visit `http://<laptop-ip>:3000` and Ad
 
 ## Architecture
 
+**Browser-safety rule:** never import value exports from `lib/vision.ts` into a client component (or anything one imports) — it constructs the Anthropic client at module load and dies in the browser. Nutrition arithmetic + the `Item`/`Per100g` types live in `lib/totals.ts` (client-safe); `lib/vision.ts` re-exports them for server callers.
+
+
 ```
 app/
   page.tsx                            # single-screen orchestrator: pulse + meals + sheets + smart-switch
