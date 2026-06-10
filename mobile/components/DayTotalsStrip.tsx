@@ -1,9 +1,14 @@
 // Day totals strip shown at the top of the Today screen.
 // Shows calories, protein, sat fat, soluble fiber, plant %.
 // Numbers only — no red alerts, no grades. Reference numbers, not gates.
+//
+// Restyled onto the design system: a bordered + offset-shadow Card carrying
+// big condensed display numerals (this strip is the day's headline numbers).
+// Plant gets the food accent — it's the lead metric, the one to celebrate.
 
-import { View, Text, StyleSheet } from "react-native";
-import { colors } from "@/lib/colors";
+import { View, StyleSheet } from "react-native";
+import { palette, spacing } from "@/lib/theme";
+import { Card, StatNumber } from "@/components/ui";
 import { fmtCal, fmt, fmtPlant } from "@/lib/format";
 import type { DayTotals } from "@/lib/types";
 
@@ -13,34 +18,19 @@ type Props = {
 
 export function DayTotalsStrip({ totals }: Props) {
   return (
-    <View style={styles.strip}>
-      <TotalsItem label="kcal" value={fmtCal(totals.calories)} />
-      <Divider />
-      <TotalsItem label="protein" value={`${fmt(totals.protein_g)}g`} />
-      <Divider />
-      <TotalsItem label="sat fat" value={`${fmt(totals.sat_fat_g)}g`} />
-      <Divider />
-      <TotalsItem label="fiber" value={`${fmt(totals.soluble_fiber_g)}g`} />
-      <Divider />
-      <TotalsItem label="plant" value={fmtPlant(totals.plant_pct)} accent />
-    </View>
-  );
-}
-
-function TotalsItem({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <View style={styles.item}>
-      <Text style={[styles.value, accent && styles.accentValue]}>{value}</Text>
-      <Text style={styles.label}>{label}</Text>
-    </View>
+    <Card style={styles.card}>
+      <View style={styles.strip}>
+        <StatNumber value={fmtCal(totals.calories)} label="kcal" flex />
+        <Divider />
+        <StatNumber value={`${fmt(totals.protein_g)}g`} label="protein" flex />
+        <Divider />
+        <StatNumber value={`${fmt(totals.sat_fat_g)}g`} label="sat fat" flex />
+        <Divider />
+        <StatNumber value={`${fmt(totals.soluble_fiber_g)}g`} label="fiber" flex />
+        <Divider />
+        <StatNumber value={fmtPlant(totals.plant_pct)} label="plant" color={palette.food.accent} flex />
+      </View>
+    </Card>
   );
 }
 
@@ -49,38 +39,19 @@ function Divider() {
 }
 
 const styles = StyleSheet.create({
+  card: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
   strip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-  item: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  value: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  accentValue: {
-    color: colors.brand,
-  },
-  label: {
-    fontSize: 10,
-    color: colors.textSubtle,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   divider: {
     width: 1,
-    height: 28,
-    backgroundColor: colors.border,
+    height: 30,
+    backgroundColor: palette.hairline,
   },
 });

@@ -18,7 +18,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Card, SectionHeader, Button } from "@/components/ui";
 import { ApiError, fetchProfile, saveTargets } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_TARGETS, type Targets } from "@/lib/types";
@@ -171,14 +172,14 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionLabel}>DAILY TARGETS</Text>
+          <SectionHeader style={styles.sectionLabel}>DAILY TARGETS</SectionHeader>
           <Text style={styles.intro}>
             Reference numbers, not gates. The totals and trend lines scale to
             them; nothing red-alerts when you're over.
           </Text>
 
           {draft === null ? (
-            <ActivityIndicator color={colors.brand} style={styles.loader} />
+            <ActivityIndicator color={palette.food.accent} style={styles.loader} />
           ) : (
             <>
               {FIELDS.map((f) => (
@@ -199,26 +200,22 @@ export default function SettingsScreen() {
                 </View>
               ))}
 
-              <TouchableOpacity
-                style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+              <Button
+                label={saving ? "saving…" : "save targets"}
                 onPress={() => targets && save(targets)}
+                variant="primary"
                 disabled={!canSave}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveBtnText}>
-                  {saving ? "saving…" : "save targets"}
-                </Text>
-              </TouchableOpacity>
+                style={styles.saveBtn}
+              />
               {savedHint && !error && <Text style={styles.savedHint}>saved</Text>}
               {error && <Text style={styles.errorText}>{error}</Text>}
             </>
           )}
 
-          <Text style={[styles.sectionLabel, styles.accountLabel]}>YOUR FOODS</Text>
-          <TouchableOpacity
+          <SectionHeader style={[styles.sectionLabel, styles.accountLabel]}>YOUR FOODS</SectionHeader>
+          <Card
             style={styles.foodsBtn}
             onPress={() => router.push("/(app)/foods")}
-            activeOpacity={0.8}
             accessibilityLabel="open foods library"
           >
             <View style={styles.foodsBtnMain}>
@@ -228,10 +225,10 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Text style={styles.foodsBtnChevron}>›</Text>
-          </TouchableOpacity>
+          </Card>
 
-          <Text style={[styles.sectionLabel, styles.accountLabel]}>ACCOUNT</Text>
-          <View style={styles.accountCard}>
+          <SectionHeader style={[styles.sectionLabel, styles.accountLabel]}>ACCOUNT</SectionHeader>
+          <Card style={styles.accountCard}>
             <View style={styles.accountRow}>
               <Text style={styles.accountKey}>Signed in as</Text>
               <Text style={styles.accountValue} numberOfLines={1}>
@@ -241,7 +238,7 @@ export default function SettingsScreen() {
             <TouchableOpacity style={styles.signOutBtn} onPress={signOut}>
               <Text style={styles.signOutText}>Sign out</Text>
             </TouchableOpacity>
-          </View>
+          </Card>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -264,179 +261,157 @@ function numOr(v: unknown, fallback: number): number {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   kav: {
     flex: 1,
   },
   content: {
-    padding: 16,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.md,
     paddingBottom: 48,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 8,
+    paddingTop: spacing.sm,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.text,
+    fontSize: fontSize.display,
+    fontWeight: "800",
+    color: palette.text,
     letterSpacing: -0.5,
   },
   resetBtn: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingHorizontal: 12,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
     paddingVertical: 5,
   },
   resetBtnText: {
-    fontSize: 11,
-    color: colors.textMuted,
+    fontSize: fontSize.label,
+    color: palette.textMuted,
+    fontWeight: "700",
   },
   sectionLabel: {
-    fontSize: 11,
-    color: colors.textSubtle,
-    letterSpacing: 1,
-    fontWeight: "500",
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   intro: {
-    fontSize: 13,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
     lineHeight: 19,
   },
   loader: {
-    marginTop: 24,
+    marginTop: spacing.xxl,
   },
   field: {
-    gap: 4,
-    marginTop: 4,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   fieldLabel: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
+    fontWeight: "700",
     letterSpacing: 0.4,
   },
   fieldRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   fieldInput: {
     flex: 1,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    fontSize: fontSize.bodyLg,
   },
   fieldUnit: {
-    fontSize: 13,
-    color: colors.textFaint,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
     width: 36,
   },
   fieldHint: {
-    fontSize: 11,
-    color: colors.textFaint,
+    fontSize: fontSize.label,
+    color: palette.textSubtle,
     lineHeight: 16,
   },
   saveBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  saveBtnDisabled: {
-    opacity: 0.4,
-  },
-  saveBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.bg,
+    marginTop: spacing.sm,
   },
   savedHint: {
-    fontSize: 12,
-    color: colors.accentBright,
+    fontSize: fontSize.caption,
+    color: palette.food.accentBright,
     textAlign: "center",
   },
   errorText: {
-    fontSize: 12,
-    color: colors.bad,
+    fontSize: fontSize.caption,
+    color: palette.danger,
     textAlign: "center",
   },
   accountLabel: {
-    marginTop: 24,
+    marginTop: spacing.xxl,
   },
   foodsBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: 14,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
   foodsBtnMain: {
     flex: 1,
     gap: 3,
   },
   foodsBtnTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.text,
+    fontSize: fontSize.bodyLg,
+    fontWeight: "700",
+    color: palette.text,
   },
   foodsBtnSub: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
     lineHeight: 16,
   },
   foodsBtnChevron: {
     fontSize: 22,
-    color: colors.textFaint,
+    color: palette.textMuted,
   },
   accountCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: 14,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
   accountRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
   },
   accountKey: {
-    fontSize: 13,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
   accountValue: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: "500",
+    fontSize: fontSize.caption,
+    color: palette.text,
+    fontWeight: "600",
     flexShrink: 1,
   },
   signOutBtn: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 10,
+    paddingVertical: spacing.md,
     alignItems: "center",
   },
   signOutText: {
-    fontSize: 13,
-    color: colors.bad,
-    fontWeight: "600",
+    fontSize: fontSize.caption,
+    color: palette.danger,
+    fontWeight: "700",
   },
 });

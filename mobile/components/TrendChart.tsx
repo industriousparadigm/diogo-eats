@@ -7,7 +7,8 @@
 import { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import Svg, { Line, Path } from "react-native-svg";
-import { colors, radii } from "@/lib/colors";
+import { palette, fontSize, spacing, condensedFamily } from "@/lib/theme";
+import { Card } from "@/components/ui";
 import { rollingAverage, visibleAggregates } from "@/lib/headline";
 import type { DayAggregate } from "@/lib/types";
 
@@ -50,21 +51,22 @@ export function TrendChart({
   const targetY = H - (target / max) * H;
   const latest = [...points].reverse().find((v) => !isNaN(v)) ?? 0;
 
+  const accentLight = palette.food.accentBright;
   const latestColor =
     direction === "keep_up"
       ? latest >= target
-        ? colors.accentLight
-        : colors.textMuted
+        ? accentLight
+        : palette.textMuted
       : latest > target
-        ? colors.warn
-        : colors.accentLight;
+        ? palette.warn
+        : accentLight;
 
   return (
-    <View style={styles.card}>
+    <Card tone="recessed" style={styles.card}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={[styles.latest, { color: latestColor }]}>
-          {latest.toFixed(1)}g
+        <Text style={styles.latestWrap}>
+          <Text style={[styles.latest, { color: latestColor }]}>{latest.toFixed(1)}g</Text>
           <Text style={styles.target}> / {target}g target</Text>
         </Text>
       </View>
@@ -79,32 +81,28 @@ export function TrendChart({
           x2={W}
           y1={targetY}
           y2={targetY}
-          stroke={colors.borderStrong}
+          stroke={palette.inkSoft}
           strokeWidth={0.4}
           strokeDasharray="1,1"
         />
         <Path
           d={path}
           fill="none"
-          stroke={colors.accentLight}
-          strokeWidth={1}
+          stroke={accentLight}
+          strokeWidth={1.4}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
       </Svg>
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
   },
   headerRow: {
     flexDirection: "row",
@@ -112,19 +110,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   title: {
-    fontSize: 11,
-    color: colors.textSubtle,
-    letterSpacing: 0.5,
-    fontWeight: "500",
+    fontSize: fontSize.label,
+    color: palette.textSubtle,
+    letterSpacing: 1,
+    fontWeight: "700",
   },
-  latest: {
-    fontSize: 13,
-    fontWeight: "500",
+  latestWrap: {
     fontVariant: ["tabular-nums"],
   },
+  latest: {
+    fontFamily: condensedFamily,
+    fontSize: fontSize.title,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: condensedFamily ? 0.2 : 0,
+  },
   target: {
-    color: colors.textFaint,
-    fontWeight: "400",
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
+    fontWeight: "500",
   },
   svg: {
     width: "100%",

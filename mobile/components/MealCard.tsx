@@ -2,18 +2,17 @@
 // Shows: photo thumbnail (if any), meal_vibe, items summary, cal/plant badge.
 // Swipe left or long-press to reveal delete affordance.
 // No grades, no streaks — identity language only.
+//
+// Restyled onto the design system: a chunky-ink-bordered Card with a hard
+// offset shadow (the calm food register — neutral ink, not a color identity).
+// The photo sits hard against the inked left edge (the card's photo-led DNA);
+// kcal is a condensed display numeral; plant % keeps its single-hue scale.
 
 import { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Pressable,
-  Alert,
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Image } from "expo-image";
-import { colors, radii, plantColor } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, plantColor, condensedFamily } from "@/lib/theme";
+import { Card, Chip } from "@/components/ui";
 import { fmtCal, fmtPlant, itemsSummary, fmtTime } from "@/lib/format";
 import { resolvePhotoUrl } from "@/lib/api";
 import type { Meal } from "@/lib/types";
@@ -64,41 +63,38 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
     );
   }
 
-  const hasMeals = true; // the card only renders when there are meals
-  const pc = plantColor(meal.plant_pct, hasMeals);
+  const pc = plantColor(meal.plant_pct, true);
 
   return (
-    <Pressable
+    <Card
+      style={styles.card}
       onLongPress={() => setShowDelete(true)}
       onPress={() => {
-        if (showDelete) {
-          setShowDelete(false);
-        } else {
-          onOpen?.();
-        }
+        if (showDelete) setShowDelete(false);
+        else onOpen?.();
       }}
       accessibilityLabel={`open meal ${meal.meal_vibe ?? meal.caption ?? ""}`.trim()}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <View style={styles.inner}>
-        {/* Photo thumbnail — tap to open the full-screen lightbox. */}
+        {/* Photo thumbnail — hard against the inked left edge. */}
         {photoUrl ? (
-          <Pressable
+          <TouchableOpacity
             onPress={(e) => {
               e.stopPropagation?.();
               setLightbox(true);
             }}
             accessibilityLabel="open photo"
             style={styles.thumb}
+            activeOpacity={0.85}
           >
             <Image
               source={{ uri: photoUrl }}
-              style={styles.thumb}
+              style={styles.thumbImg}
               contentFit="cover"
               transition={200}
               cachePolicy="memory-disk"
             />
-          </Pressable>
+          </TouchableOpacity>
         ) : meal.photo_filename ? (
           <View style={[styles.thumb, styles.thumbPlaceholder]}>
             <Text style={styles.thumbPlaceholderText}>...</Text>
@@ -121,14 +117,15 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
             {itemsSummary(meal.items_json)}
           </Text>
           <View style={styles.badges}>
-            <View style={[styles.badge, styles.calBadge]}>
-              <Text style={styles.badgeText}>{fmtCal(meal.calories)} kcal</Text>
+            <View style={styles.kcalWrap}>
+              <Text style={styles.kcalNum}>{fmtCal(meal.calories)}</Text>
+              <Text style={styles.kcalUnit}>kcal</Text>
             </View>
-            <View style={[styles.badge, { backgroundColor: pc }]}>
-              <Text style={[styles.badgeText, styles.plantBadgeText]}>
-                {fmtPlant(meal.plant_pct)} plant
-              </Text>
-            </View>
+            <Chip
+              label={`${fmtPlant(meal.plant_pct)} plant`}
+              fill={pc}
+              textColor={palette.text}
+            />
             {onRepeat && (
               <View style={styles.repeatWrap}>
                 <RepeatButton onRepeat={onRepeat} variant="card" />
@@ -138,11 +135,7 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
         </View>
       </View>
 
-      <PhotoLightbox
-        uri={photoUrl}
-        visible={lightbox}
-        onClose={() => setLightbox(false)}
-      />
+      <PhotoLightbox uri={photoUrl} visible={lightbox} onClose={() => setLightbox(false)} />
 
       {/* Delete affordance — shown on long-press */}
       {showDelete && (
@@ -163,125 +156,131 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
           </TouchableOpacity>
         </View>
       )}
-    </Pressable>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    marginHorizontal: 16,
-    marginBottom: 8,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
     overflow: "hidden",
-  },
-  cardPressed: {
-    opacity: 0.85,
   },
   inner: {
     flexDirection: "row",
-    padding: 12,
-    gap: 12,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   thumb: {
     width: 72,
     height: 72,
-    borderRadius: radii.md,
+    borderRadius: radii.sm,
     flexShrink: 0,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
+    overflow: "hidden",
+  },
+  thumbImg: {
+    width: "100%",
+    height: "100%",
   },
   thumbPlaceholder: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   thumbPlaceholderText: {
-    color: colors.textFaint,
-    fontSize: 14,
+    color: palette.textFaint,
+    fontSize: fontSize.body,
   },
   thumbText: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   thumbTextIcon: {
-    color: colors.textSubtle,
-    fontSize: 18,
+    color: palette.textSubtle,
+    fontSize: fontSize.lead,
     fontWeight: "700",
   },
   content: {
     flex: 1,
-    gap: 4,
+    gap: spacing.xs,
     justifyContent: "center",
   },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   vibe: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.text,
+    fontSize: fontSize.bodyLg,
+    fontWeight: "700",
+    color: palette.text,
     flex: 1,
   },
   time: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
     flexShrink: 0,
   },
   items: {
-    fontSize: 12,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
   },
   badges: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: spacing.sm,
     marginTop: 2,
+  },
+  kcalWrap: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 3,
+  },
+  kcalNum: {
+    fontFamily: condensedFamily,
+    fontSize: fontSize.lead,
+    fontWeight: "800",
+    color: palette.food.cream,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: condensedFamily ? 0.2 : -0.3,
+  },
+  kcalUnit: {
+    fontSize: fontSize.tiny,
+    fontWeight: "700",
+    color: palette.textSubtle,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   repeatWrap: {
     marginLeft: "auto",
   },
-  badge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 100,
-  },
-  calBadge: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.textMuted,
-  },
-  plantBadgeText: {
-    color: colors.text,
-  },
   deleteRow: {
     flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopWidth: borders.bold,
+    borderTopColor: palette.ink,
   },
   deleteButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: "center",
-    backgroundColor: colors.badStrong,
+    backgroundColor: palette.dangerStrong,
   },
   deleteText: {
-    fontSize: 14,
+    fontSize: fontSize.body,
     fontWeight: "700",
-    color: "#fff",
+    color: palette.white,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: "center",
   },
   cancelText: {
-    fontSize: 14,
-    color: colors.textMuted,
+    fontSize: fontSize.body,
+    color: palette.textMuted,
   },
 });

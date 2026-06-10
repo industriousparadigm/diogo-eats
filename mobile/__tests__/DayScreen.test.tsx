@@ -208,9 +208,12 @@ describe("DayScreen", () => {
 
   it("shows day totals strip when meals exist", async () => {
     mockFetchMeals.mockResolvedValue([makeMeal("meal-1")]);
-    const { getByText } = await render(<DayScreen />);
+    const { getByText, getAllByText } = await render(<DayScreen />);
     await waitFor(() => {
-      expect(getByText("kcal")).toBeTruthy();
+      // "kcal" now appears in both the totals strip and each meal card's
+      // calorie badge unit (the styled card splits "590" from "kcal"); the
+      // totals strip is the unique source of the "plant" label.
+      expect(getAllByText("kcal").length).toBeGreaterThan(0);
       expect(getByText("plant")).toBeTruthy();
     });
   });

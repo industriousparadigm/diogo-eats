@@ -18,7 +18,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { colors, radii, exerciseAccent } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, exerciseIdentity, condensedFamily } from "@/lib/theme";
+import { Card, Chip, SectionHeader, Button } from "@/components/ui";
 import { ApiError, fetchStrengthOverview } from "@/lib/api";
 import { loadDraft } from "@/lib/draftStorage";
 import { exerciseImage } from "@/lib/exerciseImages";
@@ -69,27 +70,24 @@ export default function StrengthScreen() {
               setRefreshing(true);
               load();
             }}
-            tintColor={colors.strength.brand}
-            colors={[colors.strength.brand]}
+            tintColor={palette.strength.brand}
+            colors={[palette.strength.brand]}
           />
         }
       >
         <Text style={styles.title}>Strength</Text>
 
         {/* Start / resume — the screen's one unmissable action */}
-        <TouchableOpacity
-          style={styles.startBtn}
+        <Button
+          label={hasDraft ? "Resume session" : "Start session"}
+          hint={hasDraft ? "a session is in progress" : undefined}
           onPress={startSession}
-          activeOpacity={0.85}
+          variant="primary"
+          accent={palette.strength.brand}
+          size="lg"
           accessibilityLabel={hasDraft ? "resume session" : "start session"}
-        >
-          <Text style={styles.startBtnText}>
-            {hasDraft ? "Resume session" : "Start session"}
-          </Text>
-          {hasDraft && (
-            <Text style={styles.startBtnHint}>a session is in progress</Text>
-          )}
-        </TouchableOpacity>
+          style={styles.startBtn}
+        />
 
         {error && !overview && (
           <View style={styles.errorWrap}>
@@ -103,23 +101,20 @@ export default function StrengthScreen() {
         {overview && (
           <>
             {/* Per-exercise scoreboard */}
-            <Text style={styles.sectionLabel}>THE NUMBERS TO BEAT</Text>
+            <SectionHeader color={palette.strength.brand} style={styles.section}>
+              THE NUMBERS TO BEAT
+            </SectionHeader>
             <View style={styles.cardList}>
               {overview.states.map((state) => {
                 const ex = byId.get(state.exercise_id);
                 if (!ex) return null;
-                const accent = exerciseAccent(ex.id);
+                const accent = exerciseIdentity(ex.id).accent;
                 const img = exerciseImage(ex.image_key);
                 return (
-                  <View
-                    key={ex.id}
-                    style={[styles.exCard, { borderColor: accent }]}
-                  >
+                  <Card key={ex.id} identity={accent} depth="loud" style={styles.exCard}>
                     {img && <Image source={img} style={styles.exImage} />}
                     <View style={styles.exBody}>
-                      <Text style={[styles.exName, { color: accent }]}>
-                        {ex.name}
-                      </Text>
+                      <Text style={[styles.exName, { color: accent }]}>{ex.name}</Text>
                       {state.last ? (
                         <>
                           <View style={styles.numRow}>
@@ -141,13 +136,13 @@ export default function StrengthScreen() {
                         <Text style={styles.neverDone}>not done yet</Text>
                       )}
                     </View>
-                  </View>
+                  </Card>
                 );
               })}
             </View>
 
             {/* Session history */}
-            <Text style={styles.sectionLabel}>SESSIONS</Text>
+            <SectionHeader style={styles.section}>SESSIONS</SectionHeader>
             {overview.sessions.length === 0 ? (
               <Text style={styles.emptyHistory}>
                 No sessions yet. The first one sets the numbers to beat.
@@ -155,7 +150,7 @@ export default function StrengthScreen() {
             ) : (
               <View style={styles.historyList}>
                 {overview.sessions.map((s) => (
-                  <View key={s.id} style={styles.historyRow}>
+                  <Card key={s.id} tone="recessed" style={styles.historyRow}>
                     <View style={styles.historyMain}>
                       <Text style={styles.historyDate}>
                         {fmtSessionDate(s.completed_at)}
@@ -166,22 +161,14 @@ export default function StrengthScreen() {
                         {s.note ? ` · ${s.note}` : ""}
                       </Text>
                     </View>
-                    <View
-                      style={[
-                        styles.beatsBadge,
-                        s.beats_count === 0 && styles.beatsBadgeZero,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.beatsText,
-                          s.beats_count === 0 && styles.beatsTextZero,
-                        ]}
-                      >
-                        {s.beats_count} beat{s.beats_count === 1 ? "" : "s"}
-                      </Text>
-                    </View>
-                  </View>
+                    <Chip
+                      label={`${s.beats_count} beat${s.beats_count === 1 ? "" : "s"}`}
+                      tone={s.beats_count === 0 ? "neutral" : "accent"}
+                      identity={palette.strength.brandBright}
+                      fill={s.beats_count === 0 ? palette.surfaceMuted : palette.strength.brandSoft}
+                      textColor={s.beats_count === 0 ? palette.textMuted : palette.strength.brandBright}
+                    />
+                  </Card>
                 ))}
               </View>
             )}
@@ -195,164 +182,126 @@ export default function StrengthScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   content: {
-    padding: 16,
-    gap: 12,
+    padding: spacing.lg,
+    gap: spacing.md,
     paddingBottom: 40,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.text,
+    fontSize: fontSize.display,
+    fontWeight: "800",
+    color: palette.text,
     letterSpacing: -0.5,
-    paddingTop: 8,
+    paddingTop: spacing.sm,
   },
   startBtn: {
-    backgroundColor: colors.strength.brand,
-    borderRadius: radii.lg,
-    paddingVertical: 18,
-    alignItems: "center",
-    gap: 2,
+    marginTop: spacing.xs,
   },
-  startBtnText: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.bg,
-    letterSpacing: -0.2,
-  },
-  startBtnHint: {
-    fontSize: 11,
-    color: "rgba(10,10,10,0.7)",
-    fontWeight: "600",
-  },
-  sectionLabel: {
-    fontSize: 11,
-    color: colors.textSubtle,
-    letterSpacing: 1,
-    fontWeight: "500",
-    marginTop: 10,
+  section: {
+    marginTop: spacing.sm,
   },
   cardList: {
-    gap: 10,
+    gap: spacing.md,
   },
   exCard: {
     flexDirection: "row",
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 2,
-    padding: 12,
-    gap: 12,
+    padding: spacing.md,
+    gap: spacing.md,
     alignItems: "center",
   },
   exImage: {
     width: 64,
     height: 48,
     borderRadius: radii.sm,
-    backgroundColor: "#fff",
+    backgroundColor: palette.white,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   exBody: {
     flex: 1,
     gap: 3,
   },
   exName: {
-    fontSize: 15,
+    fontSize: fontSize.bodyLg,
     fontWeight: "800",
     letterSpacing: -0.2,
   },
   numRow: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 8,
+    gap: spacing.sm,
   },
   numKey: {
-    fontSize: 9,
-    color: colors.textSubtle,
+    fontSize: fontSize.micro,
+    color: palette.textSubtle,
     letterSpacing: 0.8,
+    fontWeight: "700",
     width: 30,
   },
   numValue: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: "600",
+    fontFamily: condensedFamily,
+    fontSize: fontSize.bodyLg,
+    color: palette.text,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
+    letterSpacing: condensedFamily ? 0.2 : 0,
     flexShrink: 1,
   },
   neverDone: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
     fontStyle: "italic",
   },
   historyList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   historyRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 10,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   historyMain: {
     flex: 1,
     gap: 2,
   },
   historyDate: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text,
+    fontSize: fontSize.body,
+    fontWeight: "700",
+    color: palette.text,
   },
   historyDetail: {
-    fontSize: 12,
-    color: colors.textSubtle,
-  },
-  beatsBadge: {
-    backgroundColor: colors.strength.brandDim,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  beatsBadgeZero: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  beatsText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.strength.brandBright,
-  },
-  beatsTextZero: {
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
   emptyHistory: {
-    fontSize: 13,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
   errorWrap: {
     alignItems: "center",
-    gap: 10,
-    paddingTop: 16,
+    gap: spacing.md,
+    paddingTop: spacing.lg,
   },
   errorText: {
-    fontSize: 13,
-    color: colors.bad,
+    fontSize: fontSize.caption,
+    color: palette.danger,
     textAlign: "center",
   },
   retryBtn: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "transparent",
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.md,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   retryText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: "600",
+    fontSize: fontSize.caption,
+    color: palette.text,
+    fontWeight: "700",
   },
 });

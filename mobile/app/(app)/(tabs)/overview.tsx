@@ -15,7 +15,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Card, SectionHeader, StatNumber } from "@/components/ui";
 import { ApiError, fetchProfile, fetchStats } from "@/lib/api";
 import { buildHeadline, loggedAverages } from "@/lib/headline";
 import { DEFAULT_TARGETS, type DayAggregate, type Targets } from "@/lib/types";
@@ -110,8 +111,8 @@ export default function OverviewScreen() {
               setRefreshing(true);
               load();
             }}
-            tintColor={colors.brand}
-            colors={[colors.brand]}
+            tintColor={palette.food.accent}
+            colors={[palette.food.accent]}
           />
         }
       >
@@ -147,18 +148,18 @@ export default function OverviewScreen() {
           <>
             {/* Headline or first-days copy */}
             {logged < 3 ? (
-              <View style={styles.headlineCard}>
+              <Card style={styles.headlineCard}>
                 <Text style={styles.headlineText}>
                   {logged === 0
                     ? "Just getting started. Log a few and you'll start seeing patterns here."
                     : `${logged} day${logged === 1 ? "" : "s"} in. A few more and you'll start seeing patterns.`}
                 </Text>
-              </View>
+              </Card>
             ) : (
               headline && (
-                <View style={styles.headlineCard}>
+                <Card identity={palette.food.accentDeep} style={styles.headlineCard}>
                   <Text style={styles.headlineText}>{headline}</Text>
-                </View>
+                </Card>
               )
             )}
 
@@ -170,19 +171,18 @@ export default function OverviewScreen() {
 
             {/* Coverage-honest averages — logged days only, and says so */}
             {averages && averages.loggedDays >= 3 && (
-              <View style={styles.avgCard}>
-                <Text style={styles.avgTitle}>
-                  AVERAGES · LAST {averages.loggedDays} LOGGED DAY
-                  {averages.loggedDays === 1 ? "" : "S"}
-                </Text>
+              <Card tone="recessed" style={styles.avgCard}>
+                <SectionHeader>
+                  {`AVERAGES · LAST ${averages.loggedDays} LOGGED DAY${averages.loggedDays === 1 ? "" : "S"}`}
+                </SectionHeader>
                 <View style={styles.avgRow}>
-                  <AvgStat label="plant" value={`${Math.round(averages.plant_pct)}%`} accent />
-                  <AvgStat label="fiber" value={`${fmt(averages.soluble_fiber_g)}g`} />
-                  <AvgStat label="sat fat" value={`${fmt(averages.sat_fat_g)}g`} />
-                  <AvgStat label="kcal" value={fmtCal(averages.calories)} />
-                  <AvgStat label="protein" value={`${fmt(averages.protein_g, 0)}g`} />
+                  <StatNumber label="plant" value={`${Math.round(averages.plant_pct)}%`} color={palette.food.accent} align="left" />
+                  <StatNumber label="fiber" value={`${fmt(averages.soluble_fiber_g)}g`} align="left" />
+                  <StatNumber label="sat fat" value={`${fmt(averages.sat_fat_g)}g`} align="left" />
+                  <StatNumber label="kcal" value={fmtCal(averages.calories)} align="left" />
+                  <StatNumber label="protein" value={`${fmt(averages.protein_g, 0)}g`} align="left" />
                 </View>
-              </View>
+              </Card>
             )}
 
             {logged >= 3 && (
@@ -219,23 +219,6 @@ export default function OverviewScreen() {
   );
 }
 
-function AvgStat({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <View style={styles.avgStat}>
-      <Text style={[styles.avgValue, accent && styles.avgValueAccent]}>{value}</Text>
-      <Text style={styles.avgLabel}>{label}</Text>
-    </View>
-  );
-}
-
 function numOr(v: unknown, fallback: number): number {
   return typeof v === "number" && isFinite(v) && v > 0 ? v : fallback;
 }
@@ -243,133 +226,101 @@ function numOr(v: unknown, fallback: number): number {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   content: {
-    padding: 16,
-    gap: 14,
+    padding: spacing.lg,
+    gap: spacing.lg,
     paddingBottom: 40,
   },
   headerRow: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 8,
+    paddingTop: spacing.sm,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.text,
+    fontSize: fontSize.display,
+    fontWeight: "800",
+    color: palette.text,
     letterSpacing: -0.5,
   },
   loggedCount: {
-    fontSize: 12,
-    color: colors.textFaint,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
   windowToggle: {
     flexDirection: "row",
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.sm,
     padding: 3,
     gap: 2,
   },
   windowBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.xs,
   },
   windowBtnActive: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.food.accentSoft,
   },
   windowText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    fontWeight: "700",
+    color: palette.textSubtle,
     letterSpacing: 0.3,
   },
   windowTextActive: {
-    color: colors.text,
+    color: palette.food.accentBright,
   },
   skeleton: {
     height: 320,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: palette.surfaceAlt,
     borderRadius: radii.lg,
     opacity: 0.5,
   },
   headlineCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   headlineText: {
-    fontSize: 16,
+    fontSize: fontSize.title,
     lineHeight: 24,
-    color: colors.text,
+    color: palette.text,
     letterSpacing: -0.1,
   },
   avgCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  avgTitle: {
-    fontSize: 11,
-    color: colors.textSubtle,
-    letterSpacing: 0.5,
-    fontWeight: "500",
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   avgRow: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  avgStat: {
-    alignItems: "flex-start",
-  },
-  avgValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  avgValueAccent: {
-    color: colors.brand,
-  },
-  avgLabel: {
-    fontSize: 10,
-    color: colors.textSubtle,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
   errorRow: {
     alignItems: "center",
-    gap: 10,
-    paddingTop: 8,
+    gap: spacing.md,
+    paddingTop: spacing.sm,
   },
   errorText: {
-    fontSize: 13,
-    color: colors.bad,
+    fontSize: fontSize.caption,
+    color: palette.danger,
     textAlign: "center",
   },
   retryBtn: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "transparent",
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.md,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   retryText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: "600",
+    fontSize: fontSize.caption,
+    color: palette.text,
+    fontWeight: "700",
   },
 });

@@ -4,7 +4,7 @@
 
 import { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
-import { colors, plantColor } from "@/lib/colors";
+import { palette, plantColor } from "@/lib/theme";
 import { buildWeekGrid, monthLabelFor } from "@/lib/heatmap";
 import type { DayAggregate } from "@/lib/types";
 
@@ -99,11 +99,11 @@ export function Heatmap({
       <View style={styles.legend}>
         <Text style={styles.legendText}>less plant</Text>
         {[
-          colors.plant.veryLow,
-          colors.plant.low,
-          colors.plant.mid,
-          colors.plant.high,
-          colors.plant.full,
+          palette.plant.veryLow,
+          palette.plant.low,
+          palette.plant.mid,
+          palette.plant.high,
+          palette.plant.full,
         ].map((c, i) => (
           <View key={i} style={[styles.legendSwatch, { backgroundColor: c }]} />
         ))}
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   monthText: {
     fontSize: 10,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     letterSpacing: 0.4,
     width: CELL * 2,
   },
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   dayLabelText: {
     fontSize: 9,
-    color: colors.textFaint,
+    color: palette.textSubtle,
     letterSpacing: 0.4,
   },
   weekCol: {
@@ -164,11 +164,11 @@ const styles = StyleSheet.create({
   },
   cellEmpty: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.hairline,
   },
   cellSelected: {
     borderWidth: 2,
-    borderColor: colors.accentBright,
+    borderColor: palette.food.accentBright,
   },
   cellPad: {
     width: CELL,
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 10,
-    color: colors.textFaint,
+    color: palette.textSubtle,
   },
   legendSwatch: {
     width: 10,

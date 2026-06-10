@@ -32,7 +32,7 @@ import {
 } from "@/lib/api";
 import { computeDayTotals } from "@/lib/types";
 import { dayNavLabel, shiftYmd, todayYmd } from "@/lib/format";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, offsetShadow } from "@/lib/theme";
 import { consumePendingDay, onDayPicked, stashMeal, takeNewMeal } from "@/lib/stores";
 import { MealCard } from "@/components/MealCard";
 import { CopyDayButton } from "@/components/CopyDayButton";
@@ -397,8 +397,8 @@ export default function DayScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.brand}
-            colors={[colors.brand]}
+            tintColor={palette.food.accent}
+            colors={[palette.food.accent]}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -431,7 +431,7 @@ export default function DayScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   list: {
     flex: 1,
@@ -443,9 +443,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   navBtn: {
     width: 44,
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   navBtnText: {
     fontSize: 28,
-    color: colors.textMuted,
+    color: palette.textMuted,
     lineHeight: 32,
   },
   dayLabelWrap: {
@@ -467,60 +467,60 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   dayLabel: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.text,
+    fontSize: fontSize.display,
+    fontWeight: "800",
+    color: palette.text,
     letterSpacing: -0.5,
   },
   dayHint: {
-    fontSize: 11,
-    color: colors.textFaint,
+    fontSize: fontSize.label,
+    color: palette.textFaint,
   },
   copyRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   emptyState: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: 40,
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   emptyTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: colors.textMuted,
+    fontSize: fontSize.title,
+    fontWeight: "700",
+    color: palette.text,
   },
   emptyHint: {
-    fontSize: 14,
-    color: colors.textSubtle,
+    fontSize: fontSize.body,
+    color: palette.textSubtle,
     textAlign: "center",
   },
   errorState: {
-    paddingHorizontal: 16,
-    paddingTop: 32,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxxl,
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
   },
   errorText: {
-    fontSize: 14,
-    color: colors.bad,
+    fontSize: fontSize.body,
+    color: palette.danger,
     textAlign: "center",
   },
   retryBtn: {
-    backgroundColor: colors.surface,
+    backgroundColor: "transparent",
     borderRadius: radii.md,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   retryBtnText: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: "600",
+    fontSize: fontSize.body,
+    color: palette.text,
+    fontWeight: "700",
   },
   fab: {
     position: "absolute",
@@ -528,20 +528,18 @@ const styles = StyleSheet.create({
     right: 24,
     width: 60,
     height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.accent,
+    borderRadius: radii.lg,
+    backgroundColor: palette.food.accent,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    borderWidth: borders.chunky,
+    borderColor: palette.bg,
+    ...offsetShadow(palette.food.accentDeep, "loud"),
   },
   fabIcon: {
     fontSize: 32,
-    color: colors.bg,
+    color: palette.onAccent,
     lineHeight: 36,
-    fontWeight: "300",
+    fontWeight: "600",
   },
 });
