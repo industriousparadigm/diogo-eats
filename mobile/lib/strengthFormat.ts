@@ -6,6 +6,7 @@
 //   carry            — "16kg × 60 steps" (kg is per hand)
 
 import type {
+  Beat,
   ExerciseBest,
   MeasurementType,
   SeriesNumbers,
@@ -48,6 +49,24 @@ export function fmtBest(best: ExerciseBest, type: MeasurementType): string {
   return `${fmtKg(best.weight_kg)} × ${best.reps}`;
 }
 
+// A single beat as a short scoreboard phrase, e.g. "39 → 41kg",
+// "24 → 30 reps", "12 → 24 reps @ 32kg" (loud register; the verb/exercise
+// name is rendered around it by the caller).
+export function fmtBeat(beat: Beat): string {
+  switch (beat.kind) {
+    case "weight":
+      return `${beat.from} → ${fmtKg(beat.to)}`;
+    case "total_reps":
+      return `${beat.from} → ${beat.to} reps`;
+    case "reps_at_weight":
+      return `${beat.from} → ${beat.to} reps @ ${fmtKg(beat.at_weight_kg ?? 0)}`;
+    case "steps_at_weight":
+      return `${beat.from} → ${beat.to} steps @ ${fmtKg(beat.at_weight_kg ?? 0)}`;
+    default:
+      return `${beat.from} → ${beat.to}`;
+  }
+}
+
 // "Tue 10 Jun" for the session history list.
 export function fmtSessionDate(ms: number): string {
   const d = new Date(ms);
@@ -56,6 +75,21 @@ export function fmtSessionDate(ms: number): string {
     day: "numeric",
     month: "short",
   });
+}
+
+// "Tue 10 Jun · 18:00" for the session-detail header.
+export function fmtSessionDateTime(ms: number): string {
+  const d = new Date(ms);
+  const date = d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${date} · ${time}`;
 }
 
 // Units for the entry screen, by measurement type.

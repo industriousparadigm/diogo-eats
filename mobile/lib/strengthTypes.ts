@@ -121,6 +121,13 @@ export type CompleteSessionResult = {
   highlights: Highlight[];
 };
 
+// GET /api/strength/sessions/[id] — one session in full + the beats it
+// achieved that day (vs the most recent prior session per exercise).
+export type SessionDetail = {
+  session: StrengthSession;
+  beats: Beat[];
+};
+
 // POST /api/strength/sessions body shape.
 export type SessionPayload = {
   started_at: number;

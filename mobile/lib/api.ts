@@ -14,10 +14,16 @@ import type { DayAggregate, Item, Meal, Per100g, Targets } from "./types";
 import type { Food } from "./foods";
 import type {
   CompleteSessionResult,
+  SessionDetail,
   SessionPayload,
   StrengthOverview,
+  StrengthSession,
 } from "./strengthTypes";
-import { mockCompleteSession, mockStrengthOverview } from "./strengthFixtures";
+import {
+  mockCompleteSession,
+  mockSessionDetail,
+  mockStrengthOverview,
+} from "./strengthFixtures";
 
 // Dev-only escape hatches, resolved at bundle time:
 // - EXPO_PUBLIC_API_URL points the app at a local Next dev server.
@@ -460,6 +466,30 @@ export async function fetchStrengthOverview(): Promise<StrengthOverview> {
   if (STRENGTH_MOCK) return mockStrengthOverview();
   return request<StrengthOverview>(
     "/api/strength/overview",
+    { method: "GET" },
+    30_000
+  );
+}
+
+// GET /api/strength/sessions — the full session log (with sets),
+// newest first. Powers the exercise-detail screen's per-exercise history
+// + progression sparkline (derived client-side; no new endpoint).
+export async function fetchStrengthSessions(): Promise<StrengthSession[]> {
+  if (STRENGTH_MOCK) return [mockSessionDetail("").session];
+  const data = await request<{ sessions: StrengthSession[] }>(
+    "/api/strength/sessions",
+    { method: "GET" },
+    30_000
+  );
+  return data.sessions ?? [];
+}
+
+// GET /api/strength/sessions/[id] — one session in full + that day's
+// beats. Powers the session-detail screen.
+export async function fetchStrengthSession(id: string): Promise<SessionDetail> {
+  if (STRENGTH_MOCK) return mockSessionDetail(id);
+  return request<SessionDetail>(
+    `/api/strength/sessions/${encodeURIComponent(id)}`,
     { method: "GET" },
     30_000
   );

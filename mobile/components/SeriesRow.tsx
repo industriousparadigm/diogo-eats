@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { palette, radii, borders, fontSize, condensedFamily } from "@/lib/theme";
+import { tapConfirm } from "@/lib/haptics";
 import { repsUnit, weightUnit } from "@/lib/strengthFormat";
 import type { MeasurementType } from "@/lib/strengthTypes";
 import type { DraftSeries } from "@/lib/strengthSession";
@@ -78,7 +79,14 @@ export function SeriesRow({
           series.confirmed && { backgroundColor: accent, borderColor: accent },
           !series.confirmed && !canConfirm && styles.confirmBtnDisabled,
         ]}
-        onPress={series.confirmed ? onUnconfirm : onConfirm}
+        onPress={() => {
+          if (series.confirmed) {
+            onUnconfirm();
+          } else {
+            tapConfirm();
+            onConfirm();
+          }
+        }}
         disabled={!series.confirmed && !canConfirm}
         accessibilityLabel={
           series.confirmed

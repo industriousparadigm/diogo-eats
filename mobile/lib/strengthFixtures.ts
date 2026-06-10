@@ -6,6 +6,7 @@
 import type {
   CompleteSessionResult,
   Exercise,
+  SessionDetail,
   SessionPayload,
   StrengthOverview,
 } from "./strengthTypes";
@@ -182,6 +183,32 @@ export function mockStrengthOverview(): StrengthOverview {
         beats_count: 0,
       },
     ],
+  };
+}
+
+// The day-1 baseline session in full — the sets the overview's `last`
+// numbers come from, expanded to StrengthSet shape (logged order).
+export function mockSessionDetail(_id: string): SessionDetail {
+  return {
+    session: {
+      id: DAY1_SESSION_ID,
+      started_at: DAY1_COMPLETED_AT - 50 * 60 * 1000,
+      completed_at: DAY1_COMPLETED_AT,
+      note: "10min warmup run, 22min run after, ~10min banho turco.",
+      sets: [
+        { exercise_id: "leg-press", series_index: 1, weight_kg: 32, reps: 12 },
+        { exercise_id: "leg-press", series_index: 2, weight_kg: 39, reps: 12 },
+        { exercise_id: "back-extension", series_index: 1, weight_kg: null, reps: 12 },
+        { exercise_id: "back-extension", series_index: 2, weight_kg: null, reps: 12 },
+        { exercise_id: "chest-press", series_index: 1, weight_kg: 32, reps: 12 },
+        { exercise_id: "chest-press", series_index: 2, weight_kg: 32, reps: 12 },
+        { exercise_id: "seated-row", series_index: 1, weight_kg: 25, reps: 12 },
+        { exercise_id: "seated-row", series_index: 2, weight_kg: 32, reps: 12 },
+        { exercise_id: "farmers-carry", series_index: 1, weight_kg: 16, reps: 60 },
+        { exercise_id: "farmers-carry", series_index: 2, weight_kg: 16, reps: 60 },
+      ],
+    },
+    beats: [], // day 1 — nothing before it to beat
   };
 }
 

@@ -6,10 +6,13 @@ import {
   fmtSeries,
   fmtSeriesList,
   fmtBest,
+  fmtBeat,
   fmtSessionDate,
+  fmtSessionDateTime,
   repsUnit,
   weightUnit,
 } from "../lib/strengthFormat";
+import type { Beat } from "../lib/strengthTypes";
 
 describe("fmtKg", () => {
   it("trims trailing zeros", () => {
@@ -97,6 +100,47 @@ describe("fmtSessionDate", () => {
   it("formats as weekday day month", () => {
     const ms = new Date(2026, 5, 10, 18, 0).getTime();
     expect(fmtSessionDate(ms)).toBe("Wed 10 Jun");
+  });
+});
+
+describe("fmtSessionDateTime", () => {
+  it("appends a 24h clock time", () => {
+    const ms = new Date(2026, 5, 10, 18, 5).getTime();
+    expect(fmtSessionDateTime(ms)).toBe("Wed 10 Jun · 18:05");
+  });
+});
+
+describe("fmtBeat", () => {
+  it("weight beat reads from → to kg", () => {
+    const b: Beat = { exercise_id: "leg-press", kind: "weight", from: 39, to: 41 };
+    expect(fmtBeat(b)).toBe("39 → 41kg");
+  });
+
+  it("total_reps beat reads from → to reps", () => {
+    const b: Beat = { exercise_id: "back-extension", kind: "total_reps", from: 24, to: 30 };
+    expect(fmtBeat(b)).toBe("24 → 30 reps");
+  });
+
+  it("reps_at_weight beat names the weight it happened at", () => {
+    const b: Beat = {
+      exercise_id: "seated-row",
+      kind: "reps_at_weight",
+      from: 12,
+      to: 24,
+      at_weight_kg: 32,
+    };
+    expect(fmtBeat(b)).toBe("12 → 24 reps @ 32kg");
+  });
+
+  it("steps_at_weight beat (carry) reads in steps", () => {
+    const b: Beat = {
+      exercise_id: "farmers-carry",
+      kind: "steps_at_weight",
+      from: 60,
+      to: 120,
+      at_weight_kg: 16,
+    };
+    expect(fmtBeat(b)).toBe("60 → 120 steps @ 16kg");
   });
 });
 

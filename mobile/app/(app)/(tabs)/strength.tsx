@@ -75,6 +75,14 @@ export default function StrengthScreen() {
     router.push("/(app)/strength/session");
   }
 
+  function openExercise(exerciseId: string) {
+    router.push(`/(app)/strength/exercise/${exerciseId}`);
+  }
+
+  function openSession(sessionId: string) {
+    router.push(`/(app)/strength/log/${sessionId}`);
+  }
+
   const byId = new Map((overview?.exercises ?? []).map((e) => [e.id, e]));
 
   return (
@@ -133,7 +141,14 @@ export default function StrengthScreen() {
                 const accent = exerciseIdentity(ex.id).accent;
                 const img = exerciseImage(ex.image_key);
                 return (
-                  <Card key={ex.id} identity={accent} depth="loud" style={styles.exCard}>
+                  <Card
+                    key={ex.id}
+                    identity={accent}
+                    depth="loud"
+                    style={styles.exCard}
+                    onPress={() => openExercise(ex.id)}
+                    accessibilityLabel={`${ex.name} detail`}
+                  >
                     {img && <Image source={img} style={styles.exImage} />}
                     <View style={styles.exBody}>
                       <Text style={[styles.exName, { color: accent }]}>{ex.name}</Text>
@@ -172,7 +187,13 @@ export default function StrengthScreen() {
             ) : (
               <View style={styles.historyList}>
                 {overview.sessions.map((s) => (
-                  <Card key={s.id} tone="recessed" style={styles.historyRow}>
+                  <Card
+                    key={s.id}
+                    tone="recessed"
+                    style={styles.historyRow}
+                    onPress={() => openSession(s.id)}
+                    accessibilityLabel={`session ${fmtSessionDate(s.completed_at)}`}
+                  >
                     <View style={styles.historyMain}>
                       <Text style={styles.historyDate}>
                         {fmtSessionDate(s.completed_at)}

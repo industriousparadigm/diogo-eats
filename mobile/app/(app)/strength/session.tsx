@@ -17,7 +17,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -26,7 +25,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, exerciseIdentity } from "@/lib/theme";
-import { Card, Button } from "@/components/ui";
+import { Card, Button, Input } from "@/components/ui";
 import { SessionPickerSkeleton } from "@/components/skeletons/SessionPickerSkeleton";
 import { ApiError, completeStrengthSession, fetchStrengthOverview } from "@/lib/api";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draftStorage";
@@ -48,6 +47,7 @@ import {
   type SessionDraft,
 } from "@/lib/strengthSession";
 import { stashSessionResult } from "@/lib/stores";
+import { beatBuzz, sessionDone } from "@/lib/haptics";
 import { SeriesRow } from "@/components/SeriesRow";
 
 type View_ = { kind: "picker" } | { kind: "entry"; exerciseId: string };
@@ -135,6 +135,14 @@ export default function StrengthSessionScreen() {
       const payload = toSessionPayload(draft, Date.now());
       const result = await completeStrengthSession(payload);
       await clearDraft();
+      // Success haptic — and a distinct heavier buzz when at least one
+      // number was beaten (the beats highlight is priority 1, leads).
+      const beats = result.highlights.find((h) => h.id === "beats")?.beats ?? [];
+      if (beats.length > 0) {
+        beatBuzz();
+      } else {
+        sessionDone();
+      }
       stashSessionResult(result);
       router.replace("/(app)/strength/highlights");
     } catch (err) {
@@ -291,13 +299,12 @@ export default function StrengthSessionScreen() {
         {noteOpen ? (
           <View style={styles.noteCard}>
             <Text style={styles.noteLabel}>SESSION NOTE</Text>
-            <TextInput
-              style={styles.noteInput}
+            <Input
+              variant="multiline"
+              accent={palette.strength.brand}
               value={draft.note}
               onChangeText={(t) => update((d) => setNote(d, t))}
               placeholder="warmup run, how it felt, anything else..."
-              placeholderTextColor={palette.textFaint}
-              multiline
               maxLength={2000}
               autoFocus
               accessibilityLabel="session note"
@@ -526,29 +533,18 @@ const styles = StyleSheet.create({
   },
   noteCard: {
     backgroundColor: palette.surfaceAlt,
-    borderWidth: 1,
+    borderWidth: borders.bold,
     borderColor: palette.ink,
     borderRadius: radii.md,
-    padding: 12,
-    gap: 8,
-    marginTop: 6,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   noteLabel: {
-    fontSize: 10,
+    fontSize: fontSize.tiny,
     color: palette.textSubtle,
     letterSpacing: 1,
-  },
-  noteInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: 1,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    minHeight: 70,
-    textAlignVertical: "top",
+    fontWeight: "700",
   },
   noteDoneText: {
     fontSize: 13,
