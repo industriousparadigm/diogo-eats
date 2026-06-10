@@ -81,3 +81,25 @@ describe("prompt invariants", () => {
     expect(prompt).toContain("double-counts mass");
   });
 });
+
+describe("exactness-beats-inference invariants", () => {
+  // The Telepizza incident (10 Jun): official whole-product macros were
+  // provided, the parser invented dough/sauce/cheese reference values
+  // instead. Exact data must govern; decomposition survives only as
+  // plant-share apportioning under the label's budget.
+  it.each([
+    ["PARSE_SYSTEM", PARSE_SYSTEM],
+    ["TEXT_SYSTEM", TEXT_SYSTEM],
+  ])("%s makes provided product nutrition ground truth", (_name, prompt) => {
+    expect(prompt).toContain("Exactness beats inference.");
+    expect(prompt).toContain("Do NOT decompose it into its ingredients");
+    expect(prompt).toContain("a budget to apportion, never to overrule");
+  });
+
+  it.each([
+    ["PARSE_SYSTEM", PARSE_SYSTEM],
+    ["TEXT_SYSTEM", TEXT_SYSTEM],
+  ])("%s scopes decomposition to dishes WITHOUT exact data", (_name, prompt) => {
+    expect(prompt).toContain("WITHOUT exact product data");
+  });
+});
