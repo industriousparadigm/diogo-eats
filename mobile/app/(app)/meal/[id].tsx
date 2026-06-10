@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ScrollView,
   Alert,
@@ -39,11 +40,14 @@ import {
   deleteMeal,
   lookupFood,
   patchMealItems,
+  repeatMeal,
   resolvePhotoUrl,
   talkFixMeal,
 } from "@/lib/api";
-import { takeMeal } from "@/lib/stores";
+import { takeMeal, stashNewMeal } from "@/lib/stores";
 import { EditItemRow } from "@/components/EditItemRow";
+import { RepeatButton } from "@/components/RepeatButton";
+import { PhotoLightbox } from "@/components/PhotoLightbox";
 
 export default function MealEditScreen() {
   const router = useRouter();
@@ -86,6 +90,7 @@ function Editor({ meal }: { meal: Meal }) {
   const [talkHint, setTalkHint] = useState<string | null>(null);
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState(false);
 
   useEffect(() => {
     if (!meal.photo_filename) return;
@@ -218,6 +223,13 @@ function Editor({ meal }: { meal: Meal }) {
     ? `${fmtDayLabel(ymd)} · added later`
     : `${fmtDayLabel(ymd)} · ${fmtTime(meal.created_at)}`;
 
+  // Repeat lands on THIS meal's own day (its created_at calendar date),
+  // stashed so the food tab inserts it / jumps there on focus.
+  async function handleRepeat(scale: number) {
+    const repeated = await repeatMeal(meal.id, { scale, forDate: ymd });
+    stashNewMeal(repeated, ymd);
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
@@ -250,28 +262,38 @@ function Editor({ meal }: { meal: Meal }) {
           contentContainerStyle={styles.bodyContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Photo */}
+          {/* Photo — tap to open the full-screen lightbox. */}
           {photoUrl ? (
-            <Image
-              source={{ uri: photoUrl }}
-              style={styles.photo}
-              contentFit="cover"
-              transition={200}
-              cachePolicy="memory-disk"
-            />
+            <Pressable
+              onPress={() => setLightbox(true)}
+              accessibilityLabel="open photo"
+            >
+              <Image
+                source={{ uri: photoUrl }}
+                style={styles.photo}
+                contentFit="cover"
+                transition={200}
+                cachePolicy="memory-disk"
+              />
+            </Pressable>
           ) : meal.photo_filename ? (
             <View style={[styles.photo, styles.photoPlaceholder]}>
               <ActivityIndicator color={colors.textFaint} />
             </View>
           ) : null}
 
-          {/* Caption / vibe / notes */}
+          {/* Caption / vibe / notes + repeat */}
           {meal.caption && <Text style={styles.caption}>“{meal.caption}”</Text>}
-          {meal.meal_vibe && (
-            <View style={styles.vibePill}>
-              <Text style={styles.vibeText}>{meal.meal_vibe}</Text>
-            </View>
-          )}
+          <View style={styles.vibeRow}>
+            {meal.meal_vibe ? (
+              <View style={styles.vibePill}>
+                <Text style={styles.vibeText}>{meal.meal_vibe}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
+            {!isLegacy && <RepeatButton onRepeat={handleRepeat} variant="detail" />}
+          </View>
           {meal.notes && <Text style={styles.notes}>{meal.notes}</Text>}
 
           {isLegacy ? (
@@ -434,6 +456,12 @@ function Editor({ meal }: { meal: Meal }) {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      <PhotoLightbox
+        uri={photoUrl}
+        visible={lightbox}
+        onClose={() => setLightbox(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -536,6 +564,12 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 19,
     paddingHorizontal: 4,
+  },
+  vibeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
   vibePill: {
     alignSelf: "flex-start",

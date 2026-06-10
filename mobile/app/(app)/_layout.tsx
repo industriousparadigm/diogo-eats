@@ -14,6 +14,8 @@ export default function AppLayout() {
     >
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="meal/[id]" />
+      <Stack.Screen name="compose" />
+      <Stack.Screen name="foods" />
       <Stack.Screen name="strength/session" options={{ gestureEnabled: false }} />
       <Stack.Screen name="strength/highlights" options={{ gestureEnabled: false }} />
     </Stack>

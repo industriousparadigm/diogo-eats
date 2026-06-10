@@ -17,17 +17,22 @@ import { colors, radii, plantColor } from "@/lib/colors";
 import { fmtCal, fmtPlant, itemsSummary, fmtTime } from "@/lib/format";
 import { resolvePhotoUrl } from "@/lib/api";
 import type { Meal } from "@/lib/types";
+import { RepeatButton } from "./RepeatButton";
+import { PhotoLightbox } from "./PhotoLightbox";
 
 type Props = {
   meal: Meal;
   onDelete: (id: string) => void;
   // Tap → meal detail/edit screen. Long-press keeps the quick-delete.
   onOpen?: () => void;
+  // Deterministic re-log at a scale. When provided, the ↻ chip shows.
+  onRepeat?: (scale: number) => Promise<void>;
 };
 
-export function MealCard({ meal, onDelete, onOpen }: Props) {
+export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [showDelete, setShowDelete] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
 
   useEffect(() => {
     if (!meal.photo_filename) return;
@@ -76,15 +81,24 @@ export function MealCard({ meal, onDelete, onOpen }: Props) {
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <View style={styles.inner}>
-        {/* Photo thumbnail */}
+        {/* Photo thumbnail — tap to open the full-screen lightbox. */}
         {photoUrl ? (
-          <Image
-            source={{ uri: photoUrl }}
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              setLightbox(true);
+            }}
+            accessibilityLabel="open photo"
             style={styles.thumb}
-            contentFit="cover"
-            transition={200}
-            cachePolicy="memory-disk"
-          />
+          >
+            <Image
+              source={{ uri: photoUrl }}
+              style={styles.thumb}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+            />
+          </Pressable>
         ) : meal.photo_filename ? (
           <View style={[styles.thumb, styles.thumbPlaceholder]}>
             <Text style={styles.thumbPlaceholderText}>...</Text>
@@ -115,9 +129,20 @@ export function MealCard({ meal, onDelete, onOpen }: Props) {
                 {fmtPlant(meal.plant_pct)} plant
               </Text>
             </View>
+            {onRepeat && (
+              <View style={styles.repeatWrap}>
+                <RepeatButton onRepeat={onRepeat} variant="card" />
+              </View>
+            )}
           </View>
         </View>
       </View>
+
+      <PhotoLightbox
+        uri={photoUrl}
+        visible={lightbox}
+        onClose={() => setLightbox(false)}
+      />
 
       {/* Delete affordance — shown on long-press */}
       {showDelete && (
@@ -211,8 +236,12 @@ const styles = StyleSheet.create({
   },
   badges: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     marginTop: 2,
+  },
+  repeatWrap: {
+    marginLeft: "auto",
   },
   badge: {
     paddingHorizontal: 7,

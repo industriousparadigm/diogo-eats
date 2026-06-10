@@ -123,7 +123,25 @@ describe("OverviewScreen", () => {
     mockFetchStats.mockResolvedValue(WEEK);
     const { getByText } = await render(<OverviewScreen />);
     await waitFor(() => {
-      expect(getByText("7 days logged")).toBeTruthy();
+      expect(getByText("7 days logged in this window")).toBeTruthy();
+    });
+  });
+
+  it("defaults the window to 90 days (3M)", async () => {
+    mockFetchStats.mockResolvedValue(WEEK);
+    await render(<OverviewScreen />);
+    await waitFor(() => {
+      expect(mockFetchStats).toHaveBeenCalledWith(90);
+    });
+  });
+
+  it("refetches with 30 days when the 1M window is picked", async () => {
+    mockFetchStats.mockResolvedValue(WEEK);
+    const { getByLabelText } = await render(<OverviewScreen />);
+    await waitFor(() => expect(mockFetchStats).toHaveBeenCalledWith(90));
+    await fireEvent.press(getByLabelText("show 1M"));
+    await waitFor(() => {
+      expect(mockFetchStats).toHaveBeenCalledWith(30);
     });
   });
 

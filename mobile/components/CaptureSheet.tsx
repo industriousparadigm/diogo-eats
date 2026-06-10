@@ -1,15 +1,22 @@
-// Capture sheet — bottom sheet shown when the user taps the camera FAB.
-// Two paths:
-//   1. Photo: expo-image-picker (camera or library, up to 4 images),
-//      client-side resize via expo-image-manipulator (max 2048px JPEG 0.85),
-//      then POST /api/parse.
-//   2. Text: text input → POST /api/parse-text.
+// Unified capture sheet — one sheet, no photo-vs-text mode chooser.
 //
-// On submit, creates an optimistic PendingState visible in the Today
-// list while the API call is in flight. Returns the pending item's id
-// to the parent so it can track completion.
+//   - Photo slot(s): camera + library (≤4), each thumbnail offers a crop
+//     affordance (PhotoCropSheet). Camera shots use ImagePicker's native
+//     allowsEditing crop; library picks get the in-app crop sheet.
+//   - Text field: a caption/description that coexists with photos.
+//   - Recent-meals repeat row: the last ~14 days, newest-first, searchable,
+//     one tap re-logs verbatim (discoverable at logging time).
+//   - Composer entry: jump to build-from-library (zero AI).
+//
+// Submit routes automatically:
+//   photos present → /api/parse (multipart), text becomes the caption
+//   text only      → /api/parse-text
+//   nothing        → disabled
+//
+// Backfill (for_date) flows through to every path. The parent shows the
+// optimistic pending card + retry from the returned CaptureResult.
 
-import { useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -28,8 +35,12 @@ import * as ImageManipulator from "expo-image-manipulator";
 import { Image } from "expo-image";
 import { colors, radii } from "@/lib/colors";
 import { fmtDayLabel } from "@/lib/format";
+import { fetchRecentMeals, repeatMeal } from "@/lib/api";
+import { filterRecentMeals, recentMealLabel } from "@/lib/recentMeals";
+import type { Meal } from "@/lib/types";
+import { PhotoCropSheet } from "./PhotoCropSheet";
 
-export type CaptureMode = "photo" | "text";
+const IS_WEB = Platform.OS === "web";
 
 export type CaptureResult = {
   pendingId: string;
@@ -39,30 +50,45 @@ export type CaptureResult = {
   caption?: string;
   text?: string;
   photoCount?: number;
-  // Backfill target day (YYYY-MM-DD). Undefined = today.
   forDate?: string;
 };
+
+type PickedPhoto = { uri: string; name: string; type: string };
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onSubmit: (result: CaptureResult) => void;
-  // When set, captures log INTO this past day via the parse endpoints'
-  // for_date param. The sheet shows which day it's logging for.
+  // A repeat fired from the recent row that lands on the viewed day.
+  onRepeat?: (meal: Meal) => void;
+  // Jump to the composer (build from library).
+  onCompose?: () => void;
+  // When set, captures log INTO this past day via for_date.
   forDate?: string;
 };
 
 const MAX_PHOTOS = 4;
 
-export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
-  const [mode, setMode] = useState<CaptureMode>("photo");
-  const [pickedPhotos, setPickedPhotos] = useState<
-    Array<{ uri: string; name: string; type: string }>
-  >([]);
-  const [caption, setCaption] = useState("");
-  const [textInput, setTextInput] = useState("");
-  const [loading, setLoading] = useState(false);
+export function CaptureSheet({
+  visible,
+  onClose,
+  onSubmit,
+  onRepeat,
+  onCompose,
+  forDate,
+}: Props) {
+  const [pickedPhotos, setPickedPhotos] = useState<PickedPhoto[]>([]);
+  const [text, setText] = useState("");
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Recent meals for the repeat row.
+  const [recent, setRecent] = useState<Meal[] | null>(null);
+  const [recentSearch, setRecentSearch] = useState("");
+  const [repeatingId, setRepeatingId] = useState<string | null>(null);
+
+  // Crop sheet target (index into pickedPhotos).
+  const [cropIndex, setCropIndex] = useState<number | null>(null);
 
   const pendingIdRef = useRef(0);
 
@@ -73,10 +99,12 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
 
   function reset() {
     setPickedPhotos([]);
-    setCaption("");
-    setTextInput("");
+    setText("");
     setError(null);
-    setLoading(false);
+    setProcessing(false);
+    setRecentSearch("");
+    setRepeatingId(null);
+    setCropIndex(null);
   }
 
   function handleClose() {
@@ -84,7 +112,24 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
     onClose();
   }
 
-  async function resizeImage(uri: string): Promise<{ uri: string; name: string; type: string }> {
+  // Load recent meals when the sheet opens.
+  const loadRecent = useCallback(async () => {
+    try {
+      const meals = await fetchRecentMeals({ days: 14, limit: 50 });
+      setRecent(meals);
+    } catch {
+      setRecent([]); // a failed load just hides the row, never blocks capture
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      setRecent(null);
+      loadRecent();
+    }
+  }, [visible, loadRecent]);
+
+  async function resizeImage(uri: string): Promise<PickedPhoto> {
     const result = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 2048 } }],
@@ -95,6 +140,9 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
   }
 
   async function pickFromCamera() {
+    // Camera is native-only. On web, launchCameraAsync is unreliable, so
+    // the button is hidden there and library (file dialog) covers it.
+    if (IS_WEB) return;
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       setError("Camera permission required");
@@ -102,32 +150,34 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
     }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: "images",
-      allowsEditing: false,
+      allowsEditing: true, // native iOS crop on the captured shot
       quality: 1,
     });
     if (result.canceled || result.assets.length === 0) return;
-    setLoading(true);
+    setProcessing(true);
     setError(null);
     try {
       const resized = await resizeImage(result.assets[0].uri);
-      setPickedPhotos([resized]);
+      setPickedPhotos((prev) => [...prev, resized].slice(0, MAX_PHOTOS));
     } catch {
       setError("Could not process photo — try again");
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   }
 
   async function pickFromLibrary() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      setError("Photo library permission required");
-      return;
-    }
     const remaining = MAX_PHOTOS - pickedPhotos.length;
     if (remaining <= 0) {
       setError(`Max ${MAX_PHOTOS} photos`);
       return;
+    }
+    if (!IS_WEB) {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        setError("Photo library permission required");
+        return;
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
@@ -136,7 +186,7 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
       quality: 1,
     });
     if (result.canceled || result.assets.length === 0) return;
-    setLoading(true);
+    setProcessing(true);
     setError(null);
     try {
       const resized = await Promise.all(result.assets.map((a) => resizeImage(a.uri)));
@@ -144,7 +194,7 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
     } catch {
       setError("Could not process photos — try again");
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   }
 
@@ -152,41 +202,59 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
     setPickedPhotos((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleSubmitPhoto() {
-    if (pickedPhotos.length === 0) {
-      setError("Pick at least one photo");
+  function applyCrop(cropped: PickedPhoto) {
+    setPickedPhotos((prev) =>
+      prev.map((p, i) => (i === cropIndex ? cropped : p))
+    );
+    setCropIndex(null);
+  }
+
+  // One submit button — routes by content.
+  function submit() {
+    if (pickedPhotos.length > 0) {
+      const id = nextId();
+      onSubmit({
+        pendingId: id,
+        kind: "photo",
+        previewUri: pickedPhotos[0].uri,
+        photoUris: pickedPhotos,
+        caption: text.trim() || undefined,
+        photoCount: pickedPhotos.length,
+        forDate,
+      });
+      reset();
+      onClose();
+      return;
+    }
+    const t = text.trim();
+    if (!t) {
+      setError("Add a photo or describe what you ate");
       return;
     }
     const id = nextId();
-    onSubmit({
-      pendingId: id,
-      kind: "photo",
-      previewUri: pickedPhotos[0].uri,
-      photoUris: pickedPhotos,
-      caption: caption.trim() || undefined,
-      photoCount: pickedPhotos.length,
-      forDate,
-    });
+    onSubmit({ pendingId: id, kind: "text", text: t, forDate });
     reset();
     onClose();
   }
 
-  function handleSubmitText() {
-    const text = textInput.trim();
-    if (!text) {
-      setError("Describe what you ate");
-      return;
+  async function onRepeatRecent(meal: Meal) {
+    if (repeatingId) return;
+    setRepeatingId(meal.id);
+    setError(null);
+    try {
+      const repeated = await repeatMeal(meal.id, { scale: 1, forDate });
+      onRepeat?.(repeated);
+      reset();
+      onClose();
+    } catch {
+      setError("Couldn't repeat that — try again");
+      setRepeatingId(null);
     }
-    const id = nextId();
-    onSubmit({
-      pendingId: id,
-      kind: "text",
-      text,
-      forDate,
-    });
-    reset();
-    onClose();
   }
+
+  const filteredRecent = recent ? filterRecentMeals(recent, recentSearch) : [];
+  const canSubmit = (pickedPhotos.length > 0 || text.trim().length > 0) && !processing;
+  const cropTarget = cropIndex != null ? pickedPhotos[cropIndex] ?? null : null;
 
   return (
     <Modal
@@ -200,160 +268,181 @@ export function CaptureSheet({ visible, onClose, onSubmit, forDate }: Props) {
         style={styles.kav}
       >
         <View style={styles.sheet}>
-          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>Cancel</Text>
             </TouchableOpacity>
             <View style={styles.titleWrap}>
               <Text style={styles.title}>Log a meal</Text>
-              {forDate && (
-                <Text style={styles.titleHint}>for {fmtDayLabel(forDate)}</Text>
-              )}
+              {forDate && <Text style={styles.titleHint}>for {fmtDayLabel(forDate)}</Text>}
             </View>
             <View style={styles.closeBtn} />
-          </View>
-
-          {/* Mode selector */}
-          <View style={styles.modeRow}>
-            <TouchableOpacity
-              style={[styles.modeTab, mode === "photo" && styles.modeTabActive]}
-              onPress={() => {
-                setMode("photo");
-                setError(null);
-              }}
-            >
-              <Text
-                style={[styles.modeTabText, mode === "photo" && styles.modeTabTextActive]}
-              >
-                Photo
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeTab, mode === "text" && styles.modeTabActive]}
-              onPress={() => {
-                setMode("text");
-                setError(null);
-              }}
-            >
-              <Text
-                style={[styles.modeTabText, mode === "text" && styles.modeTabTextActive]}
-              >
-                Text
-              </Text>
-            </TouchableOpacity>
           </View>
 
           <ScrollView
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {mode === "photo" ? (
-              <>
-                {/* Photo picker buttons */}
-                <View style={styles.pickRow}>
-                  <TouchableOpacity
-                    style={styles.pickButton}
-                    onPress={pickFromCamera}
-                    disabled={loading}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.pickButtonText}>Camera</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.pickButton}
-                    onPress={pickFromLibrary}
-                    disabled={loading || pickedPhotos.length >= MAX_PHOTOS}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.pickButtonText}>Library</Text>
-                  </TouchableOpacity>
-                </View>
+            {/* Photo slots */}
+            <View style={styles.pickRow}>
+              {!IS_WEB && (
+                <TouchableOpacity
+                  style={styles.pickButton}
+                  onPress={pickFromCamera}
+                  disabled={processing || pickedPhotos.length >= MAX_PHOTOS}
+                  activeOpacity={0.8}
+                  accessibilityLabel="take a photo"
+                >
+                  <Text style={styles.pickButtonText}>Camera</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.pickButton}
+                onPress={pickFromLibrary}
+                disabled={processing || pickedPhotos.length >= MAX_PHOTOS}
+                activeOpacity={0.8}
+                accessibilityLabel={IS_WEB ? "choose a photo" : "pick from library"}
+              >
+                <Text style={styles.pickButtonText}>{IS_WEB ? "Choose photo" : "Library"}</Text>
+              </TouchableOpacity>
+            </View>
 
-                {/* Photo previews */}
-                {pickedPhotos.length > 0 && (
-                  <ScrollView horizontal style={styles.photoRow} showsHorizontalScrollIndicator={false}>
-                    {pickedPhotos.map((p, i) => (
-                      <View key={p.uri} style={styles.photoThumbWrap}>
-                        <Image source={{ uri: p.uri }} style={styles.photoThumb} contentFit="cover" />
-                        <Pressable style={styles.removeBtn} onPress={() => removePhoto(i)}>
-                          <Text style={styles.removeBtnText}>✕</Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-
-                {loading && (
-                  <View style={styles.loadingRow}>
-                    <ActivityIndicator color={colors.brand} />
-                    <Text style={styles.loadingText}>Processing...</Text>
+            {pickedPhotos.length > 0 && (
+              <ScrollView
+                horizontal
+                style={styles.photoRow}
+                showsHorizontalScrollIndicator={false}
+              >
+                {pickedPhotos.map((p, i) => (
+                  <View key={p.uri} style={styles.photoThumbWrap}>
+                    <Image source={{ uri: p.uri }} style={styles.photoThumb} contentFit="cover" />
+                    <Pressable style={styles.removeBtn} onPress={() => removePhoto(i)} accessibilityLabel="remove photo">
+                      <Text style={styles.removeBtnText}>✕</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.cropBtn}
+                      onPress={() => setCropIndex(i)}
+                      accessibilityLabel="crop photo"
+                    >
+                      <Text style={styles.cropBtnText}>crop</Text>
+                    </Pressable>
                   </View>
-                )}
-
-                {/* Optional caption */}
-                <Text style={styles.captionLabel}>Caption (optional)</Text>
-                <TextInput
-                  style={styles.captionInput}
-                  value={caption}
-                  onChangeText={setCaption}
-                  placeholder="small plate, homemade, at restaurant..."
-                  placeholderTextColor={colors.textFaint}
-                  multiline
-                  maxLength={500}
-                />
-
-                {error && <Text style={styles.errorText}>{error}</Text>}
-
-                <TouchableOpacity
-                  style={[
-                    styles.submitButton,
-                    (pickedPhotos.length === 0 || loading) && styles.submitButtonDisabled,
-                  ]}
-                  onPress={handleSubmitPhoto}
-                  disabled={pickedPhotos.length === 0 || loading}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.submitButtonText}>
-                    {pickedPhotos.length > 0
-                      ? `Parse ${pickedPhotos.length} photo${pickedPhotos.length > 1 ? "s" : ""}`
-                      : "Pick a photo first"}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.captionLabel}>What did you eat?</Text>
-                <TextInput
-                  style={[styles.captionInput, styles.textInput]}
-                  value={textInput}
-                  onChangeText={setTextInput}
-                  placeholder="a bowl of oatmeal with banana and chia seeds..."
-                  placeholderTextColor={colors.textFaint}
-                  multiline
-                  maxLength={1000}
-                  autoFocus
-                />
-
-                {error && <Text style={styles.errorText}>{error}</Text>}
-
-                <TouchableOpacity
-                  style={[
-                    styles.submitButton,
-                    !textInput.trim() && styles.submitButtonDisabled,
-                  ]}
-                  onPress={handleSubmitText}
-                  disabled={!textInput.trim()}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.submitButtonText}>Parse</Text>
-                </TouchableOpacity>
-              </>
+                ))}
+              </ScrollView>
             )}
+
+            {processing && (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color={colors.brand} />
+                <Text style={styles.loadingText}>Processing...</Text>
+              </View>
+            )}
+
+            {/* Text field — coexists with photos (becomes the caption). */}
+            <TextInput
+              style={[styles.textInput, pickedPhotos.length > 0 && styles.textInputShort]}
+              value={text}
+              onChangeText={setText}
+              placeholder={
+                pickedPhotos.length > 0
+                  ? "add a caption (optional)…"
+                  : "describe what you ate, or add a photo…"
+              }
+              placeholderTextColor={colors.textFaint}
+              multiline
+              maxLength={1000}
+            />
+
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
+            <TouchableOpacity
+              style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+              onPress={submit}
+              disabled={!canSubmit}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.submitButtonText}>
+                {pickedPhotos.length > 0
+                  ? `Log ${pickedPhotos.length} photo${pickedPhotos.length > 1 ? "s" : ""}`
+                  : "Log it"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Compose from library entry. */}
+            {onCompose && (
+              <TouchableOpacity
+                style={styles.composeBtn}
+                onPress={() => {
+                  reset();
+                  onClose();
+                  onCompose();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.composeText}>+ build from your foods</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Recent meals — one-tap repeat. */}
+            <View style={styles.recentSection}>
+              <Text style={styles.recentLabel}>RECENT — TAP TO LOG AGAIN</Text>
+              {recent === null ? (
+                <ActivityIndicator color={colors.textFaint} style={styles.recentLoader} />
+              ) : recent.length === 0 ? (
+                <Text style={styles.recentEmpty}>
+                  Nothing logged in the last two weeks yet.
+                </Text>
+              ) : (
+                <>
+                  <TextInput
+                    style={styles.recentSearch}
+                    value={recentSearch}
+                    onChangeText={setRecentSearch}
+                    placeholder="search recent meals…"
+                    placeholderTextColor={colors.textFaint}
+                    autoComplete="off"
+                  />
+                  {filteredRecent.length === 0 ? (
+                    <Text style={styles.recentEmpty}>No recent meal matches.</Text>
+                  ) : (
+                    filteredRecent.map((m) => (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={[styles.recentRow, repeatingId === m.id && styles.dim]}
+                        onPress={() => onRepeatRecent(m)}
+                        disabled={!!repeatingId}
+                        activeOpacity={0.7}
+                        accessibilityLabel={`log again: ${recentMealLabel(m)}`}
+                      >
+                        <View style={styles.recentRowMain}>
+                          <Text style={styles.recentRowText} numberOfLines={1}>
+                            {recentMealLabel(m)}
+                          </Text>
+                          <Text style={styles.recentRowSub} numberOfLines={1}>
+                            {Math.round(m.calories)} kcal · {Math.round(m.plant_pct)}% plant
+                          </Text>
+                        </View>
+                        <Text style={styles.recentRepeat}>
+                          {repeatingId === m.id ? "…" : "↻"}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </>
+              )}
+            </View>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+
+      <PhotoCropSheet
+        visible={cropIndex != null}
+        photo={cropTarget}
+        onCancel={() => setCropIndex(null)}
+        onApply={applyCrop}
+      />
     </Modal>
   );
 }
@@ -396,32 +485,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.warn,
     fontWeight: "500",
-  },
-  modeRow: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
-    padding: 4,
-  },
-  modeTab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: radii.sm,
-  },
-  modeTabActive: {
-    backgroundColor: colors.surface,
-  },
-  modeTabText: {
-    fontSize: 14,
-    color: colors.textSubtle,
-    fontWeight: "500",
-  },
-  modeTabTextActive: {
-    color: colors.text,
-    fontWeight: "600",
   },
   body: {
     flex: 1,
@@ -479,6 +542,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
+  cropBtn: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  cropBtnText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -489,13 +567,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
   },
-  captionLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  captionInput: {
+  textInput: {
     backgroundColor: colors.surfaceMuted,
     color: colors.text,
     borderWidth: 1,
@@ -504,11 +576,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     fontSize: 15,
-    minHeight: 44,
-  },
-  textInput: {
-    minHeight: 120,
+    minHeight: 110,
     textAlignVertical: "top",
+  },
+  textInputShort: {
+    minHeight: 56,
   },
   errorText: {
     fontSize: 13,
@@ -519,7 +591,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingVertical: 16,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 4,
   },
   submitButtonDisabled: {
     opacity: 0.4,
@@ -528,5 +600,76 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: colors.bg,
+  },
+  composeBtn: {
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.borderDashed,
+    borderRadius: radii.sm,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  composeText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  recentSection: {
+    marginTop: 12,
+    gap: 8,
+  },
+  recentLabel: {
+    fontSize: 11,
+    color: colors.textSubtle,
+    letterSpacing: 0.5,
+    fontWeight: "500",
+  },
+  recentLoader: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  recentEmpty: {
+    fontSize: 13,
+    color: colors.textFaint,
+  },
+  recentSearch: {
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radii.sm,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  recentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  recentRowMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  recentRowText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  recentRowSub: {
+    fontSize: 11,
+    color: colors.textFaint,
+  },
+  recentRepeat: {
+    fontSize: 16,
+    color: colors.textMuted,
+  },
+  dim: {
+    opacity: 0.5,
   },
 });

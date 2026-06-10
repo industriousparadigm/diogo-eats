@@ -17,7 +17,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { colors, radii } from "@/lib/colors";
 import { ApiError, fetchProfile, saveTargets } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -58,6 +58,7 @@ const FIELDS: Array<{
 ];
 
 export default function SettingsScreen() {
+  const router = useRouter();
   // draft holds the text-field values so partial input ("1", "") doesn't
   // fight the numeric state while typing.
   const [draft, setDraft] = useState<Record<FieldKey, string> | null>(null);
@@ -213,6 +214,22 @@ export default function SettingsScreen() {
             </>
           )}
 
+          <Text style={[styles.sectionLabel, styles.accountLabel]}>YOUR FOODS</Text>
+          <TouchableOpacity
+            style={styles.foodsBtn}
+            onPress={() => router.push("/(app)/foods")}
+            activeOpacity={0.8}
+            accessibilityLabel="open foods library"
+          >
+            <View style={styles.foodsBtnMain}>
+              <Text style={styles.foodsBtnTitle}>Foods library</Text>
+              <Text style={styles.foodsBtnSub}>
+                Search, edit, merge, add by hand, or read a label.
+              </Text>
+            </View>
+            <Text style={styles.foodsBtnChevron}>›</Text>
+          </TouchableOpacity>
+
           <Text style={[styles.sectionLabel, styles.accountLabel]}>ACCOUNT</Text>
           <View style={styles.accountCard}>
             <View style={styles.accountRow}>
@@ -357,6 +374,34 @@ const styles = StyleSheet.create({
   },
   accountLabel: {
     marginTop: 24,
+  },
+  foodsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: 14,
+    gap: 12,
+  },
+  foodsBtnMain: {
+    flex: 1,
+    gap: 3,
+  },
+  foodsBtnTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  foodsBtnSub: {
+    fontSize: 12,
+    color: colors.textSubtle,
+    lineHeight: 16,
+  },
+  foodsBtnChevron: {
+    fontSize: 22,
+    color: colors.textFaint,
   },
   accountCard: {
     backgroundColor: colors.surface,

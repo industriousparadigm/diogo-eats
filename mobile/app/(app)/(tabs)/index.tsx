@@ -22,12 +22,20 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { fetchMeals, deleteMeal, parseMealPhoto, parseMealText, ApiError } from "@/lib/api";
+import {
+  fetchMeals,
+  deleteMeal,
+  parseMealPhoto,
+  parseMealText,
+  repeatMeal,
+  ApiError,
+} from "@/lib/api";
 import { computeDayTotals } from "@/lib/types";
 import { dayNavLabel, shiftYmd, todayYmd } from "@/lib/format";
 import { colors, radii } from "@/lib/colors";
-import { consumePendingDay, onDayPicked, stashMeal } from "@/lib/stores";
+import { consumePendingDay, onDayPicked, stashMeal, takeNewMeal } from "@/lib/stores";
 import { MealCard } from "@/components/MealCard";
+import { CopyDayButton } from "@/components/CopyDayButton";
 import { DayTotalsStrip } from "@/components/DayTotalsStrip";
 import { PendingCard, type PendingState } from "@/components/PendingCard";
 import { CaptureSheet, type CaptureResult } from "@/components/CaptureSheet";
@@ -87,6 +95,22 @@ export default function DayScreen() {
   const firstFocusRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
+      // A meal created on a pushed screen (composer) lands here. If it
+      // belongs to the viewed day, insert it; otherwise jump to its day.
+      const created = takeNewMeal();
+      if (created) {
+        firstFocusRef.current = false;
+        if (created.day === dayRef.current) {
+          setMeals((prev) =>
+            [created.meal, ...prev.filter((m) => m.id !== created.meal.id)].sort(
+              (a, b) => b.created_at - a.created_at
+            )
+          );
+        } else {
+          setDay(created.day); // day change triggers a full load via the effect
+        }
+        return;
+      }
       const picked = consumePendingDay();
       if (picked && picked !== dayRef.current) {
         firstFocusRef.current = false;
@@ -147,6 +171,31 @@ export default function DayScreen() {
   function openMeal(meal: Meal) {
     stashMeal(meal);
     router.push(`/(app)/meal/${meal.id}`);
+  }
+
+  // Deterministic re-log. On a past day, land the copy on THAT day via
+  // for_date so a ↻ in yesterday's list stays in yesterday. Insert the
+  // returned meal if the user is still viewing the day it landed on.
+  async function repeatMealOnViewedDay(id: string, scale: number) {
+    const forDate = isToday ? undefined : day;
+    const meal = await repeatMeal(id, { scale, forDate });
+    const targetDay = forDate ?? todayYmd();
+    if (dayRef.current === targetDay) {
+      setMeals((prev) =>
+        [meal, ...prev].sort((a, b) => b.created_at - a.created_at)
+      );
+    }
+  }
+
+  // A composed meal (from the capture sheet → composer) lands like a parse
+  // result: insert if the user is still on the day it landed on.
+  function onComposedMeal(meal: Meal, forDate?: string) {
+    const targetDay = forDate ?? todayYmd();
+    if (dayRef.current === targetDay) {
+      setMeals((prev) =>
+        [meal, ...prev].sort((a, b) => b.created_at - a.created_at)
+      );
+    }
   }
 
   // Called when user submits from CaptureSheet.
@@ -278,7 +327,16 @@ export default function DayScreen() {
       case "whoop":
         return <WhoopChip />;
       case "totals":
-        return <DayTotalsStrip totals={totals} />;
+        return (
+          <View>
+            {meals.length > 0 && (
+              <View style={styles.copyRow}>
+                <CopyDayButton meals={meals} ymd={day} />
+              </View>
+            )}
+            <DayTotalsStrip totals={totals} />
+          </View>
+        );
       case "pending":
         return (
           <PendingCard
@@ -293,6 +351,7 @@ export default function DayScreen() {
             meal={item.item}
             onDelete={handleDelete}
             onOpen={() => openMeal(item.item)}
+            onRepeat={(scale) => repeatMealOnViewedDay(item.item.id, scale)}
           />
         );
       case "empty":
@@ -359,6 +418,10 @@ export default function DayScreen() {
         visible={captureOpen}
         onClose={() => setCaptureOpen(false)}
         onSubmit={handleCaptureSubmit}
+        onRepeat={(meal) => onComposedMeal(meal, isToday ? undefined : day)}
+        onCompose={() =>
+          router.push(isToday ? "/(app)/compose" : `/(app)/compose?date=${day}`)
+        }
         forDate={isToday ? undefined : day}
       />
     </SafeAreaView>
@@ -412,6 +475,12 @@ const styles = StyleSheet.create({
   dayHint: {
     fontSize: 11,
     color: colors.textFaint,
+  },
+  copyRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   emptyState: {
     paddingHorizontal: 16,

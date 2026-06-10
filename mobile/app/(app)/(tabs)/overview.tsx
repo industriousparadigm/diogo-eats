@@ -4,7 +4,7 @@
 //   fiber trend (the lever to KEEP UP) -> sat fat trend (keep down).
 // No streaks, no badges, no grades — identity language only.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -24,18 +24,26 @@ import { pickDay } from "@/lib/stores";
 import { Heatmap } from "@/components/Heatmap";
 import { TrendChart } from "@/components/TrendChart";
 
+// Overview window options — a month vs a quarter. Drives both the fetch
+// size and how much of the heatmap / trends the screen renders.
+const WINDOWS = [
+  { days: 30, label: "1M" },
+  { days: 90, label: "3M" },
+] as const;
+
 export default function OverviewScreen() {
   const router = useRouter();
   const [aggs, setAggs] = useState<DayAggregate[] | null>(null);
   const [targets, setTargets] = useState<Targets>(DEFAULT_TARGETS);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [windowDays, setWindowDays] = useState<number>(90);
   const loadedOnce = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const [stats, profile] = await Promise.all([
-        fetchStats(84),
+        fetchStats(windowDays),
         fetchProfile().catch(() => null),
       ]);
       setAggs(stats);
@@ -55,13 +63,30 @@ export default function OverviewScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [windowDays]);
 
   useFocusEffect(
     useCallback(() => {
       load();
     }, [load])
   );
+
+  // Refetch when the window changes (focus already covers the first load).
+  const windowMountRef = useRef(true);
+  useEffect(() => {
+    if (windowMountRef.current) {
+      windowMountRef.current = false;
+      return;
+    }
+    load();
+  }, [windowDays, load]);
+
+  // Switching the window refetches immediately (don't wait for re-focus).
+  function changeWindow(days: number) {
+    if (days === windowDays) return;
+    setAggs(null);
+    setWindowDays(days);
+  }
 
   function onPickDate(ymd: string) {
     pickDay(ymd);
@@ -92,12 +117,29 @@ export default function OverviewScreen() {
       >
         <View style={styles.headerRow}>
           <Text style={styles.title}>Looking back</Text>
-          {!loading && (
-            <Text style={styles.loggedCount}>
-              {logged} day{logged === 1 ? "" : "s"} logged
-            </Text>
-          )}
+          <View style={styles.windowToggle}>
+            {WINDOWS.map((w) => {
+              const active = w.days === windowDays;
+              return (
+                <TouchableOpacity
+                  key={w.days}
+                  onPress={() => changeWindow(w.days)}
+                  style={[styles.windowBtn, active && styles.windowBtnActive]}
+                  accessibilityLabel={`show ${w.label}`}
+                >
+                  <Text style={[styles.windowText, active && styles.windowTextActive]}>
+                    {w.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
+        {!loading && (
+          <Text style={styles.loggedCount}>
+            {logged} day{logged === 1 ? "" : "s"} logged in this window
+          </Text>
+        )}
 
         {loading ? (
           <View style={styles.skeleton} />
@@ -223,6 +265,32 @@ const styles = StyleSheet.create({
   loggedCount: {
     fontSize: 12,
     color: colors.textFaint,
+  },
+  windowToggle: {
+    flexDirection: "row",
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    padding: 3,
+    gap: 2,
+  },
+  windowBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  windowBtnActive: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  windowText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.textSubtle,
+    letterSpacing: 0.3,
+  },
+  windowTextActive: {
+    color: colors.text,
   },
   skeleton: {
     height: 320,
