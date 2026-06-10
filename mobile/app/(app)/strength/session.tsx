@@ -26,7 +26,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { colors, radii, exerciseAccent } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, exerciseIdentity } from "@/lib/theme";
+import { Card, Button } from "@/components/ui";
 import { ApiError, completeStrengthSession, fetchStrengthOverview } from "@/lib/api";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draftStorage";
 import { exerciseImage } from "@/lib/exerciseImages";
@@ -164,7 +165,7 @@ export default function StrengthSessionScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <ActivityIndicator color={colors.strength.brand} />
+            <ActivityIndicator color={palette.strength.brand} />
           )}
         </View>
       </SafeAreaView>
@@ -221,20 +222,19 @@ export default function StrengthSessionScreen() {
           const ex = byId.get(id);
           if (!ex) return null;
           const state = draft.overview.states.find((s) => s.exercise_id === id);
-          const accent = exerciseAccent(id);
+          const accent = exerciseIdentity(id).accent;
           const done = exerciseDone(draft, id);
           const img = exerciseImage(ex.image_key);
           const confirmed = confirmedCount(draft, id);
           return (
-            <TouchableOpacity
+            <Card
               key={id}
-              style={[
-                styles.pickCard,
-                { borderColor: done ? colors.border : accent },
-                done && styles.pickCardDone,
-              ]}
+              identity={done ? palette.ink : accent}
+              depth="loud"
+              dimmed={done}
+              tone={done ? "recessed" : "raised"}
+              style={styles.pickCard}
               onPress={() => setView({ kind: "entry", exerciseId: id })}
-              activeOpacity={0.85}
               accessibilityLabel={`${ex.name}${done ? ", logged" : ""}`}
             >
               {img && (
@@ -247,7 +247,7 @@ export default function StrengthSessionScreen() {
                 <Text
                   style={[
                     styles.pickName,
-                    { color: done ? colors.textMuted : accent },
+                    { color: done ? palette.textMuted : accent },
                   ]}
                 >
                   {ex.name}
@@ -265,7 +265,7 @@ export default function StrengthSessionScreen() {
                 )}
               </View>
               {done && <Text style={[styles.pickCheck, { color: accent }]}>✓</Text>}
-            </TouchableOpacity>
+            </Card>
           );
         })}
 
@@ -278,7 +278,7 @@ export default function StrengthSessionScreen() {
               value={draft.note}
               onChangeText={(t) => update((d) => setNote(d, t))}
               placeholder="warmup run, how it felt, anything else..."
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               multiline
               maxLength={2000}
               autoFocus
@@ -301,22 +301,16 @@ export default function StrengthSessionScreen() {
 
       {/* Session complete — explicit, sticky */}
       <View style={styles.completeBar}>
-        <TouchableOpacity
-          style={[
-            styles.completeBtn,
-            (totalConfirmed === 0 || submitting) && styles.completeBtnDisabled,
-          ]}
-          onPress={complete}
+        <Button
+          label="Session complete"
+          variant="primary"
+          accent={palette.strength.brand}
+          size="lg"
+          loading={submitting}
           disabled={totalConfirmed === 0 || submitting}
-          activeOpacity={0.85}
+          onPress={complete}
           accessibilityLabel="session complete"
-        >
-          {submitting ? (
-            <ActivityIndicator color={colors.bg} />
-          ) : (
-            <Text style={styles.completeBtnText}>Session complete</Text>
-          )}
-        </TouchableOpacity>
+        />
       </View>
     </SafeAreaView>
   );
@@ -340,7 +334,7 @@ function EntryView({
   // Defensive: an unknown exercise just renders nothing (shouldn't happen —
   // entries are created for every catalog exercise at draft creation).
   if (!ex || !entry) return null;
-  const accent = exerciseAccent(exerciseId);
+  const accent = exerciseIdentity(exerciseId).accent;
   const img = exerciseImage(ex.image_key);
   const confirmed = confirmedCount(draft, exerciseId);
 
@@ -370,10 +364,10 @@ function EntryView({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.entryHero, { borderColor: accent }]}>
+          <Card identity={accent} depth="loud" style={styles.entryHero}>
             {img && <Image source={img} style={styles.entryImage} />}
             <Text style={styles.entryDesc}>{ex.description}</Text>
-          </View>
+          </Card>
 
           {entry.series.map((s, i) => (
             <SeriesRow
@@ -400,18 +394,18 @@ function EntryView({
         </ScrollView>
 
         <View style={styles.completeBar}>
-          <TouchableOpacity
-            style={[styles.entryDoneBtn, { backgroundColor: accent }]}
-            onPress={onBack}
-            activeOpacity={0.85}
-            accessibilityLabel="done with this exercise"
-          >
-            <Text style={styles.completeBtnText}>
-              {confirmed > 0
+          <Button
+            label={
+              confirmed > 0
                 ? `Done — ${confirmed} set${confirmed === 1 ? "" : "s"} logged`
-                : "Back to exercises"}
-            </Text>
-          </TouchableOpacity>
+                : "Back to exercises"
+            }
+            variant="primary"
+            accent={accent}
+            size="lg"
+            onPress={onBack}
+            accessibilityLabel="done with this exercise"
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -421,7 +415,7 @@ function EntryView({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   kav: {
     flex: 1,
@@ -440,7 +434,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: palette.ink,
   },
   headerBtn: {
     minWidth: 56,
@@ -450,18 +444,18 @@ const styles = StyleSheet.create({
   },
   headerBtnText: {
     fontSize: 26,
-    color: colors.textMuted,
+    color: palette.textMuted,
     lineHeight: 30,
   },
   headerTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: colors.text,
+    color: palette.text,
     letterSpacing: 1,
   },
   discardText: {
     fontSize: 12,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
   },
   pickerContent: {
     padding: 16,
@@ -470,27 +464,22 @@ const styles = StyleSheet.create({
   },
   pickerHint: {
     fontSize: 12,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     marginBottom: 2,
   },
   pickCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderRadius: radii.lg,
-    padding: 12,
-    gap: 12,
-  },
-  pickCardDone: {
-    opacity: 0.75,
-    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   pickImage: {
     width: 72,
     height: 52,
     borderRadius: radii.sm,
-    backgroundColor: "#fff",
+    backgroundColor: palette.white,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   pickImageDone: {
     opacity: 0.5,
@@ -506,21 +495,21 @@ const styles = StyleSheet.create({
   },
   pickLast: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
     fontVariant: ["tabular-nums"],
   },
   pickDoneLine: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
   },
   pickCheck: {
     fontSize: 20,
     fontWeight: "800",
   },
   noteCard: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: palette.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.ink,
     borderRadius: radii.md,
     padding: 12,
     gap: 8,
@@ -528,14 +517,14 @@ const styles = StyleSheet.create({
   },
   noteLabel: {
     fontSize: 10,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     letterSpacing: 1,
   },
   noteInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -545,14 +534,14 @@ const styles = StyleSheet.create({
   },
   noteDoneText: {
     fontSize: 13,
-    color: colors.strength.brandBright,
+    color: palette.strength.brandBright,
     fontWeight: "600",
     alignSelf: "flex-end",
   },
   noteBtn: {
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: colors.borderDashed,
+    borderColor: palette.borderDashed,
     borderRadius: radii.md,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -560,100 +549,80 @@ const styles = StyleSheet.create({
   },
   noteBtnText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: palette.textMuted,
   },
   submitError: {
     fontSize: 13,
-    color: colors.bad,
+    color: palette.danger,
     textAlign: "center",
     marginTop: 8,
     lineHeight: 19,
   },
   completeBar: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: 16,
+    borderTopWidth: borders.bold,
+    borderTopColor: palette.ink,
+    padding: spacing.lg,
     paddingBottom: 28,
-    backgroundColor: colors.bg,
-  },
-  completeBtn: {
-    backgroundColor: colors.strength.brand,
-    borderRadius: radii.lg,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  completeBtnDisabled: {
-    opacity: 0.35,
-  },
-  completeBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.bg,
+    backgroundColor: palette.bg,
   },
   entryContent: {
-    padding: 16,
-    gap: 10,
-    paddingBottom: 24,
+    padding: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl,
   },
   entryHero: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderRadius: radii.lg,
-    padding: 12,
-    marginBottom: 4,
+    gap: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
   },
   entryImage: {
     width: 88,
     height: 64,
     borderRadius: radii.sm,
-    backgroundColor: "#fff",
+    backgroundColor: palette.white,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   entryDesc: {
     flex: 1,
     fontSize: 12,
-    color: colors.textMuted,
+    color: palette.textMuted,
     lineHeight: 18,
   },
   addSeriesBtn: {
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: colors.borderDashed,
+    borderColor: palette.borderDashed,
     borderRadius: radii.md,
     paddingVertical: 12,
     alignItems: "center",
   },
   addSeriesText: {
     fontSize: 13,
-    color: colors.textMuted,
-  },
-  entryDoneBtn: {
-    borderRadius: radii.lg,
-    paddingVertical: 16,
-    alignItems: "center",
+    color: palette.textMuted,
   },
   errorText: {
     fontSize: 14,
-    color: colors.bad,
+    color: palette.danger,
     textAlign: "center",
   },
   retryBtn: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "transparent",
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.md,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
   retryText: {
     fontSize: 14,
-    color: colors.text,
+    color: palette.text,
     fontWeight: "600",
   },
   leaveText: {
     fontSize: 13,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
   },
 });

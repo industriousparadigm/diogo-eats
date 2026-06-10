@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { colors } from "@/lib/colors";
+import { palette, radii, borders, fontSize } from "@/lib/theme";
 import { fetchWhoopToday, syncWhoop, type WhoopToday } from "@/lib/api";
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
@@ -48,12 +48,12 @@ export function WhoopChip() {
   // Recovery tint: matches Whoop's own color language, restrained.
   const recColor =
     recovery == null
-      ? colors.textFaint
+      ? palette.textSubtle
       : recovery < 34
-        ? colors.bad
+        ? palette.danger
         : recovery < 67
-          ? colors.warn
-          : colors.accentBright;
+          ? palette.warn
+          : palette.food.accentBright;
 
   return (
     <View style={styles.row}>
@@ -84,28 +84,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(132,204,22,0.06)",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
+    backgroundColor: palette.food.accentSoft,
+    borderWidth: borders.hairline,
+    borderColor: palette.ink,
+    borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 5,
   },
   label: {
-    fontSize: 10,
-    fontWeight: "500",
+    fontSize: fontSize.tiny,
+    fontWeight: "700",
     letterSpacing: 0.5,
-    color: colors.textMuted,
+    color: palette.textMuted,
   },
   strainValue: {
-    color: colors.text,
-    fontWeight: "700",
+    color: palette.text,
+    fontWeight: "800",
   },
   recValue: {
-    fontWeight: "700",
+    fontWeight: "800",
   },
   dot: {
-    color: colors.textFaint,
-    fontSize: 10,
+    color: palette.textSubtle,
+    fontSize: fontSize.tiny,
   },
 });

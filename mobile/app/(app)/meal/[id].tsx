@@ -31,7 +31,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Card, Chip, SectionHeader, Button, StatNumber } from "@/components/ui";
 import { computeTotals } from "@/lib/editTotals";
 import { parseItems, type Item, type Meal } from "@/lib/types";
 import { fmt, fmtCal, fmtTime, fmtDayLabel } from "@/lib/format";
@@ -278,7 +279,7 @@ function Editor({ meal }: { meal: Meal }) {
             </Pressable>
           ) : meal.photo_filename ? (
             <View style={[styles.photo, styles.photoPlaceholder]}>
-              <ActivityIndicator color={colors.textFaint} />
+              <ActivityIndicator color={palette.textSubtle} />
             </View>
           ) : null}
 
@@ -286,9 +287,7 @@ function Editor({ meal }: { meal: Meal }) {
           {meal.caption && <Text style={styles.caption}>“{meal.caption}”</Text>}
           <View style={styles.vibeRow}>
             {meal.meal_vibe ? (
-              <View style={styles.vibePill}>
-                <Text style={styles.vibeText}>{meal.meal_vibe}</Text>
-              </View>
+              <Chip label={meal.meal_vibe} tone="accent" identity={palette.food.accentDeep} />
             ) : (
               <View />
             )}
@@ -297,22 +296,22 @@ function Editor({ meal }: { meal: Meal }) {
           {meal.notes && <Text style={styles.notes}>{meal.notes}</Text>}
 
           {isLegacy ? (
-            <View style={styles.legacyCard}>
+            <Card style={styles.legacyCard}>
               <Text style={styles.legacyText}>
                 This meal predates per-item nutrition. Delete and re-log to edit.
               </Text>
-            </View>
+            </Card>
           ) : (
             <>
               {/* Talk-to-fix */}
-              <View style={styles.talkCard}>
-                <Text style={styles.talkLabel}>QUICK FIX — TELL CLAUDE</Text>
+              <Card tone="recessed" style={styles.talkCard}>
+                <SectionHeader>QUICK FIX — TELL CLAUDE</SectionHeader>
                 <TextInput
                   style={styles.talkInput}
                   value={talkMsg}
                   onChangeText={setTalkMsg}
                   placeholder="e.g. it's all plant / smaller portion / add olive oil"
-                  placeholderTextColor={colors.textFaint}
+                  placeholderTextColor={palette.textFaint}
                   multiline
                   maxLength={500}
                   editable={!talkBusy && !busy}
@@ -330,7 +329,7 @@ function Editor({ meal }: { meal: Meal }) {
                   >
                     {talkBusy ? (
                       <View style={styles.talkBtnInner}>
-                        <ActivityIndicator size="small" color="#fff" />
+                        <ActivityIndicator size="small" color={palette.onAccent} />
                         <Text style={styles.talkBtnText}>thinking…</Text>
                       </View>
                     ) : (
@@ -342,7 +341,7 @@ function Editor({ meal }: { meal: Meal }) {
                     <Text style={styles.talkHint}>{talkHint}</Text>
                   )}
                 </View>
-              </View>
+              </Card>
 
               {/* Items */}
               <View style={styles.itemsList}>
@@ -364,7 +363,7 @@ function Editor({ meal }: { meal: Meal }) {
                       value={addName}
                       onChangeText={setAddName}
                       placeholder="e.g. olive oil, avocado, salmon"
-                      placeholderTextColor={colors.textFaint}
+                      placeholderTextColor={palette.textFaint}
                       editable={!addBusy}
                       autoFocus
                       accessibilityLabel="new item name"
@@ -375,7 +374,7 @@ function Editor({ meal }: { meal: Meal }) {
                         value={addGrams}
                         onChangeText={setAddGrams}
                         placeholder="grams"
-                        placeholderTextColor={colors.textFaint}
+                        placeholderTextColor={palette.textFaint}
                         keyboardType="numeric"
                         editable={!addBusy}
                         accessibilityLabel="new item grams"
@@ -428,30 +427,28 @@ function Editor({ meal }: { meal: Meal }) {
         {!isLegacy && (
           <View style={styles.saveBar}>
             <View style={styles.liveRow}>
-              <LiveStat label="kcal" value={fmtCal(live.calories)} />
-              <LiveStat label="sat" value={`${live.sat_fat_g.toFixed(1)}g`} />
-              <LiveStat label="fib" value={`${live.soluble_fiber_g.toFixed(1)}g`} />
-              <LiveStat label="pro" value={`${fmt(live.protein_g, 0)}g`} />
-              <LiveStat label="plant" value={`${live.plant_pct}%`} />
+              <StatNumber label="kcal" value={fmtCal(live.calories)} align="left" />
+              <StatNumber label="sat" value={`${live.sat_fat_g.toFixed(1)}g`} align="left" />
+              <StatNumber label="fib" value={`${live.soluble_fiber_g.toFixed(1)}g`} align="left" />
+              <StatNumber label="pro" value={`${fmt(live.protein_g, 0)}g`} align="left" />
+              <StatNumber label="plant" value={`${live.plant_pct}%`} color={palette.food.accent} align="left" />
             </View>
             <View style={styles.saveRow}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
+              <Button
+                label="cancel"
+                variant="secondary"
+                accent={palette.textMuted}
                 onPress={() => router.back()}
                 disabled={busy}
-              >
-                <Text style={styles.cancelBtnText}>cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+                style={styles.cancelBtn}
+              />
+              <Button
+                label={busy ? "saving…" : dirty ? "save" : "no changes"}
+                variant="primary"
                 onPress={save}
                 disabled={!canSave}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveBtnText}>
-                  {busy ? "saving…" : dirty ? "save" : "no changes"}
-                </Text>
-              </TouchableOpacity>
+                style={styles.saveBtn}
+              />
             </View>
           </View>
         )}
@@ -466,19 +463,10 @@ function Editor({ meal }: { meal: Meal }) {
   );
 }
 
-function LiveStat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.liveStat}>
-      <Text style={styles.liveStatLabel}>{label.toUpperCase()}</Text>
-      <Text style={styles.liveStatValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   kav: {
     flex: 1,
@@ -487,33 +475,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
+    gap: spacing.lg,
   },
   missingText: {
-    fontSize: 16,
-    color: colors.textMuted,
+    fontSize: fontSize.title,
+    color: palette.textMuted,
   },
   missingBack: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "transparent",
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.md,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
   missingBackText: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "600",
+    color: palette.text,
+    fontSize: fontSize.body,
+    fontWeight: "700",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: borders.bold,
+    borderBottomColor: palette.ink,
+    gap: spacing.sm,
   },
   backBtn: {
     width: 40,
@@ -523,125 +511,102 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     fontSize: 26,
-    color: colors.textMuted,
+    color: palette.textMuted,
     lineHeight: 30,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 12,
-    color: colors.textMuted,
-    letterSpacing: 0.5,
+    fontSize: fontSize.label,
+    fontWeight: "700",
+    color: palette.textMuted,
+    letterSpacing: 1,
   },
   deleteBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
   deleteBtnText: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.danger,
+    fontWeight: "600",
   },
   body: {
     flex: 1,
   },
   bodyContent: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 24,
+    padding: spacing.lg,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   photo: {
     width: "100%",
     height: 220,
     borderRadius: radii.md,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
+    borderWidth: borders.chunky,
+    borderColor: palette.ink,
   },
   photoPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
   },
   caption: {
-    fontSize: 13,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
     fontStyle: "italic",
     lineHeight: 19,
-    paddingHorizontal: 4,
+    paddingHorizontal: spacing.xs,
   },
   vibeRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-  },
-  vibePill: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(132,204,22,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(132,204,22,0.20)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  vibeText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: colors.accentLight,
+    gap: spacing.sm,
   },
   notes: {
-    fontSize: 12,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
     fontStyle: "italic",
     lineHeight: 18,
-    paddingHorizontal: 4,
+    paddingHorizontal: spacing.xs,
   },
   legacyCard: {
-    padding: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    padding: spacing.lg,
   },
   legacyText: {
-    fontSize: 14,
-    color: colors.textMuted,
+    fontSize: fontSize.body,
+    color: palette.textMuted,
     lineHeight: 21,
   },
   talkCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    padding: 10,
-    gap: 8,
-  },
-  talkLabel: {
-    fontSize: 11,
-    color: colors.textSubtle,
-    letterSpacing: 0.5,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   talkInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.body,
     minHeight: 60,
     textAlignVertical: "top",
   },
   talkRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: spacing.md,
   },
   talkBtn: {
-    backgroundColor: "#0c4a6e",
+    backgroundColor: palette.food.accentDeep,
     borderRadius: radii.sm,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 9,
   },
   talkBtnDisabled: {
-    backgroundColor: "#3f3f46",
+    backgroundColor: palette.inkSoft,
   },
   talkBtnInner: {
     flexDirection: "row",
@@ -649,154 +614,121 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   talkBtnText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
+    color: palette.onAccent,
+    fontSize: fontSize.caption,
+    fontWeight: "800",
   },
   talkError: {
     flex: 1,
-    fontSize: 11,
-    color: colors.bad,
+    fontSize: fontSize.label,
+    color: palette.danger,
   },
   talkHint: {
     flex: 1,
-    fontSize: 11,
-    color: colors.accentBright,
+    fontSize: fontSize.label,
+    color: palette.food.accentBright,
   },
   itemsList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   addCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: borders.hairline,
     borderStyle: "dashed",
-    borderColor: colors.borderDashed,
+    borderColor: palette.borderDashed,
     borderRadius: radii.sm,
-    padding: 10,
-    gap: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   addNameInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.body,
   },
   addRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
   },
   addGramsInput: {
     flex: 1,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.body,
   },
   addCancelBtn: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.lg,
     justifyContent: "center",
   },
   addCancelText: {
-    color: colors.textMuted,
-    fontSize: 13,
+    color: palette.textMuted,
+    fontSize: fontSize.caption,
   },
   addConfirmBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.food.accent,
     borderRadius: radii.sm,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     justifyContent: "center",
   },
   addConfirmText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
+    color: palette.onAccent,
+    fontSize: fontSize.caption,
+    fontWeight: "800",
   },
   addItemBtn: {
-    borderWidth: 1,
+    borderWidth: borders.hairline,
     borderStyle: "dashed",
-    borderColor: colors.borderDashed,
+    borderColor: palette.borderDashed,
     borderRadius: radii.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   addItemBtnText: {
-    fontSize: 13,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
   },
   errorCard: {
     backgroundColor: "#7f1d1d",
-    padding: 12,
+    padding: spacing.md,
     borderRadius: radii.sm,
   },
   errorCardText: {
-    fontSize: 13,
-    color: "#fff",
+    fontSize: fontSize.caption,
+    color: palette.white,
   },
   saveBar: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bg,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 24,
-    gap: 10,
+    borderTopWidth: borders.bold,
+    borderTopColor: palette.ink,
+    backgroundColor: palette.bg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md,
   },
   liveRow: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  liveStat: {
-    flex: 1,
-  },
-  liveStatLabel: {
-    fontSize: 9,
-    color: colors.textSubtle,
-    letterSpacing: 0.5,
-  },
-  liveStatValue: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: "500",
-  },
   saveRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
   },
   cancelBtn: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radii.sm,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  cancelBtnText: {
-    color: colors.textMuted,
-    fontSize: 14,
+    paddingHorizontal: spacing.xl,
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: colors.accent,
-    borderRadius: radii.sm,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  saveBtnDisabled: {
-    backgroundColor: "#3f3f46",
-  },
-  saveBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
   },
 });

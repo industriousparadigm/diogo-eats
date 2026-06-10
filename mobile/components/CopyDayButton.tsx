@@ -8,7 +8,7 @@
 import { useRef, useState } from "react";
 import { Text, TouchableOpacity, StyleSheet } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { colors } from "@/lib/colors";
+import { palette, radii, borders, fontSize } from "@/lib/theme";
 import { formatDayReport } from "@/lib/dayReport";
 import type { Meal } from "@/lib/types";
 
@@ -64,29 +64,29 @@ export function CopyDayButton({ meals, ymd }: Props) {
 
 const styles = StyleSheet.create({
   btn: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: 999,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
+    borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   btnCopied: {
-    borderColor: colors.accent,
+    borderColor: palette.food.accent,
   },
   btnFailed: {
-    borderColor: colors.bad,
+    borderColor: palette.danger,
   },
   text: {
-    fontSize: 10,
+    fontSize: fontSize.tiny,
     letterSpacing: 0.5,
-    fontWeight: "500",
-    color: colors.textMuted,
+    fontWeight: "700",
+    color: palette.textMuted,
     textTransform: "uppercase",
   },
   textCopied: {
-    color: colors.accentBright,
+    color: palette.food.accentBright,
   },
   textFailed: {
-    color: colors.bad,
+    color: palette.danger,
   },
 });

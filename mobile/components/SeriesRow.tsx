@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, condensedFamily } from "@/lib/theme";
 import { repsUnit, weightUnit } from "@/lib/strengthFormat";
 import type { MeasurementType } from "@/lib/strengthTypes";
 import type { DraftSeries } from "@/lib/strengthSession";
@@ -40,7 +40,7 @@ export function SeriesRow({
     <View
       style={[
         styles.row,
-        series.confirmed && { borderColor: accent, backgroundColor: colors.surface },
+        series.confirmed && { borderColor: accent, backgroundColor: palette.surface },
       ]}
     >
       <Text style={[styles.seriesLabel, series.confirmed && { color: accent }]}>
@@ -157,7 +157,7 @@ function Stepper({
           onEndEditing={(e) => commitText(e.nativeEvent.text)}
           keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
           placeholder={placeholder}
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={palette.textFaint}
           accessibilityLabel={`${accessibilityPrefix} value`}
         />
         <Text style={styles.unitText}>{unit}</Text>
@@ -179,26 +179,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 2,
-    borderColor: colors.border,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.md,
     padding: 10,
   },
   seriesLabel: {
-    fontSize: 12,
+    fontSize: fontSize.caption,
     fontWeight: "800",
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     width: 24,
   },
   stepper: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
     borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
   },
   stepBtn: {
     width: 36,
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   stepBtnText: {
     fontSize: 20,
-    color: colors.textMuted,
+    color: palette.textMuted,
     fontWeight: "600",
   },
   valueWrap: {
@@ -216,16 +216,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   valueInput: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "700",
+    fontFamily: condensedFamily,
+    color: palette.text,
+    fontSize: fontSize.lead,
+    fontWeight: "800",
     textAlign: "center",
     paddingVertical: 4,
     minWidth: 40,
+    fontVariant: ["tabular-nums"],
   },
   unitText: {
     fontSize: 8,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     letterSpacing: 0.5,
     textTransform: "uppercase",
     marginTop: -3,
@@ -236,14 +238,14 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
     borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
   },
   bwText: {
     fontSize: 9,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     letterSpacing: 1,
     textAlign: "center",
     lineHeight: 12,
@@ -252,8 +254,8 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: radii.sm,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -262,10 +264,10 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     fontSize: 20,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     fontWeight: "700",
   },
   confirmTextDone: {
-    color: colors.bg,
+    color: palette.onAccent,
   },
 });

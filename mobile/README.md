@@ -4,6 +4,12 @@ Native mobile client for the Eats food-logging app + the strength-training score
 
 **Distribution:** Expo Go (no Apple Developer Program required). EAS Update for OTA patches.
 
+> **Doing any UI work? Read [`DESIGN.md`](./DESIGN.md) first.** It is the style
+> bible — the design DNA, the token system (`lib/theme.ts`), the shared
+> primitives (`components/ui/`), the food-vs-strength register rule, and a
+> new-screen checklist. The whole app shares one visual language; DESIGN.md is
+> how it stays coherent.
+
 **Surfaces** (4 tabs + pushed screens):
 
 - **Today** (default) — the daily food loop. Day navigation (chevrons walk back, label taps home to today), totals strip, Whoop chip, meal cards, capture FAB. Viewing a past day makes the FAB backfill INTO that day (`for_date`).

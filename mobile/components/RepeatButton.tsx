@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { colors } from "@/lib/colors";
+import { palette, radii, borders, fontSize } from "@/lib/theme";
 
 type Props = {
   onRepeat: (scale: number) => Promise<void>;
@@ -117,9 +117,9 @@ export function RepeatButton({ onRepeat, variant = "card" }: Props) {
 
 const styles = StyleSheet.create({
   chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
+    borderWidth: borders.hairline,
+    borderColor: palette.ink,
+    borderRadius: radii.pill,
     paddingHorizontal: 9,
     paddingVertical: 3,
     alignSelf: "flex-start",
@@ -129,18 +129,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chipError: {
-    borderColor: colors.bad,
+    borderColor: palette.danger,
   },
   chipText: {
-    fontSize: 11,
-    color: colors.textSubtle,
+    fontSize: fontSize.label,
+    color: palette.textSubtle,
     letterSpacing: 0.3,
+    fontWeight: "600",
   },
   chipTextDetail: {
-    fontSize: 12,
+    fontSize: fontSize.caption,
   },
   chipTextError: {
-    color: colors.bad,
+    color: palette.danger,
   },
   picker: {
     flexDirection: "row",
@@ -148,9 +149,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   scaleBtn: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: 999,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
+    borderRadius: radii.pill,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
@@ -159,19 +160,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   scaleBtnDefault: {
-    backgroundColor: "rgba(132,204,22,0.12)",
-    borderColor: "rgba(132,204,22,0.30)",
+    backgroundColor: palette.food.accentSoft,
+    borderColor: palette.food.accent,
   },
   scaleText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: colors.textMuted,
+    fontSize: fontSize.label,
+    fontWeight: "600",
+    color: palette.textMuted,
   },
   scaleTextDetail: {
-    fontSize: 12,
+    fontSize: fontSize.caption,
   },
   scaleTextDefault: {
-    color: colors.accentLight,
+    color: palette.food.accentBright,
   },
   dim: {
     opacity: 0.5,
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cancelText: {
-    fontSize: 13,
-    color: colors.textFaint,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
 });

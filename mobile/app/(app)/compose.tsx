@@ -20,7 +20,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, offsetShadow } from "@/lib/theme";
+import { Button, StatNumber } from "@/components/ui";
 import { ApiError, composeMeal, fetchFoods } from "@/lib/api";
 import { composeVibe } from "@/lib/compose";
 import { totalsFromItems, type Item } from "@/lib/types";
@@ -151,7 +152,7 @@ export default function ComposeScreen() {
             value={query}
             onChangeText={setQuery}
             placeholder="search a food to add…"
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={palette.textFaint}
             autoComplete="off"
             autoFocus
             accessibilityLabel="search foods"
@@ -276,47 +277,34 @@ export default function ComposeScreen() {
         <View style={styles.totalsBar}>
           {vibe && <Text style={styles.vibe}>{vibe}</Text>}
           <View style={styles.totalsRow}>
-            <Stat label="kcal" value={fmtCal(totals.calories)} />
-            <Stat label="sat" value={`${totals.sat_fat_g.toFixed(1)}g`} />
-            <Stat label="fib" value={`${totals.soluble_fiber_g.toFixed(1)}g`} />
-            <Stat label="pro" value={`${fmt(totals.protein_g, 0)}g`} />
-            <Stat label="plant" value={`${totals.plant_pct}%`} />
+            <StatNumber label="kcal" value={fmtCal(totals.calories)} align="left" />
+            <StatNumber label="sat" value={`${totals.sat_fat_g.toFixed(1)}g`} align="left" />
+            <StatNumber label="fib" value={`${totals.soluble_fiber_g.toFixed(1)}g`} align="left" />
+            <StatNumber label="pro" value={`${fmt(totals.protein_g, 0)}g`} align="left" />
+            <StatNumber label="plant" value={`${totals.plant_pct}%`} color={palette.food.accent} align="left" />
           </View>
-          <TouchableOpacity
-            style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+          <Button
+            label={busy ? "saving…" : forDate ? "save for that day" : "save meal"}
+            variant="primary"
             onPress={save}
             disabled={!canSave}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.saveBtnText}>
-              {busy ? "saving…" : forDate ? "save for that day" : "save meal"}
-            </Text>
-          </TouchableOpacity>
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1, backgroundColor: palette.bg },
   kav: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomWidth: borders.bold,
+    borderBottomColor: palette.ink,
   },
   backBtn: {
     width: 44,
@@ -326,72 +314,75 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     fontSize: 26,
-    color: colors.textMuted,
+    color: palette.textMuted,
     lineHeight: 30,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 12,
-    color: colors.textMuted,
-    letterSpacing: 0.5,
+    fontSize: fontSize.label,
+    fontWeight: "700",
+    color: palette.textMuted,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
     textAlign: "center",
   },
   body: { flex: 1 },
   bodyContent: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 24,
+    padding: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl,
   },
   search: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    fontSize: 15,
+    fontSize: fontSize.bodyLg,
   },
   results: {
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.sm,
     overflow: "hidden",
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
   },
   resultMuted: {
     padding: 12,
     fontSize: 13,
-    color: colors.textFaint,
+    color: palette.textSubtle,
   },
   resultRow: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: palette.ink,
   },
   resultName: {
     fontSize: 14,
-    color: colors.text,
+    color: palette.text,
   },
   resultSub: {
     fontSize: 11,
-    color: colors.textFaint,
+    color: palette.textSubtle,
     marginTop: 2,
   },
   emptyHint: {
     fontSize: 14,
-    color: colors.textFaint,
+    color: palette.textSubtle,
     textAlign: "center",
     paddingVertical: 20,
   },
   lineCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radii.sm,
-    padding: 10,
-    gap: 10,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    gap: spacing.md,
+    ...offsetShadow(palette.surfaceShadow, "soft"),
   },
   lineTop: {
     flexDirection: "row",
@@ -405,15 +396,15 @@ const styles = StyleSheet.create({
   },
   lineName: {
     fontSize: 14,
-    color: colors.text,
+    color: palette.text,
   },
   lineSub: {
     fontSize: 11,
-    color: colors.textFaint,
+    color: palette.textSubtle,
   },
   lineRemove: {
     fontSize: 16,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     paddingHorizontal: 4,
   },
   lineBottom: {
@@ -425,23 +416,23 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     alignItems: "center",
     justifyContent: "center",
   },
   stepText: {
     fontSize: 20,
-    color: colors.text,
+    color: palette.text,
     lineHeight: 22,
   },
   gramsInput: {
     width: 64,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 8,
     paddingHorizontal: 10,
@@ -450,7 +441,7 @@ const styles = StyleSheet.create({
   },
   gramsUnit: {
     fontSize: 12,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
   },
   presetRow: {
     flexDirection: "row",
@@ -458,7 +449,7 @@ const styles = StyleSheet.create({
   },
   presetChip: {
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -466,7 +457,7 @@ const styles = StyleSheet.create({
   },
   presetText: {
     fontSize: 11,
-    color: colors.textMuted,
+    color: palette.textMuted,
   },
   errorCard: {
     backgroundColor: "#7f1d1d",
@@ -478,49 +469,22 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   totalsBar: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bg,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 24,
-    gap: 10,
+    borderTopWidth: borders.bold,
+    borderTopColor: palette.ink,
+    backgroundColor: palette.bg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md,
   },
   vibe: {
-    fontSize: 11,
-    color: colors.accentLight,
+    fontSize: fontSize.label,
+    color: palette.food.accentBright,
     textAlign: "center",
     letterSpacing: 0.2,
   },
   totalsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-  },
-  stat: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 9,
-    color: colors.textSubtle,
-    letterSpacing: 0.5,
-  },
-  statValue: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: "500",
-  },
-  saveBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.sm,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  saveBtnDisabled: {
-    backgroundColor: "#3f3f46",
-  },
-  saveBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.bg,
   },
 });

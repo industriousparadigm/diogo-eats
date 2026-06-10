@@ -33,7 +33,8 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Image } from "expo-image";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Button, SectionHeader } from "@/components/ui";
 import { fmtDayLabel } from "@/lib/format";
 import { fetchRecentMeals, repeatMeal } from "@/lib/api";
 import { filterRecentMeals, recentMealLabel } from "@/lib/recentMeals";
@@ -335,7 +336,7 @@ export function CaptureSheet({
 
             {processing && (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color={colors.brand} />
+                <ActivityIndicator color={palette.food.accent} />
                 <Text style={styles.loadingText}>Processing...</Text>
               </View>
             )}
@@ -350,46 +351,43 @@ export function CaptureSheet({
                   ? "add a caption (optional)…"
                   : "describe what you ate, or add a photo…"
               }
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               multiline
               maxLength={1000}
             />
 
             {error && <Text style={styles.errorText}>{error}</Text>}
 
-            <TouchableOpacity
-              style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-              onPress={submit}
-              disabled={!canSubmit}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.submitButtonText}>
-                {pickedPhotos.length > 0
+            <Button
+              label={
+                pickedPhotos.length > 0
                   ? `Log ${pickedPhotos.length} photo${pickedPhotos.length > 1 ? "s" : ""}`
-                  : "Log it"}
-              </Text>
-            </TouchableOpacity>
+                  : "Log it"
+              }
+              onPress={submit}
+              variant="primary"
+              disabled={!canSubmit}
+              style={styles.submitButton}
+            />
 
             {/* Compose from library entry. */}
             {onCompose && (
-              <TouchableOpacity
-                style={styles.composeBtn}
+              <Button
+                label="+ build from your foods"
+                variant="ghost"
                 onPress={() => {
                   reset();
                   onClose();
                   onCompose();
                 }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.composeText}>+ build from your foods</Text>
-              </TouchableOpacity>
+              />
             )}
 
             {/* Recent meals — one-tap repeat. */}
             <View style={styles.recentSection}>
-              <Text style={styles.recentLabel}>RECENT — TAP TO LOG AGAIN</Text>
+              <SectionHeader>RECENT — TAP TO LOG AGAIN</SectionHeader>
               {recent === null ? (
-                <ActivityIndicator color={colors.textFaint} style={styles.recentLoader} />
+                <ActivityIndicator color={palette.textSubtle} style={styles.recentLoader} />
               ) : recent.length === 0 ? (
                 <Text style={styles.recentEmpty}>
                   Nothing logged in the last two weeks yet.
@@ -401,7 +399,7 @@ export function CaptureSheet({
                     value={recentSearch}
                     onChangeText={setRecentSearch}
                     placeholder="search recent meals…"
-                    placeholderTextColor={colors.textFaint}
+                    placeholderTextColor={palette.textFaint}
                     autoComplete="off"
                   />
                   {filteredRecent.length === 0 ? (
@@ -450,81 +448,83 @@ export function CaptureSheet({
 const styles = StyleSheet.create({
   kav: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   sheet: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: borders.bold,
+    borderBottomColor: palette.ink,
   },
   closeBtn: {
     width: 70,
   },
   closeBtnText: {
-    fontSize: 16,
-    color: colors.textMuted,
+    fontSize: fontSize.title,
+    color: palette.textMuted,
   },
   titleWrap: {
     alignItems: "center",
     gap: 1,
   },
   title: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: colors.text,
+    fontSize: fontSize.lead,
+    fontWeight: "800",
+    color: palette.text,
   },
   titleHint: {
-    fontSize: 11,
-    color: colors.warn,
-    fontWeight: "500",
+    fontSize: fontSize.label,
+    color: palette.warn,
+    fontWeight: "600",
   },
   body: {
     flex: 1,
   },
   bodyContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
     paddingBottom: 40,
-    gap: 12,
+    gap: spacing.md,
   },
   pickRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: spacing.md,
   },
   pickButton: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderRadius: radii.md,
-    paddingVertical: 14,
+    paddingVertical: spacing.lg,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   pickButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.text,
+    fontSize: fontSize.bodyLg,
+    fontWeight: "700",
+    color: palette.text,
   },
   photoRow: {
     flexDirection: "row",
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   photoThumbWrap: {
-    marginRight: 8,
+    marginRight: spacing.sm,
     position: "relative",
   },
   photoThumb: {
     width: 100,
     height: 100,
     borderRadius: radii.md,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   removeBtn: {
     position: "absolute",
@@ -538,8 +538,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   removeBtnText: {
-    color: "#fff",
-    fontSize: 11,
+    color: palette.white,
+    fontSize: fontSize.label,
     fontWeight: "700",
   },
   cropBtn: {
@@ -547,35 +547,35 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 4,
     backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: radii.pill,
   },
   cropBtnText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "600",
+    color: palette.white,
+    fontSize: fontSize.tiny,
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 4,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   loadingText: {
-    fontSize: 13,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
   },
   textInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    fontSize: fontSize.bodyLg,
     minHeight: 110,
     textAlignVertical: "top",
   },
@@ -583,74 +583,44 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   errorText: {
-    fontSize: 13,
-    color: colors.bad,
+    fontSize: fontSize.caption,
+    color: palette.danger,
   },
   submitButton: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  submitButtonDisabled: {
-    opacity: 0.4,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.bg,
-  },
-  composeBtn: {
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.borderDashed,
-    borderRadius: radii.sm,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  composeText: {
-    fontSize: 13,
-    color: colors.textMuted,
+    marginTop: spacing.xs,
   },
   recentSection: {
-    marginTop: 12,
-    gap: 8,
-  },
-  recentLabel: {
-    fontSize: 11,
-    color: colors.textSubtle,
-    letterSpacing: 0.5,
-    fontWeight: "500",
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   recentLoader: {
-    marginTop: 8,
+    marginTop: spacing.sm,
     alignSelf: "flex-start",
   },
   recentEmpty: {
-    fontSize: 13,
-    color: colors.textFaint,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
   recentSearch: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 9,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.body,
   },
   recentRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.md,
+    backgroundColor: palette.surface,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   recentRowMain: {
     flex: 1,
@@ -658,16 +628,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   recentRowText: {
-    fontSize: 14,
-    color: colors.text,
+    fontSize: fontSize.body,
+    color: palette.text,
   },
   recentRowSub: {
-    fontSize: 11,
-    color: colors.textFaint,
+    fontSize: fontSize.label,
+    color: palette.textSubtle,
   },
   recentRepeat: {
-    fontSize: 16,
-    color: colors.textMuted,
+    fontSize: fontSize.title,
+    color: palette.textMuted,
   },
   dim: {
     opacity: 0.5,

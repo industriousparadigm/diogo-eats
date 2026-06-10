@@ -23,7 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, offsetShadow } from "@/lib/theme";
 import {
   ApiError,
   createFood,
@@ -179,7 +179,7 @@ export default function FoodsScreen() {
             value={query}
             onChangeText={setQuery}
             placeholder="search your foods…"
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={palette.textFaint}
             autoComplete="off"
             accessibilityLabel="search foods"
           />
@@ -253,7 +253,7 @@ export default function FoodsScreen() {
 
           {/* List */}
           {foods === null && loading ? (
-            <ActivityIndicator color={colors.brand} style={styles.loader} />
+            <ActivityIndicator color={palette.food.accent} style={styles.loader} />
           ) : foods !== null && list.length === 0 ? (
             <Text style={styles.emptyText}>
               {query ? "no foods match." : "no foods yet — log a meal or read a label."}
@@ -298,9 +298,9 @@ export default function FoodsScreen() {
 }
 
 const PROV_BADGE: Record<Provenance, { bg: string; fg: string; bd: string }> = {
-  label_verified: { bg: "rgba(132,204,22,0.12)", fg: colors.accentLight, bd: "rgba(132,204,22,0.30)" },
-  user_corrected: { bg: colors.surfaceMuted, fg: colors.textMuted, bd: colors.borderStrong },
-  ai_inferred: { bg: "transparent", fg: colors.textFaint, bd: colors.border },
+  label_verified: { bg: palette.food.accentSoft, fg: palette.food.accentBright, bd: palette.food.accent },
+  user_corrected: { bg: palette.surfaceMuted, fg: palette.textMuted, bd: palette.inkSoft },
+  ai_inferred: { bg: "transparent", fg: palette.textSubtle, bd: palette.ink },
 };
 
 function FoodCard({
@@ -469,7 +469,7 @@ function FoodForm({
         value={name}
         onChangeText={setName}
         placeholder="e.g. Provamel oat milk"
-        placeholderTextColor={colors.textFaint}
+        placeholderTextColor={palette.textFaint}
         editable={!busy}
         accessibilityLabel="food name"
         autoFocus={mode === "add"}
@@ -527,15 +527,15 @@ function FoodForm({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1, backgroundColor: palette.bg },
   kav: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomWidth: borders.bold,
+    borderBottomColor: palette.ink,
     gap: 4,
   },
   backBtn: {
@@ -546,62 +546,63 @@ const styles = StyleSheet.create({
   },
   backBtnText: {
     fontSize: 26,
-    color: colors.textMuted,
+    color: palette.textMuted,
     lineHeight: 30,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: fontSize.body,
+    fontWeight: "800",
     letterSpacing: 2,
-    color: colors.text,
+    color: palette.text,
   },
   headerCount: {
-    fontSize: 11,
-    color: colors.textFaint,
+    fontSize: fontSize.label,
+    color: palette.textSubtle,
     paddingRight: 12,
   },
   body: { flex: 1 },
   bodyContent: {
-    padding: 16,
-    gap: 10,
+    padding: spacing.lg,
+    gap: spacing.md,
     paddingBottom: 48,
   },
   search: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    fontSize: 15,
+    fontSize: fontSize.bodyLg,
   },
   actionRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
   },
   secondaryBtn: {
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   secondaryText: {
-    fontSize: 13,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
+    fontWeight: "600",
   },
   primaryBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.food.accent,
     borderRadius: radii.sm,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   primaryText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#fff",
+    fontSize: fontSize.caption,
+    fontWeight: "800",
+    color: palette.onAccent,
   },
   dim: { opacity: 0.5 },
   errorCard: {
@@ -616,41 +617,42 @@ const styles = StyleSheet.create({
   loader: { marginTop: 24 },
   emptyText: {
     fontSize: 14,
-    color: colors.textFaint,
+    color: palette.textSubtle,
     paddingVertical: 24,
   },
   mergeBanner: {
-    backgroundColor: "rgba(132,204,22,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(132,204,22,0.22)",
+    backgroundColor: palette.food.accentSoft,
+    borderWidth: borders.bold,
+    borderColor: palette.food.accentDeep,
     borderRadius: radii.sm,
-    padding: 10,
-    gap: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   mergeBannerText: {
-    fontSize: 12,
-    color: colors.text,
+    fontSize: fontSize.caption,
+    color: palette.text,
     lineHeight: 18,
   },
   mergeBannerName: {
     fontWeight: "700",
-    color: colors.accentLight,
+    color: palette.food.accentBright,
   },
   mergeBannerRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
   },
   foodCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: palette.surface,
+    borderWidth: borders.chunky,
+    borderColor: palette.ink,
     borderRadius: radii.md,
-    padding: 12,
-    gap: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...offsetShadow(palette.surfaceShadow, "soft"),
   },
   foodCardSelected: {
-    backgroundColor: "rgba(132,204,22,0.07)",
-    borderColor: "rgba(132,204,22,0.30)",
+    backgroundColor: palette.food.accentSoft,
+    borderColor: palette.food.accent,
   },
   foodTop: {
     flexDirection: "row",
@@ -661,7 +663,7 @@ const styles = StyleSheet.create({
   foodName: {
     flex: 1,
     fontSize: 14,
-    color: colors.text,
+    color: palette.text,
     lineHeight: 19,
   },
   provBadge: {
@@ -682,15 +684,15 @@ const styles = StyleSheet.create({
   },
   foodStat: {
     fontSize: 11,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
   },
   foodStatFaint: {
     fontSize: 11,
-    color: colors.textFaint,
+    color: palette.textSubtle,
   },
   foodSeen: {
     fontSize: 11,
-    color: colors.textFaint,
+    color: palette.textSubtle,
     marginLeft: "auto",
   },
   foodActions: {
@@ -699,34 +701,34 @@ const styles = StyleSheet.create({
   },
   miniBtn: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.ink,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
   miniBtnText: {
     fontSize: 11,
-    color: colors.textMuted,
+    color: palette.textMuted,
   },
   form: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: palette.surfaceAlt,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: colors.borderDashed,
+    borderColor: palette.borderDashed,
     borderRadius: radii.md,
     padding: 12,
     gap: 10,
   },
   formLabel: {
     fontSize: 11,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
     letterSpacing: 0.5,
   },
   formInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -739,21 +741,21 @@ const styles = StyleSheet.create({
   plantBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 8,
     alignItems: "center",
   },
   plantBtnActive: {
-    backgroundColor: "rgba(132,204,22,0.12)",
-    borderColor: "rgba(132,204,22,0.30)",
+    backgroundColor: palette.food.accentSoft,
+    borderColor: palette.food.accent,
   },
   plantBtnText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: palette.textMuted,
   },
   plantBtnTextActive: {
-    color: colors.accentLight,
+    color: palette.food.accentBright,
   },
   numGrid: {
     flexDirection: "row",
@@ -767,13 +769,13 @@ const styles = StyleSheet.create({
   },
   numLabel: {
     fontSize: 11,
-    color: colors.textSubtle,
+    color: palette.textSubtle,
   },
   numInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
     paddingVertical: 8,
     paddingHorizontal: 10,
@@ -781,7 +783,7 @@ const styles = StyleSheet.create({
   },
   formError: {
     fontSize: 12,
-    color: colors.bad,
+    color: palette.danger,
   },
   formActions: {
     flexDirection: "row",
@@ -795,6 +797,6 @@ const styles = StyleSheet.create({
   },
   deleteLinkText: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: palette.textSubtle,
   },
 });

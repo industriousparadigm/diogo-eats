@@ -5,7 +5,8 @@
 
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Card } from "@/components/ui";
 
 export type PendingState = {
   id: string;
@@ -30,7 +31,7 @@ export function PendingCard({ pending, onRetry, onDismiss }: Props) {
   const isError = pending.status === "error";
 
   return (
-    <View style={[styles.card, isError && styles.cardError]}>
+    <Card identity={isError ? palette.danger : undefined} style={styles.card}>
       <View style={styles.inner}>
         {/* Preview / icon */}
         {pending.previewUri ? (
@@ -80,7 +81,7 @@ export function PendingCard({ pending, onRetry, onDismiss }: Props) {
           ) : (
             <>
               <View style={styles.processingRow}>
-                <ActivityIndicator size="small" color={colors.brand} />
+                <ActivityIndicator size="small" color={palette.food.accent} />
                 <Text style={styles.processingText}>Reading the plate...</Text>
               </View>
               {pending.caption && (
@@ -97,42 +98,37 @@ export function PendingCard({ pending, onRetry, onDismiss }: Props) {
           )}
         </View>
       </View>
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cardError: {
-    borderColor: colors.bad,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   inner: {
     flexDirection: "row",
-    padding: 12,
-    gap: 12,
+    padding: spacing.md,
+    gap: spacing.md,
     alignItems: "center",
   },
   thumb: {
     width: 72,
     height: 72,
-    borderRadius: radii.md,
+    borderRadius: radii.sm,
     flexShrink: 0,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
   },
   textIcon: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: palette.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   textIconLabel: {
-    color: colors.textSubtle,
-    fontSize: 18,
+    color: palette.textSubtle,
+    fontSize: fontSize.lead,
     fontWeight: "700",
   },
   countBadge: {
@@ -145,59 +141,59 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   countText: {
-    color: colors.text,
-    fontSize: 11,
+    color: palette.text,
+    fontSize: fontSize.label,
     fontWeight: "700",
   },
   content: {
     flex: 1,
-    gap: 6,
+    gap: spacing.sm,
   },
   processingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   processingText: {
-    fontSize: 14,
-    color: colors.textMuted,
+    fontSize: fontSize.body,
+    color: palette.textMuted,
   },
   captionHint: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
     fontStyle: "italic",
   },
   errorTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.bad,
+    fontSize: fontSize.body,
+    fontWeight: "700",
+    color: palette.danger,
   },
   errorMsg: {
-    fontSize: 12,
-    color: colors.textMuted,
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
   },
   actions: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 4,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   retryButton: {
-    backgroundColor: colors.accent,
+    backgroundColor: palette.food.accent,
     borderRadius: radii.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   retryText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.bg,
+    fontSize: fontSize.caption,
+    fontWeight: "800",
+    color: palette.onAccent,
   },
   dismissButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   dismissText: {
-    fontSize: 13,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
 });

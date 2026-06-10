@@ -5,7 +5,7 @@
 // nudge to verify low/medium portions without alarming about them.
 
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
 import type { Item } from "@/lib/types";
 
 type Props = {
@@ -68,17 +68,17 @@ export function EditItemRow({ item, onName, onGrams, onRemove, disabled }: Props
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: borders.bold,
+    borderColor: palette.ink,
     borderRadius: radii.sm,
-    padding: 10,
-    gap: 6,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   dot: {
     width: 8,
@@ -88,44 +88,44 @@ const styles = StyleSheet.create({
   },
   nameInput: {
     flex: 1,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    fontSize: 14,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.body,
     minHeight: 36,
   },
   removeText: {
-    color: colors.textSubtle,
-    fontSize: 16,
-    paddingHorizontal: 4,
+    color: palette.textSubtle,
+    fontSize: fontSize.title,
+    paddingHorizontal: spacing.xs,
   },
   bottomRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   gramsInput: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    fontSize: 14,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.body,
     width: 90,
   },
   gramsUnit: {
-    fontSize: 12,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
   },
   perItem: {
     marginLeft: "auto",
-    fontSize: 11,
-    color: colors.textSubtle,
+    fontSize: fontSize.label,
+    color: palette.textSubtle,
   },
 });

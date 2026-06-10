@@ -21,11 +21,11 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing, condensedFamily } from "@/lib/theme";
+import { Button } from "@/components/ui";
 
 type Step = "email" | "code";
 
@@ -116,7 +116,7 @@ export default function SignInScreen() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="you@example.com"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -125,18 +125,13 @@ export default function SignInScreen() {
                 onSubmitEditing={handleSendCode}
               />
               {error && <Text style={styles.errorText}>{error}</Text>}
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
+              <Button
+                label="Send code"
+                variant="primary"
                 onPress={handleSendCode}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.bg} />
-                ) : (
-                  <Text style={styles.buttonText}>Send code</Text>
-                )}
-              </TouchableOpacity>
+                loading={loading}
+                style={styles.button}
+              />
             </View>
           ) : (
             <View style={styles.form}>
@@ -147,7 +142,7 @@ export default function SignInScreen() {
                 value={code}
                 onChangeText={setCode}
                 placeholder="000000"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
                 keyboardType="number-pad"
                 maxLength={6}
                 returnKeyType="done"
@@ -155,18 +150,13 @@ export default function SignInScreen() {
                 autoFocus
               />
               {error && <Text style={styles.errorText}>{error}</Text>}
-              <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
+              <Button
+                label="Sign in"
+                variant="primary"
                 onPress={handleVerifyCode}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.bg} />
-                ) : (
-                  <Text style={styles.buttonText}>Sign in</Text>
-                )}
-              </TouchableOpacity>
+                loading={loading}
+                style={styles.button}
+              />
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={() => {
@@ -188,14 +178,14 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   kav: {
     flex: 1,
   },
   container: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
     justifyContent: "center",
   },
   header: {
@@ -203,72 +193,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    fontSize: 40,
-    fontWeight: "700",
-    color: colors.brand,
-    letterSpacing: -1,
-    marginBottom: 8,
+    fontFamily: condensedFamily,
+    fontSize: fontSize.hero,
+    fontWeight: "800",
+    color: palette.food.accent,
+    letterSpacing: condensedFamily ? 0.5 : -1,
+    marginBottom: spacing.sm,
   },
   tagline: {
-    fontSize: 16,
-    color: colors.textMuted,
+    fontSize: fontSize.title,
+    color: palette.textMuted,
   },
   form: {
-    gap: 12,
+    gap: spacing.md,
   },
   label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textMuted,
+    fontSize: fontSize.body,
+    fontWeight: "700",
+    color: palette.textMuted,
     marginBottom: 2,
   },
   hint: {
-    fontSize: 13,
-    color: colors.textSubtle,
-    marginBottom: 4,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
+    marginBottom: spacing.xs,
   },
   input: {
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
+    backgroundColor: palette.surfaceMuted,
+    color: palette.text,
+    borderWidth: borders.bold,
+    borderColor: palette.inkSoft,
     borderRadius: radii.sm,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    fontSize: 16,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    fontSize: fontSize.title,
   },
   codeInput: {
-    fontSize: 28,
+    fontFamily: condensedFamily,
+    fontSize: fontSize.displayLg,
     letterSpacing: 8,
     textAlign: "center",
-    paddingVertical: 18,
+    paddingVertical: spacing.lg,
   },
   errorText: {
-    fontSize: 13,
-    color: colors.bad,
+    fontSize: fontSize.caption,
+    color: palette.danger,
     marginTop: 2,
   },
   button: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.bg,
+    marginTop: spacing.sm,
   },
   backButton: {
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
   },
   backText: {
-    fontSize: 14,
-    color: colors.textSubtle,
+    fontSize: fontSize.body,
+    color: palette.textSubtle,
   },
 });

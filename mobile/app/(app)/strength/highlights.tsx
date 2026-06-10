@@ -8,7 +8,8 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMemo } from "react";
 import { useRouter } from "expo-router";
-import { colors, radii } from "@/lib/colors";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Card, Button } from "@/components/ui";
 import { takeSessionResult } from "@/lib/stores";
 
 export default function HighlightsScreen() {
@@ -26,9 +27,12 @@ export default function HighlightsScreen() {
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <View style={styles.centerWrap}>
           <Text style={styles.missingText}>No session to show</Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={done}>
-            <Text style={styles.doneBtnText}>Back to strength</Text>
-          </TouchableOpacity>
+          <Button
+            label="Back to strength"
+            variant="primary"
+            accent={palette.strength.brand}
+            onPress={done}
+          />
         </View>
       </SafeAreaView>
     );
@@ -52,15 +56,15 @@ export default function HighlightsScreen() {
         </Text>
 
         {lead && (
-          <View style={styles.leadCard}>
+          <Card identity={palette.strength.brand} depth="loud" style={styles.leadCard}>
             <Text style={styles.leadText}>{lead.line}</Text>
-          </View>
+          </Card>
         )}
 
         {rest.map((h) => (
-          <View key={h.id} style={styles.restCard}>
+          <Card key={h.id} style={styles.restCard}>
             <Text style={styles.restText}>{h.line}</Text>
-          </View>
+          </Card>
         ))}
 
         {result.session.note && (
@@ -69,14 +73,14 @@ export default function HighlightsScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.doneBtn}
+        <Button
+          label="Done"
+          variant="primary"
+          accent={palette.strength.brand}
+          size="lg"
           onPress={done}
-          activeOpacity={0.85}
           accessibilityLabel="done"
-        >
-          <Text style={styles.doneBtnText}>Done</Text>
-        </TouchableOpacity>
+        />
       </View>
     </SafeAreaView>
   );
@@ -85,86 +89,68 @@ export default function HighlightsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
   },
   centerWrap: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
-    padding: 24,
+    gap: spacing.lg,
+    padding: spacing.xxl,
   },
   missingText: {
-    fontSize: 15,
-    color: colors.textMuted,
+    fontSize: fontSize.bodyLg,
+    color: palette.textMuted,
   },
   content: {
-    padding: 20,
-    gap: 12,
+    padding: spacing.xl,
+    gap: spacing.md,
     paddingTop: 36,
-    paddingBottom: 32,
+    paddingBottom: spacing.xxxl,
   },
   kicker: {
-    fontSize: 12,
+    fontSize: fontSize.caption,
     fontWeight: "800",
-    color: colors.strength.brandBright,
+    color: palette.strength.brandBright,
     letterSpacing: 2,
   },
   summary: {
-    fontSize: 13,
-    color: colors.textSubtle,
-    marginBottom: 8,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
+    marginBottom: spacing.sm,
   },
   leadCard: {
-    backgroundColor: colors.strength.brandDim,
-    borderWidth: 2,
-    borderColor: colors.strength.brand,
+    backgroundColor: palette.strength.brandSoft,
     borderRadius: radii.xl,
-    padding: 20,
+    padding: spacing.xl,
   },
   leadText: {
-    fontSize: 22,
+    fontSize: fontSize.display,
     fontWeight: "800",
-    color: colors.text,
+    color: palette.text,
     lineHeight: 30,
     letterSpacing: -0.3,
   },
   restCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   restText: {
-    fontSize: 15,
-    color: colors.text,
+    fontSize: fontSize.bodyLg,
+    color: palette.text,
     lineHeight: 22,
   },
   note: {
-    fontSize: 13,
-    color: colors.textSubtle,
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
     fontStyle: "italic",
     lineHeight: 19,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   footer: {
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 28,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  doneBtn: {
-    backgroundColor: colors.strength.brand,
-    borderRadius: radii.lg,
-    paddingVertical: 16,
-    alignItems: "center",
-    paddingHorizontal: 24,
-  },
-  doneBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.bg,
+    borderTopWidth: borders.bold,
+    borderTopColor: palette.ink,
   },
 });
