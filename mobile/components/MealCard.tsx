@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing, plantColor, condensedFamily } from "@/lib/theme";
-import { Card, Chip } from "@/components/ui";
+import { Card, Chip, SkeletonBlock } from "@/components/ui";
 import { fmtCal, fmtPlant, itemsSummary, fmtTime } from "@/lib/format";
 import { resolvePhotoUrl } from "@/lib/api";
 import type { Meal } from "@/lib/types";
@@ -96,9 +96,8 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
             />
           </TouchableOpacity>
         ) : meal.photo_filename ? (
-          <View style={[styles.thumb, styles.thumbPlaceholder]}>
-            <Text style={styles.thumbPlaceholderText}>...</Text>
-          </View>
+          // Signed URL still resolving — a skeleton block, not a "..." gap.
+          <SkeletonBlock width={72} height={72} radius={radii.sm} tone="bright" style={styles.thumb} />
         ) : (
           <View style={[styles.thumb, styles.thumbText]}>
             <Text style={styles.thumbTextIcon}>T</Text>
@@ -183,15 +182,6 @@ const styles = StyleSheet.create({
   thumbImg: {
     width: "100%",
     height: "100%",
-  },
-  thumbPlaceholder: {
-    backgroundColor: palette.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  thumbPlaceholderText: {
-    color: palette.textFaint,
-    fontSize: fontSize.body,
   },
   thumbText: {
     backgroundColor: palette.surfaceMuted,

@@ -34,7 +34,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Button, SectionHeader } from "@/components/ui";
+import { Button, SectionHeader, SkeletonBlock, SkeletonCard } from "@/components/ui";
 import { fmtDayLabel } from "@/lib/format";
 import { fetchRecentMeals, repeatMeal } from "@/lib/api";
 import { filterRecentMeals, recentMealLabel } from "@/lib/recentMeals";
@@ -387,7 +387,18 @@ export function CaptureSheet({
             <View style={styles.recentSection}>
               <SectionHeader>RECENT — TAP TO LOG AGAIN</SectionHeader>
               {recent === null ? (
-                <ActivityIndicator color={palette.textSubtle} style={styles.recentLoader} />
+                // First load: skeleton rows shaped like the recent meals,
+                // not a bare spinner. Never blocks capture.
+                <View accessibilityLabel="loading recent meals" style={styles.recentSkeleton}>
+                  {[0, 1, 2].map((i) => (
+                    <SkeletonCard key={i} style={styles.recentSkeletonRow}>
+                      <View style={styles.recentSkeletonMain}>
+                        <SkeletonBlock width="65%" height={13} tone="bright" />
+                        <SkeletonBlock width="40%" height={10} />
+                      </View>
+                    </SkeletonCard>
+                  ))}
+                </View>
               ) : recent.length === 0 ? (
                 <Text style={styles.recentEmpty}>
                   Nothing logged in the last two weeks yet.
@@ -593,9 +604,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     gap: spacing.sm,
   },
-  recentLoader: {
-    marginTop: spacing.sm,
-    alignSelf: "flex-start",
+  recentSkeleton: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  recentSkeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  recentSkeletonMain: {
+    flex: 1,
+    gap: 6,
   },
   recentEmpty: {
     fontSize: fontSize.caption,

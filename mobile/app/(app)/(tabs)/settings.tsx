@@ -12,7 +12,6 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -20,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
 import { Card, SectionHeader, Button } from "@/components/ui";
+import { SettingsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { ApiError, fetchProfile, saveTargets } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_TARGETS, type Targets } from "@/lib/types";
@@ -179,7 +179,7 @@ export default function SettingsScreen() {
           </Text>
 
           {draft === null ? (
-            <ActivityIndicator color={palette.food.accent} style={styles.loader} />
+            <SettingsSkeleton />
           ) : (
             <>
               {FIELDS.map((f) => (
@@ -302,9 +302,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: palette.textMuted,
     lineHeight: 19,
-  },
-  loader: {
-    marginTop: spacing.xxl,
   },
   field: {
     gap: spacing.xs,

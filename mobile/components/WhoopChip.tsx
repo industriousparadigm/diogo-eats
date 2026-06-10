@@ -5,12 +5,17 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { palette, radii, borders, fontSize } from "@/lib/theme";
+import { SkeletonBlock } from "@/components/ui";
 import { fetchWhoopToday, syncWhoop, type WhoopToday } from "@/lib/api";
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export function WhoopChip() {
   const [data, setData] = useState<WhoopToday | null>(null);
+  // Distinguish "first fetch in flight" from "resolved, nothing to show".
+  // While loading we hold a skeleton chip so the row never pops/jumps; once
+  // resolved we either show the real chip or collapse to nothing.
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -19,6 +24,7 @@ export function WhoopChip() {
         const initial = await fetchWhoopToday();
         if (!alive) return;
         setData(initial);
+        setLoading(false);
 
         if (!initial.connected) return;
         const last = initial.last_sync_at ?? 0;
@@ -31,13 +37,25 @@ export function WhoopChip() {
         }
       } catch {
         // Chip is decoration — never surface Whoop errors here.
-        if (alive) setData(null);
+        if (alive) {
+          setData(null);
+          setLoading(false);
+        }
       }
     })();
     return () => {
       alive = false;
     };
   }, []);
+
+  // First fetch in flight: a calm skeleton chip stands in for the row.
+  if (loading) {
+    return (
+      <View style={styles.row}>
+        <SkeletonBlock width={150} height={26} radius={radii.pill} />
+      </View>
+    );
+  }
 
   if (!data?.connected || !data.today) return null;
 

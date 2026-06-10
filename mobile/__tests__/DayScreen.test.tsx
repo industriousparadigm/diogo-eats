@@ -91,6 +91,16 @@ jest.mock("../lib/supabase", () => ({
 const mockFetchMeals = jest.fn();
 const mockDeleteMeal = jest.fn();
 const mockFetchWhoopToday = jest.fn();
+const mockGetSnapshot = jest.fn();
+const mockSetSnapshot = jest.fn();
+
+// Snapshot cache — controlled per-test so we can exercise cold cache
+// (skeleton) vs cache-hit (instant data + silent refresh).
+jest.mock("../lib/snapshot", () => ({
+  getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
+  setSnapshot: (...args: unknown[]) => mockSetSnapshot(...args),
+  snapshotKey: (ns: string, sub?: string) => (sub ? `${ns}.${sub}` : ns),
+}));
 
 // ApiError is defined inside the factory so it is available as the mock class.
 jest.mock("../lib/api", () => {
@@ -153,6 +163,9 @@ describe("DayScreen", () => {
     mockPush.mockReset();
     mockFetchWhoopToday.mockReset();
     mockFetchWhoopToday.mockResolvedValue({ connected: false });
+    mockGetSnapshot.mockReset();
+    mockGetSnapshot.mockResolvedValue(null); // cold cache by default
+    mockSetSnapshot.mockReset();
   });
 
   it("shows loading state initially (before meals resolve)", async () => {
@@ -160,6 +173,44 @@ describe("DayScreen", () => {
     const { queryByText } = await render(<DayScreen />);
     expect(queryByText("Nothing logged yet")).toBeNull();
     expect(queryByText("Retry")).toBeNull();
+  });
+
+  it("shows a skeleton (not an empty state) while the first fetch is pending", async () => {
+    mockFetchMeals.mockReturnValue(new Promise(() => {}));
+    const { queryByText, findByLabelText } = await render(<DayScreen />);
+    // The skeleton placeholder is present...
+    expect(await findByLabelText("loading meals")).toBeTruthy();
+    // ...and the empty copy is NOT shown before the fetch resolves.
+    expect(queryByText("Nothing logged yet")).toBeNull();
+  });
+
+  it("renders cached meals immediately with no skeleton, then refreshes silently", async () => {
+    const cached = [makeMeal("cached-1", { meal_vibe: "cached lunch" })];
+    mockGetSnapshot.mockResolvedValue(cached);
+    // Hold the fresh fetch open so the cached render is observable before
+    // the silent reconcile lands.
+    let resolveFresh: (m: Meal[]) => void = () => {};
+    mockFetchMeals.mockReturnValue(
+      new Promise<Meal[]>((res) => {
+        resolveFresh = res;
+      })
+    );
+    const { getByText, queryByLabelText } = await render(<DayScreen />);
+    // Cached data shows first, with no skeleton (cache hit skips it).
+    await waitFor(() => expect(getByText("cached lunch")).toBeTruthy());
+    expect(queryByLabelText("loading meals")).toBeNull();
+    // The silent refresh reconciles to fresh data when it lands.
+    resolveFresh([makeMeal("fresh-1", { meal_vibe: "fresh dinner" })]);
+    await waitFor(() => expect(getByText("fresh dinner")).toBeTruthy());
+  });
+
+  it("writes the snapshot after a successful fetch", async () => {
+    const meals = [makeMeal("m-1")];
+    mockFetchMeals.mockResolvedValue(meals);
+    await render(<DayScreen />);
+    await waitFor(() => {
+      expect(mockSetSnapshot).toHaveBeenCalledWith("day", todayYmd(), expect.any(Array));
+    });
   });
 
   it("shows empty state when no meals exist", async () => {

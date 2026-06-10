@@ -56,6 +56,14 @@ describe("StrengthSessionScreen", () => {
     mockFetchStrengthOverview.mockResolvedValue(mockStrengthOverview());
   });
 
+  it("shows a skeleton picker (not a bare spinner) while booting a session", async () => {
+    mockFetchStrengthOverview.mockReturnValue(new Promise(() => {}));
+    const { findByLabelText, queryByText } = await render(<StrengthSessionScreen />);
+    expect(await findByLabelText("loading session")).toBeTruthy();
+    // The real machine cards aren't there until the overview resolves.
+    expect(queryByText("Leg press")).toBeNull();
+  });
+
   it("shows the five picker cards in most-likely-next order", async () => {
     const { getByText } = await render(<StrengthSessionScreen />);
     await waitFor(() => {

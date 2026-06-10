@@ -34,7 +34,9 @@ import { computeDayTotals } from "@/lib/types";
 import { dayNavLabel, shiftYmd, todayYmd } from "@/lib/format";
 import { palette, radii, borders, fontSize, spacing, offsetShadow } from "@/lib/theme";
 import { consumePendingDay, onDayPicked, stashMeal, takeNewMeal } from "@/lib/stores";
+import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { MealCard } from "@/components/MealCard";
+import { DayScreenSkeleton } from "@/components/skeletons/DayScreenSkeleton";
 import { CopyDayButton } from "@/components/CopyDayButton";
 import { DayTotalsStrip } from "@/components/DayTotalsStrip";
 import { PendingCard, type PendingState } from "@/components/PendingCard";
@@ -56,26 +58,45 @@ export default function DayScreen() {
   const dayRef = useRef(day);
   dayRef.current = day;
 
-  // Load the viewed day's meals.
+  // Load the viewed day's meals. On a non-quiet load (mount / day change)
+  // we first try the per-day snapshot: if it hits, render it IMMEDIATELY
+  // (no skeleton) and refresh silently underneath. Only a true cold cache
+  // shows the skeleton. Every successful fetch writes the snapshot back.
   const loadMeals = useCallback(
     async (quiet = false) => {
+      const loadingDay = day;
       if (!quiet) {
         setError(null);
-        setLoading(true);
+        const cached = await getSnapshot<Meal[]>("day", loadingDay);
+        // The user may have navigated days while the snapshot read ran.
+        if (dayRef.current === loadingDay) {
+          if (cached && cached.length > 0) {
+            setMeals([...cached].sort((a, b) => b.created_at - a.created_at));
+            setLoading(false); // cache hit: show data, refresh silently
+          } else {
+            setLoading(true); // cold cache: the skeleton stands in
+          }
+        }
       }
       try {
-        const data = await fetchMeals(day);
-        // Newest-first.
-        setMeals([...data].sort((a, b) => b.created_at - a.created_at));
-        if (quiet) setError(null);
+        const data = await fetchMeals(loadingDay);
+        const sorted = [...data].sort((a, b) => b.created_at - a.created_at);
+        // Ignore a result for a day the user has since navigated away from.
+        if (dayRef.current === loadingDay) {
+          setMeals(sorted);
+          setError(null);
+        }
+        setSnapshot("day", loadingDay, sorted);
       } catch (err) {
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else {
-          setError("Could not load meals");
+        if (dayRef.current === loadingDay) {
+          if (err instanceof ApiError) {
+            setError(err.message);
+          } else {
+            setError("Could not load meals");
+          }
         }
       } finally {
-        setLoading(false);
+        if (dayRef.current === loadingDay) setLoading(false);
         setRefreshing(false);
       }
     },
@@ -278,16 +299,23 @@ export default function DayScreen() {
     | { type: "totals" }
     | { type: "pending"; item: PendingState }
     | { type: "meal"; item: Meal }
+    | { type: "skeleton" }
     | { type: "empty" }
     | { type: "error" };
 
+  // Three visually distinct states, never an empty state before the first
+  // fetch resolves:
+  //   loading (cold cache) → skeleton placeholders shaped like the content
+  //   data                 → totals + meal cards
+  //   empty (confirmed)    → the friendly copy, only once loading is done
   const listData: ListItem[] = [
     { type: "header" },
     ...(isToday ? [{ type: "whoop" } as ListItem] : []),
     ...(hasMeals ? [{ type: "totals" } as ListItem] : []),
     ...pending.map((p) => ({ type: "pending" as const, item: p })),
     ...meals.map((m) => ({ type: "meal" as const, item: m })),
-    ...(loading ? [] : !hasMeals ? [{ type: "empty" } as ListItem] : []),
+    ...(loading && !hasMeals ? [{ type: "skeleton" } as ListItem] : []),
+    ...(!loading && !hasMeals ? [{ type: "empty" } as ListItem] : []),
     ...(error && !loading ? [{ type: "error" } as ListItem] : []),
   ];
 
@@ -354,6 +382,8 @@ export default function DayScreen() {
             onRepeat={(scale) => repeatMealOnViewedDay(item.item.id, scale)}
           />
         );
+      case "skeleton":
+        return <DayScreenSkeleton />;
       case "empty":
         return (
           <View style={styles.emptyState}>

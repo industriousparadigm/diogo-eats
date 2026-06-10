@@ -32,7 +32,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, Chip, SectionHeader, Button, StatNumber } from "@/components/ui";
+import { Card, Chip, SectionHeader, Button, StatNumber, SkeletonBlock } from "@/components/ui";
 import { computeTotals } from "@/lib/editTotals";
 import { parseItems, type Item, type Meal } from "@/lib/types";
 import { fmt, fmtCal, fmtTime, fmtDayLabel } from "@/lib/format";
@@ -278,9 +278,9 @@ function Editor({ meal }: { meal: Meal }) {
               />
             </Pressable>
           ) : meal.photo_filename ? (
-            <View style={[styles.photo, styles.photoPlaceholder]}>
-              <ActivityIndicator color={palette.textSubtle} />
-            </View>
+            // Signed URL still resolving — a skeleton block in the photo's
+            // footprint, not a bare spinner on an empty frame.
+            <SkeletonBlock height={220} radius={radii.md} tone="bright" style={styles.photo} />
           ) : null}
 
           {/* Caption / vibe / notes + repeat */}
@@ -545,10 +545,6 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surfaceMuted,
     borderWidth: borders.chunky,
     borderColor: palette.ink,
-  },
-  photoPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
   },
   caption: {
     fontSize: fontSize.caption,

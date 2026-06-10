@@ -91,6 +91,14 @@ describe("OverviewScreen", () => {
     consumePendingDay(); // drain any day left by earlier tests
   });
 
+  it("shows a design-language skeleton (not a blank box) while loading", async () => {
+    mockFetchStats.mockReturnValue(new Promise(() => {}));
+    const { findByLabelText, queryByText } = await render(<OverviewScreen />);
+    expect(await findByLabelText("loading history")).toBeTruthy();
+    // None of the resolved content (headline, averages, count) shows yet.
+    expect(queryByText(/days logged in this window/)).toBeNull();
+  });
+
   it("renders the rolling headline from the aggregates", async () => {
     mockFetchStats.mockResolvedValue(WEEK);
     const { getByText } = await render(<OverviewScreen />);

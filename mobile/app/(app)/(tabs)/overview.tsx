@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
 import { Card, SectionHeader, StatNumber } from "@/components/ui";
+import { OverviewSkeleton } from "@/components/skeletons/OverviewSkeleton";
 import { ApiError, fetchProfile, fetchStats } from "@/lib/api";
 import { buildHeadline, loggedAverages } from "@/lib/headline";
 import { DEFAULT_TARGETS, type DayAggregate, type Targets } from "@/lib/types";
@@ -143,7 +144,7 @@ export default function OverviewScreen() {
         )}
 
         {loading ? (
-          <View style={styles.skeleton} />
+          <OverviewSkeleton />
         ) : (
           <>
             {/* Headline or first-days copy */}
@@ -274,12 +275,6 @@ const styles = StyleSheet.create({
   },
   windowTextActive: {
     color: palette.food.accentBright,
-  },
-  skeleton: {
-    height: 320,
-    backgroundColor: palette.surfaceAlt,
-    borderRadius: radii.lg,
-    opacity: 0.5,
   },
   headlineCard: {
     paddingVertical: spacing.lg,

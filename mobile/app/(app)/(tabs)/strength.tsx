@@ -6,7 +6,7 @@
 // and streak language live here by design (different emotional contract
 // from food, same design system).
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, exerciseIdentity, condensedFamily } from "@/lib/theme";
 import { Card, Chip, SectionHeader, Button } from "@/components/ui";
 import { ApiError, fetchStrengthOverview } from "@/lib/api";
+import { getSnapshot, setSnapshot } from "@/lib/snapshot";
+import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOverviewSkeleton";
 import { loadDraft } from "@/lib/draftStorage";
 import { exerciseImage } from "@/lib/exerciseImages";
 import { fmtBest, fmtSeriesList, fmtSessionDate } from "@/lib/strengthFormat";
@@ -32,15 +34,32 @@ export default function StrengthScreen() {
   const [hasDraft, setHasDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // True only while the FIRST load is in flight with no cached scoreboard
+  // to stand in — that's when the skeleton shows. A cache hit clears it.
+  const [loading, setLoading] = useState(true);
+  const seededRef = useRef(false);
 
   const load = useCallback(async () => {
+    // First focus: seed from the cached scoreboard so a returning user sees
+    // their numbers instantly, then refresh silently. A cold cache keeps
+    // the skeleton up until the fetch lands.
+    if (!seededRef.current) {
+      seededRef.current = true;
+      const cached = await getSnapshot<StrengthOverview>("strength");
+      if (cached) {
+        setOverview(cached);
+        setLoading(false);
+      }
+    }
     try {
       const data = await fetchStrengthOverview();
       setOverview(data);
       setError(null);
+      setSnapshot("strength", undefined, data);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load strength data");
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -88,6 +107,9 @@ export default function StrengthScreen() {
           accessibilityLabel={hasDraft ? "resume session" : "start session"}
           style={styles.startBtn}
         />
+
+        {/* Cold start, no cached scoreboard yet: skeleton stands in. */}
+        {loading && !overview && !error && <StrengthOverviewSkeleton />}
 
         {error && !overview && (
           <View style={styles.errorWrap}>

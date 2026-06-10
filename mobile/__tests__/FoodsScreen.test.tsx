@@ -78,6 +78,13 @@ describe("FoodsScreen", () => {
     mockFetchFoods.mockResolvedValue([food()]);
   });
 
+  it("shows a skeleton list (not a bare spinner) on first load", async () => {
+    mockFetchFoods.mockReturnValue(new Promise(() => {}));
+    const { findByLabelText, queryByText } = await render(<FoodsScreen />);
+    expect(await findByLabelText("loading foods")).toBeTruthy();
+    expect(queryByText(/Oat milk/)).toBeNull();
+  });
+
   it("lists foods with a plain-language provenance badge", async () => {
     const { getByText } = await render(<FoodsScreen />);
     await waitFor(() => {

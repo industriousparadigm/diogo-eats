@@ -27,6 +27,15 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 );
 
 const mockFetchStrengthOverview = jest.fn();
+const mockGetSnapshot = jest.fn();
+const mockSetSnapshot = jest.fn();
+
+// Snapshot cache — controlled per-test (cold cache → skeleton, hit → data).
+jest.mock("../lib/snapshot", () => ({
+  getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
+  setSnapshot: (...args: unknown[]) => mockSetSnapshot(...args),
+  snapshotKey: (ns: string, sub?: string) => (sub ? `${ns}.${sub}` : ns),
+}));
 
 jest.mock("../lib/api", () => {
   class ApiError extends Error {
@@ -53,6 +62,40 @@ describe("StrengthScreen", () => {
     mockPush.mockReset();
     await clearDraft();
     mockFetchStrengthOverview.mockResolvedValue(mockStrengthOverview());
+    mockGetSnapshot.mockReset();
+    mockGetSnapshot.mockResolvedValue(null); // cold cache by default
+    mockSetSnapshot.mockReset();
+  });
+
+  it("shows a skeleton scoreboard (not a blank screen) while loading", async () => {
+    mockFetchStrengthOverview.mockReturnValue(new Promise(() => {}));
+    const { findByLabelText, queryByText } = await render(<StrengthScreen />);
+    expect(await findByLabelText("loading strength")).toBeTruthy();
+    // The Start action is always present; the scoreboard numbers are not yet.
+    expect(queryByText("Leg press")).toBeNull();
+  });
+
+  it("renders the cached scoreboard immediately, then refreshes silently", async () => {
+    const cached = mockStrengthOverview();
+    cached.exercises = cached.exercises.map((e) =>
+      e.id === "leg-press" ? { ...e, name: "Cached leg press" } : e
+    );
+    mockGetSnapshot.mockResolvedValue(cached);
+    // Hold the fresh fetch open so the cached render is observable.
+    let resolveFresh: (o: ReturnType<typeof mockStrengthOverview>) => void = () => {};
+    mockFetchStrengthOverview.mockReturnValue(new Promise((res) => (resolveFresh = res)));
+    const { getByText, queryByLabelText } = await render(<StrengthScreen />);
+    await waitFor(() => expect(getByText("Cached leg press")).toBeTruthy());
+    expect(queryByLabelText("loading strength")).toBeNull();
+    resolveFresh(mockStrengthOverview());
+    await waitFor(() => expect(getByText("Leg press")).toBeTruthy());
+  });
+
+  it("writes the snapshot after a successful overview fetch", async () => {
+    await render(<StrengthScreen />);
+    await waitFor(() => {
+      expect(mockSetSnapshot).toHaveBeenCalledWith("strength", undefined, expect.any(Object));
+    });
   });
 
   it("shows the Start session button and pushes the capture flow", async () => {

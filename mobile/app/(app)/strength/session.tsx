@@ -19,7 +19,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -28,6 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, exerciseIdentity } from "@/lib/theme";
 import { Card, Button } from "@/components/ui";
+import { SessionPickerSkeleton } from "@/components/skeletons/SessionPickerSkeleton";
 import { ApiError, completeStrengthSession, fetchStrengthOverview } from "@/lib/api";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draftStorage";
 import { exerciseImage } from "@/lib/exerciseImages";
@@ -151,23 +151,41 @@ export default function StrengthSessionScreen() {
 
   // ---- render ----
   if (!draft) {
+    // Booting: a fresh draft is being built from the overview fetch. Show
+    // the SESSION header + a skeleton picker (loud register) so the flow
+    // never opens on a bare spinner. The error path stays centered.
+    if (loadError) {
+      return (
+        <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+          <View style={styles.centerWrap}>
+            <Text style={styles.errorText}>{loadError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={boot}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.leaveText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={styles.centerWrap}>
-          {loadError ? (
-            <>
-              <Text style={styles.errorText}>{loadError}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={boot}>
-                <Text style={styles.retryText}>Retry</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.back()}>
-                <Text style={styles.leaveText}>Back</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <ActivityIndicator color={palette.strength.brand} />
-          )}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.headerBtn}
+            accessibilityLabel="leave session"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.headerBtnText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>SESSION</Text>
+          <View style={styles.headerBtn} />
         </View>
+        <ScrollView contentContainerStyle={styles.pickerContent} showsVerticalScrollIndicator={false}>
+          <SessionPickerSkeleton />
+        </ScrollView>
       </SafeAreaView>
     );
   }

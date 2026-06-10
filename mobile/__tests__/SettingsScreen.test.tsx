@@ -69,6 +69,14 @@ describe("SettingsScreen", () => {
     mockSaveTargets.mockResolvedValue(undefined);
   });
 
+  it("shows a skeleton form (not a bare spinner) while the profile loads", async () => {
+    mockFetchProfile.mockReturnValue(new Promise(() => {}));
+    const { findByLabelText, queryByText } = await render(<SettingsScreen />);
+    expect(await findByLabelText("loading settings")).toBeTruthy();
+    // The save button (and fields) aren't there until the profile resolves.
+    expect(queryByText("save targets")).toBeNull();
+  });
+
   it("loads the 4 targets from the profile", async () => {
     const { getByDisplayValue } = await render(<SettingsScreen />);
     await waitFor(() => {

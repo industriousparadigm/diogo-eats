@@ -14,7 +14,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -34,6 +33,7 @@ import {
   updateFood,
 } from "@/lib/api";
 import { provenanceLabel, parsePer100g, type Food, type Provenance } from "@/lib/foods";
+import { FoodsSkeleton } from "@/components/skeletons/FoodsSkeleton";
 import type { Per100g } from "@/lib/types";
 
 const IS_WEB = Platform.OS === "web";
@@ -253,7 +253,7 @@ export default function FoodsScreen() {
 
           {/* List */}
           {foods === null && loading ? (
-            <ActivityIndicator color={palette.food.accent} style={styles.loader} />
+            <FoodsSkeleton />
           ) : foods !== null && list.length === 0 ? (
             <Text style={styles.emptyText}>
               {query ? "no foods match." : "no foods yet — log a meal or read a label."}
@@ -614,7 +614,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#fff",
   },
-  loader: { marginTop: 24 },
   emptyText: {
     fontSize: 14,
     color: palette.textSubtle,
