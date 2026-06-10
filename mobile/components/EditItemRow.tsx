@@ -1,11 +1,14 @@
 // One item row inside the meal-edit screen: name + remove on top,
 // grams + per-item nutrient summary below. Mirrors the web's ItemRow.
 //
-// Confidence dot on the left signals when Vision was guessing — a soft
-// nudge to verify low/medium portions without alarming about them.
+// Uncertainty is shown as a LABELED chip, never a bare colored dot
+// (DESIGN.md "Uncertainty"): a low-confidence item — Vision was guessing —
+// wears a small calm "guess" chip; medium/high wear nothing. The chip is
+// the food register, so it stays calm: no orange ball, no alarm.
 
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Chip, Input } from "@/components/ui";
 import type { Item } from "@/lib/types";
 
 type Props = {
@@ -17,26 +20,18 @@ type Props = {
 };
 
 export function EditItemRow({ item, onName, onGrams, onRemove, disabled }: Props) {
-  const dot =
-    item.confidence === "low"
-      ? "#f97316" // low confidence — Vision was guessing
-      : item.confidence === "medium"
-        ? "#eab308" // medium confidence — reasonable estimate
-        : null;
-
   const kcal = Math.round((item.grams * item.per_100g.calories) / 100);
   const sat = ((item.grams * item.per_100g.sat_fat_g) / 100).toFixed(1);
+  const isGuess = item.confidence === "low";
 
   return (
     <View style={styles.card}>
       <View style={styles.topRow}>
-        {dot && <View style={[styles.dot, { backgroundColor: dot }]} />}
-        <TextInput
+        <Input
           style={styles.nameInput}
           value={item.name}
           onChangeText={onName}
           editable={!disabled}
-          multiline
           accessibilityLabel="item name"
         />
         <TouchableOpacity
@@ -49,15 +44,16 @@ export function EditItemRow({ item, onName, onGrams, onRemove, disabled }: Props
         </TouchableOpacity>
       </View>
       <View style={styles.bottomRow}>
-        <TextInput
+        <Input
           style={styles.gramsInput}
           value={String(item.grams)}
           onChangeText={onGrams}
           editable={!disabled}
-          keyboardType="numeric"
+          variant="numeric"
+          suffix="g"
           accessibilityLabel={`${item.name} grams`}
         />
-        <Text style={styles.gramsUnit}>g</Text>
+        {isGuess && <Chip label="guess" tone="neutral" accessibilityLabel="low-confidence guess" />}
         <Text style={styles.perItem}>
           {kcal} kcal · {sat}g sat
         </Text>
@@ -69,9 +65,9 @@ export function EditItemRow({ item, onName, onGrams, onRemove, disabled }: Props
 const styles = StyleSheet.create({
   card: {
     backgroundColor: palette.surfaceAlt,
-    borderWidth: borders.bold,
+    borderWidth: borders.chunky,
     borderColor: palette.ink,
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -80,23 +76,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    flexShrink: 0,
-  },
   nameInput: {
     flex: 1,
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.hairline,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.body,
-    minHeight: 36,
   },
   removeText: {
     color: palette.textSubtle,
@@ -109,19 +90,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   gramsInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.hairline,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.body,
-    width: 90,
-  },
-  gramsUnit: {
-    fontSize: fontSize.caption,
-    color: palette.textSubtle,
+    width: 110,
   },
   perItem: {
     marginLeft: "auto",

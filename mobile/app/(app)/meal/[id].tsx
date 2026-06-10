@@ -18,7 +18,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Pressable,
   StyleSheet,
@@ -32,7 +31,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, Chip, SectionHeader, Button, StatNumber, SkeletonBlock } from "@/components/ui";
+import { Card, Chip, SectionHeader, Button, StatNumber, SkeletonBlock, Input } from "@/components/ui";
 import { computeTotals } from "@/lib/editTotals";
 import { parseItems, type Item, type Meal } from "@/lib/types";
 import { fmt, fmtCal, fmtTime, fmtDayLabel } from "@/lib/format";
@@ -306,13 +305,11 @@ function Editor({ meal }: { meal: Meal }) {
               {/* Talk-to-fix */}
               <Card tone="recessed" style={styles.talkCard}>
                 <SectionHeader>QUICK FIX — TELL CLAUDE</SectionHeader>
-                <TextInput
-                  style={styles.talkInput}
+                <Input
+                  variant="multiline"
                   value={talkMsg}
                   onChangeText={setTalkMsg}
                   placeholder="e.g. it's all plant / smaller portion / add olive oil"
-                  placeholderTextColor={palette.textFaint}
-                  multiline
                   maxLength={500}
                   editable={!talkBusy && !busy}
                   accessibilityLabel="talk to fix message"
@@ -358,24 +355,22 @@ function Editor({ meal }: { meal: Meal }) {
 
                 {adding ? (
                   <View style={styles.addCard}>
-                    <TextInput
-                      style={styles.addNameInput}
+                    <Input
                       value={addName}
                       onChangeText={setAddName}
                       placeholder="e.g. olive oil, avocado, salmon"
-                      placeholderTextColor={palette.textFaint}
                       editable={!addBusy}
                       autoFocus
                       accessibilityLabel="new item name"
                     />
                     <View style={styles.addRow}>
-                      <TextInput
+                      <Input
                         style={styles.addGramsInput}
+                        variant="numeric"
+                        suffix="g"
                         value={addGrams}
                         onChangeText={setAddGrams}
                         placeholder="grams"
-                        placeholderTextColor={palette.textFaint}
-                        keyboardType="numeric"
                         editable={!addBusy}
                         accessibilityLabel="new item grams"
                       />
@@ -578,18 +573,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  talkInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.body,
-    minHeight: 60,
-    textAlignVertical: "top",
-  },
   talkRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -636,30 +619,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  addNameInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.body,
-  },
   addRow: {
     flexDirection: "row",
     gap: spacing.sm,
   },
   addGramsInput: {
     flex: 1,
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.body,
   },
   addCancelBtn: {
     borderWidth: borders.bold,

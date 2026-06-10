@@ -106,8 +106,46 @@ Reach for these before hand-rolling a styled `View`/`Text`.
   shadow, black-ink label), `secondary` (chunky border), `ghost` (dashed
   affordance), `danger` (destructive). `accent` recolors it (food lime,
   strength amber, an exercise's identity). `size="lg"` for hero actions.
+- **`Input`** — the one text field. `variant` = `text` / `numeric` /
+  `decimal` / `multiline` (picks the keyboard + multiline behaviour).
+  `accent` sets the focus-ring color (defaults to food lime; pass a strength
+  amber or an exercise identity on loud surfaces). `suffix` shows a fixed
+  unit inside the field ("g", "kg"). Never hand-roll a `TextInput` in a
+  screen — every field is this primitive (see "Form fields" below).
 
 ---
+
+## Form fields
+
+Every text field is the **`Input`** primitive — there is no hand-rolled
+`TextInput` in a screen. The recipe is fixed so the meal editor, the
+quick-fix box, the session note, settings targets, the foods forms, and
+the capture caption all read as one system:
+
+- **Fill** `surfaceMuted`, **border** `borders.bold` in `inkSoft` at rest,
+  **radius** `radii.sm`.
+- **On focus** the border takes the surface's register **accent** — food
+  lime by default, an exercise identity or strength amber on a loud
+  surface (pass `accent`). The text-selection caret matches.
+- **Placeholder** is the one legitimate use of `textFaint`. Typed text is
+  always full `text` — never leave anything a user must read in a faint
+  tier.
+- **Keyboard** is `keyboardAppearance="dark"` to match the OLED app, and
+  the `variant` picks the right keypad (`numeric` / `decimal`) so a
+  grams/weight field never opens the alphabet.
+- A fixed unit goes in the field via `suffix` ("g", "kg"), not as a
+  separate floating label.
+
+## Uncertainty
+
+When the system is unsure (Vision guessing a portion, a low-confidence
+parse), say so with a **labeled chip, never a bare colored dot**. On
+meal-edit item rows a LOW-confidence item wears a small calm `Chip`
+labeled **"guess"** (neutral tone — it's the food register, so it informs
+without alarming); medium/high wear nothing. A colored ball next to a row
+reads as a status light the user must decode; a one-word chip just tells
+them. This is also why food never gets a stoplight — uncertainty is
+labeled, not color-coded.
 
 ## Do / Don't
 
@@ -127,6 +165,8 @@ Reach for these before hand-rolling a styled `View`/`Text`.
 - ❌ A multi-hue heatmap. Plant scale is one hue, always.
 - ❌ A "photo vs text" mode-chooser or any mode picker UI. One unified surface.
 - ❌ Generic gray lists of borderless rows. Rows are Cards or chunky-bordered.
+- ❌ A hand-rolled `TextInput` in a screen. Use the `Input` primitive.
+- ❌ A bare colored dot for uncertainty. Label it with a chip.
 - ❌ Raw hex / magic font sizes in a component. Token it.
 - ❌ A font-loading dependency for the condensed look. iOS ships the family.
 
@@ -143,7 +183,8 @@ Reach for these before hand-rolling a styled `View`/`Text`.
 4. Every block is a `Card`. Every number that matters is a `StatNumber` /
    condensed numeral. Every section opens with a `SectionHeader`. Every action
    is a `Button`.
-5. Inputs: `surfaceMuted` fill, `borders.bold` `inkSoft` border, `radii.sm`.
+5. Inputs: the `Input` primitive (never a raw `TextInput`) — see "Form
+   fields". Uncertainty is a labeled chip, never a colored dot.
 6. Run tests + `tsc`, then **launch it in the simulator and look at it** —
    composition, contrast (nothing important in `textFaint`), alignment, and that
    the offset shadow blocks read. A screen you haven't looked at isn't done.

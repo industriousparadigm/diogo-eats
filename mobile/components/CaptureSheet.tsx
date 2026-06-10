@@ -20,7 +20,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Modal,
@@ -34,7 +33,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Button, SectionHeader, SkeletonBlock, SkeletonCard } from "@/components/ui";
+import { Button, Input, SectionHeader, SkeletonBlock, SkeletonCard } from "@/components/ui";
 import { fmtDayLabel } from "@/lib/format";
 import { fetchRecentMeals, repeatMeal } from "@/lib/api";
 import { filterRecentMeals, recentMealLabel } from "@/lib/recentMeals";
@@ -342,8 +341,9 @@ export function CaptureSheet({
             )}
 
             {/* Text field — coexists with photos (becomes the caption). */}
-            <TextInput
-              style={[styles.textInput, pickedPhotos.length > 0 && styles.textInputShort]}
+            <Input
+              variant="multiline"
+              style={pickedPhotos.length > 0 && styles.captionShort}
               value={text}
               onChangeText={setText}
               placeholder={
@@ -351,8 +351,6 @@ export function CaptureSheet({
                   ? "add a caption (optional)…"
                   : "describe what you ate, or add a photo…"
               }
-              placeholderTextColor={palette.textFaint}
-              multiline
               maxLength={1000}
             />
 
@@ -405,12 +403,10 @@ export function CaptureSheet({
                 </Text>
               ) : (
                 <>
-                  <TextInput
-                    style={styles.recentSearch}
+                  <Input
                     value={recentSearch}
                     onChangeText={setRecentSearch}
                     placeholder="search recent meals…"
-                    placeholderTextColor={palette.textFaint}
                     autoComplete="off"
                   />
                   {filteredRecent.length === 0 ? (
@@ -578,20 +574,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: palette.textMuted,
   },
-  textInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    fontSize: fontSize.bodyLg,
-    minHeight: 110,
-    textAlignVertical: "top",
-  },
-  textInputShort: {
-    minHeight: 56,
+  captionShort: {
+    minHeight: 52,
   },
   errorText: {
     fontSize: fontSize.caption,
@@ -621,16 +605,6 @@ const styles = StyleSheet.create({
   recentEmpty: {
     fontSize: fontSize.caption,
     color: palette.textSubtle,
-  },
-  recentSearch: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: 9,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSize.body,
   },
   recentRow: {
     flexDirection: "row",

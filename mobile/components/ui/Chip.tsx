@@ -23,6 +23,7 @@ type Props = {
   // Explicit text color (e.g. white-on-dark plant badge).
   textColor?: string;
   rotated?: boolean;
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -33,6 +34,7 @@ export function Chip({
   fill,
   textColor,
   rotated = false,
+  accessibilityLabel,
   style,
 }: Props) {
   const accent = identity ?? palette.food.accent;
@@ -50,6 +52,7 @@ export function Chip({
 
   return (
     <View
+      accessibilityLabel={accessibilityLabel}
       style={[
         styles.chip,
         toneStyle,

@@ -7,7 +7,6 @@ import { useCallback, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -18,7 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, SectionHeader, Button } from "@/components/ui";
+import { Card, SectionHeader, Button, Input } from "@/components/ui";
 import { SettingsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { ApiError, fetchProfile, saveTargets } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -185,17 +184,14 @@ export default function SettingsScreen() {
               {FIELDS.map((f) => (
                 <View key={f.key} style={styles.field}>
                   <Text style={styles.fieldLabel}>{f.label.toUpperCase()}</Text>
-                  <View style={styles.fieldRow}>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={draft[f.key]}
-                      onChangeText={(v) => patch(f.key, v)}
-                      keyboardType="decimal-pad"
-                      editable={!saving}
-                      accessibilityLabel={`${f.label} target`}
-                    />
-                    <Text style={styles.fieldUnit}>{f.unit}</Text>
-                  </View>
+                  <Input
+                    variant="decimal"
+                    suffix={f.unit}
+                    value={draft[f.key]}
+                    onChangeText={(v) => patch(f.key, v)}
+                    editable={!saving}
+                    accessibilityLabel={`${f.label} target`}
+                  />
                   <Text style={styles.fieldHint}>{f.hint}</Text>
                 </View>
               ))}
@@ -312,27 +308,6 @@ const styles = StyleSheet.create({
     color: palette.textSubtle,
     fontWeight: "700",
     letterSpacing: 0.4,
-  },
-  fieldRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  fieldInput: {
-    flex: 1,
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    fontSize: fontSize.bodyLg,
-  },
-  fieldUnit: {
-    fontSize: fontSize.caption,
-    color: palette.textSubtle,
-    width: 36,
   },
   fieldHint: {
     fontSize: fontSize.label,

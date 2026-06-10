@@ -10,7 +10,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -33,6 +32,7 @@ import {
   updateFood,
 } from "@/lib/api";
 import { provenanceLabel, parsePer100g, type Food, type Provenance } from "@/lib/foods";
+import { Input } from "@/components/ui";
 import { FoodsSkeleton } from "@/components/skeletons/FoodsSkeleton";
 import type { Per100g } from "@/lib/types";
 
@@ -174,12 +174,10 @@ export default function FoodsScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TextInput
-            style={styles.search}
+          <Input
             value={query}
             onChangeText={setQuery}
             placeholder="search your foods…"
-            placeholderTextColor={palette.textFaint}
             autoComplete="off"
             accessibilityLabel="search foods"
           />
@@ -464,12 +462,10 @@ function FoodForm({
   return (
     <View style={styles.form}>
       <Text style={styles.formLabel}>{mode === "add" ? "ADD A FOOD" : "EDIT FOOD"}</Text>
-      <TextInput
-        style={styles.formInput}
+      <Input
         value={name}
         onChangeText={setName}
         placeholder="e.g. Provamel oat milk"
-        placeholderTextColor={palette.textFaint}
         editable={!busy}
         accessibilityLabel="food name"
         autoFocus={mode === "add"}
@@ -497,11 +493,10 @@ function FoodForm({
         {NUM_FIELDS.map((f) => (
           <View key={f.key} style={styles.numField}>
             <Text style={styles.numLabel}>{f.label} (per 100g)</Text>
-            <TextInput
-              style={styles.numInput}
+            <Input
+              variant="decimal"
               value={vals[f.key] ?? ""}
               onChangeText={(v) => setVals((s) => ({ ...s, [f.key]: v }))}
-              keyboardType="decimal-pad"
               editable={!busy}
               accessibilityLabel={`${f.label} per 100g`}
             />
@@ -566,16 +561,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
     paddingBottom: 48,
-  },
-  search: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: borders.bold,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: fontSize.bodyLg,
   },
   actionRow: {
     flexDirection: "row",
@@ -723,16 +708,6 @@ const styles = StyleSheet.create({
     color: palette.textSubtle,
     letterSpacing: 0.5,
   },
-  formInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: 1,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
-  },
   plantRow: {
     flexDirection: "row",
     gap: 8,
@@ -769,16 +744,6 @@ const styles = StyleSheet.create({
   numLabel: {
     fontSize: 11,
     color: palette.textSubtle,
-  },
-  numInput: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.text,
-    borderWidth: 1,
-    borderColor: palette.inkSoft,
-    borderRadius: radii.sm,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    fontSize: 14,
   },
   formError: {
     fontSize: 12,
