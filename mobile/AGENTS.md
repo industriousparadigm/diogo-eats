@@ -17,3 +17,6 @@ two-register rule (food = calm, strength = loud), the do/don't list, and a
 new-screen checklist. Every surface shares one look; that file is how it stays
 that way. Do not introduce raw hexes, magic sizes, blurred shadows, borderless
 cards, red on food surfaces, or mode-chooser UIs — DESIGN.md explains why.
+
+## Screenshot verification requires a SERVED bundle
+Expo Go silently falls back to its cached copy of the PUBLISHED app when it can't reach the dev server — your screenshot then shows prod, not your change. Before trusting any simulator screenshot: confirm Metro's log contains an `iOS Bundled` line for your session (`grep Bundled <metro log>`). If zero, `xcrun simctl terminate booted host.exp.Exponent` and reopen `exp://127.0.0.1:8081`.

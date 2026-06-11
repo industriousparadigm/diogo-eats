@@ -267,14 +267,19 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 1,
   },
-  // Full-width footer row spanning the card (not the text column).
+  // Full-width footer bar: the four metrics distributed evenly across
+  // the card (rhyming with the day-totals strip), anchored by a
+  // hairline divider — interiors get hairlines, never floating space.
   metrics: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: spacing.lg,
+    justifyContent: "space-between",
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
     paddingTop: spacing.sm,
+    marginTop: spacing.xs,
+    borderTopWidth: borders.hairline,
+    borderTopColor: palette.inkSoft,
   },
   // Plant share — compact: a small single-hue swatch + the %, not a big pill.
   plantWrap: {
@@ -322,7 +327,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     gap: 3,
-    marginLeft: "auto",
   },
   kcalNum: {
     fontFamily: condensedFamily,
