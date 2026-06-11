@@ -134,28 +134,30 @@ export function MealCard({ meal, onDelete, onOpen, targets = DEFAULT_TARGETS }: 
               {meal.notes}
             </Text>
           ) : null}
+        </View>
+      </View>
 
-          {/* Metric hierarchy: plant compact, then the two levers (fiber +
-              sat fat), kcal small + last. NOT a calorie counter. */}
-          <View style={styles.metrics}>
-            <View style={styles.plantWrap} accessibilityLabel={`${fmtPlant(meal.plant_pct)} plant`}>
-              <View style={[styles.plantSwatch, { backgroundColor: pc }]} />
-              <Text style={styles.plantPct}>{fmtPlant(meal.plant_pct)}</Text>
-            </View>
-            <Metric
-              label="fiber"
-              value={`${fmt(meal.soluble_fiber_g)}g`}
-            />
-            <Metric
-              label="sat fat"
-              value={`${fmt(meal.sat_fat_g)}g`}
-              color={satFatHigh ? palette.warn : undefined}
-            />
-            <View style={styles.kcalWrap}>
-              <Text style={styles.kcalNum}>{fmtCal(meal.calories)}</Text>
-              <Text style={styles.kcalUnit}>kcal</Text>
-            </View>
-          </View>
+      {/* Metric hierarchy: plant compact, then the two levers (fiber +
+          sat fat), kcal small + last. NOT a calorie counter. A full-width
+          footer row — it spans the card, not the text column, so tall
+          cards don't strand dead space under the photo. */}
+      <View style={styles.metrics}>
+        <View style={styles.plantWrap} accessibilityLabel={`${fmtPlant(meal.plant_pct)} plant`}>
+          <View style={[styles.plantSwatch, { backgroundColor: pc }]} />
+          <Text style={styles.plantPct}>{fmtPlant(meal.plant_pct)}</Text>
+        </View>
+        <Metric
+          label="fiber"
+          value={`${fmt(meal.soluble_fiber_g)}g`}
+        />
+        <Metric
+          label="sat fat"
+          value={`${fmt(meal.sat_fat_g)}g`}
+          color={satFatHigh ? palette.warn : undefined}
+        />
+        <View style={styles.kcalWrap}>
+          <Text style={styles.kcalNum}>{fmtCal(meal.calories)}</Text>
+          <Text style={styles.kcalUnit}>kcal</Text>
         </View>
       </View>
 
@@ -204,7 +206,8 @@ const styles = StyleSheet.create({
   },
   inner: {
     flexDirection: "row",
-    padding: spacing.md,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.md,
     gap: spacing.md,
   },
   thumb: {
@@ -264,11 +267,14 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 1,
   },
+  // Full-width footer row spanning the card (not the text column).
   metrics: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: spacing.lg,
-    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
   },
   // Plant share — compact: a small single-hue swatch + the %, not a big pill.
   plantWrap: {
