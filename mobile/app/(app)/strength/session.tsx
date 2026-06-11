@@ -19,13 +19,11 @@ import {
   TouchableOpacity,
   Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, exerciseIdentity } from "@/lib/theme";
-import { Card, Button, Input } from "@/components/ui";
+import { Card, Button, Input, KeyboardAwareScrollView } from "@/components/ui";
 import { SessionPickerSkeleton } from "@/components/skeletons/SessionPickerSkeleton";
 import { ApiError, completeStrengthSession, fetchStrengthOverview } from "@/lib/api";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draftStorage";
@@ -234,9 +232,24 @@ export default function StrengthSessionScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.pickerContent}
-        showsVerticalScrollIndicator={false}
+        footer={
+          /* Session complete — explicit, sticky. Hidden by the aware scroll
+             while the keyboard is up so it never covers the focused note. */
+          <View style={styles.completeBar}>
+            <Button
+              label="Session complete"
+              variant="primary"
+              accent={palette.strength.brand}
+              size="lg"
+              loading={submitting}
+              disabled={totalConfirmed === 0 || submitting}
+              onPress={complete}
+              accessibilityLabel="session complete"
+            />
+          </View>
+        }
       >
         <Text style={styles.pickerHint}>
           {totalConfirmed === 0
@@ -322,21 +335,7 @@ export default function StrengthSessionScreen() {
         )}
 
         {submitError && <Text style={styles.submitError}>{submitError}</Text>}
-      </ScrollView>
-
-      {/* Session complete — explicit, sticky */}
-      <View style={styles.completeBar}>
-        <Button
-          label="Session complete"
-          variant="primary"
-          accent={palette.strength.brand}
-          size="lg"
-          loading={submitting}
-          disabled={totalConfirmed === 0 || submitting}
-          onPress={complete}
-          accessibilityLabel="session complete"
-        />
-      </View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -365,74 +364,68 @@ function EntryView({
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.headerBtn}
-            accessibilityLabel="back to exercises"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.headerBtnText}>‹</Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: accent }]}>
-            {ex.name.toUpperCase()}
-          </Text>
-          <View style={styles.headerBtn} />
-        </View>
-
-        <ScrollView
-          contentContainerStyle={styles.entryContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.headerBtn}
+          accessibilityLabel="back to exercises"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Card identity={accent} depth="loud" style={styles.entryHero}>
-            {img && <Image source={img} style={styles.entryImage} />}
-            <Text style={styles.entryDesc}>{ex.description}</Text>
-          </Card>
+          <Text style={styles.headerBtnText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: accent }]}>
+          {ex.name.toUpperCase()}
+        </Text>
+        <View style={styles.headerBtn} />
+      </View>
 
-          {entry.series.map((s, i) => (
-            <SeriesRow
-              key={i}
-              index={i}
-              series={s}
-              type={ex.measurement_type}
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.entryContent}
+        footer={
+          <View style={styles.completeBar}>
+            <Button
+              label={
+                confirmed > 0
+                  ? `Done — ${confirmed} set${confirmed === 1 ? "" : "s"} logged`
+                  : "Back to exercises"
+              }
+              variant="primary"
               accent={accent}
-              canConfirm={canConfirmSeries(draft, exerciseId, i)}
-              onWeight={(w) => update((d) => setSeriesWeight(d, exerciseId, i, w))}
-              onReps={(r) => update((d) => setSeriesReps(d, exerciseId, i, r))}
-              onConfirm={() => update((d) => confirmSeries(d, exerciseId, i))}
-              onUnconfirm={() => update((d) => unconfirmSeries(d, exerciseId, i))}
+              size="lg"
+              onPress={onBack}
+              accessibilityLabel="done with this exercise"
             />
-          ))}
+          </View>
+        }
+      >
+        <Card identity={accent} depth="loud" style={styles.entryHero}>
+          {img && <Image source={img} style={styles.entryImage} />}
+          <Text style={styles.entryDesc}>{ex.description}</Text>
+        </Card>
 
-          <TouchableOpacity
-            style={styles.addSeriesBtn}
-            onPress={() => update((d) => addSeries(d, exerciseId))}
-            accessibilityLabel="add series"
-          >
-            <Text style={styles.addSeriesText}>+ add series</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        <View style={styles.completeBar}>
-          <Button
-            label={
-              confirmed > 0
-                ? `Done — ${confirmed} set${confirmed === 1 ? "" : "s"} logged`
-                : "Back to exercises"
-            }
-            variant="primary"
+        {entry.series.map((s, i) => (
+          <SeriesRow
+            key={i}
+            index={i}
+            series={s}
+            type={ex.measurement_type}
             accent={accent}
-            size="lg"
-            onPress={onBack}
-            accessibilityLabel="done with this exercise"
+            canConfirm={canConfirmSeries(draft, exerciseId, i)}
+            onWeight={(w) => update((d) => setSeriesWeight(d, exerciseId, i, w))}
+            onReps={(r) => update((d) => setSeriesReps(d, exerciseId, i, r))}
+            onConfirm={() => update((d) => confirmSeries(d, exerciseId, i))}
+            onUnconfirm={() => update((d) => unconfirmSeries(d, exerciseId, i))}
           />
-        </View>
-      </KeyboardAvoidingView>
+        ))}
+
+        <TouchableOpacity
+          style={styles.addSeriesBtn}
+          onPress={() => update((d) => addSeries(d, exerciseId))}
+          accessibilityLabel="add series"
+        >
+          <Text style={styles.addSeriesText}>+ add series</Text>
+        </TouchableOpacity>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -441,9 +434,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: palette.bg,
-  },
-  kav: {
-    flex: 1,
   },
   centerWrap: {
     flex: 1,

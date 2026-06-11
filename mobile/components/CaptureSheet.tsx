@@ -23,7 +23,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -33,7 +32,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Button, Input, SectionHeader, SkeletonBlock, SkeletonCard } from "@/components/ui";
+import { Button, Input, SectionHeader, SkeletonBlock, SkeletonCard, KeyboardAwareScrollView } from "@/components/ui";
 import { fmtDayLabel } from "@/lib/format";
 import { fetchRecentMeals, repeatMeal } from "@/lib/api";
 import { filterRecentMeals, recentMealLabel } from "@/lib/recentMeals";
@@ -263,28 +262,22 @@ export function CaptureSheet({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        <View style={styles.sheet}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <View style={styles.titleWrap}>
-              <Text style={styles.title}>Log a meal</Text>
-              {forDate && <Text style={styles.titleHint}>for {fmtDayLabel(forDate)}</Text>}
-            </View>
-            <View style={styles.closeBtn} />
+      <View style={styles.sheet}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+            <Text style={styles.closeBtnText}>Cancel</Text>
+          </TouchableOpacity>
+          <View style={styles.titleWrap}>
+            <Text style={styles.title}>Log a meal</Text>
+            {forDate && <Text style={styles.titleHint}>for {fmtDayLabel(forDate)}</Text>}
           </View>
+          <View style={styles.closeBtn} />
+        </View>
 
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+        <KeyboardAwareScrollView
+          style={styles.body}
+          contentContainerStyle={styles.bodyContent}
+        >
             {/* Photo slots */}
             <View style={styles.pickRow}>
               {!IS_WEB && (
@@ -438,9 +431,8 @@ export function CaptureSheet({
                 </>
               )}
             </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </View>
 
       <PhotoCropSheet
         visible={cropIndex != null}
@@ -453,10 +445,6 @@ export function CaptureSheet({
 }
 
 const styles = StyleSheet.create({
-  kav: {
-    flex: 1,
-    backgroundColor: palette.bg,
-  },
   sheet: {
     flex: 1,
     backgroundColor: palette.bg,

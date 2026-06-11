@@ -8,16 +8,13 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, SectionHeader, Button, Input } from "@/components/ui";
+import { Card, SectionHeader, Button, Input, KeyboardAwareScrollView } from "@/components/ui";
 import { SettingsSkeleton } from "@/components/skeletons/SettingsSkeleton";
 import { ApiError, fetchProfile, saveTargets } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -155,15 +152,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Settings</Text>
             <TouchableOpacity onPress={resetAll} style={styles.resetBtn} disabled={saving}>
@@ -235,8 +224,7 @@ export default function SettingsScreen() {
               <Text style={styles.signOutText}>Sign out</Text>
             </TouchableOpacity>
           </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -258,9 +246,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: palette.bg,
-  },
-  kav: {
-    flex: 1,
   },
   content: {
     padding: spacing.lg,

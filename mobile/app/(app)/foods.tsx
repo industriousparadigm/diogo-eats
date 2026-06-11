@@ -12,9 +12,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
-  KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -32,7 +30,7 @@ import {
   updateFood,
 } from "@/lib/api";
 import { provenanceLabel, parsePer100g, type Food, type Provenance } from "@/lib/foods";
-import { Input } from "@/components/ui";
+import { Input, KeyboardAwareScrollView } from "@/components/ui";
 import { FoodsSkeleton } from "@/components/skeletons/FoodsSkeleton";
 import type { Per100g } from "@/lib/types";
 
@@ -149,31 +147,25 @@ export default function FoodsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            accessibilityLabel="back"
-            style={styles.backBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.backBtnText}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>FOODS</Text>
-          <Text style={styles.headerCount}>
-            {foods ? `${list.length}${list.length === 100 ? "+" : ""}` : ""}
-          </Text>
-        </View>
-
-        <ScrollView
-          style={styles.body}
-          contentContainerStyle={styles.bodyContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityLabel="back"
+          style={styles.backBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
+          <Text style={styles.backBtnText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>FOODS</Text>
+        <Text style={styles.headerCount}>
+          {foods ? `${list.length}${list.length === 100 ? "+" : ""}` : ""}
+        </Text>
+      </View>
+
+      <KeyboardAwareScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+      >
           <Input
             value={query}
             onChangeText={setQuery}
@@ -289,8 +281,7 @@ export default function FoodsScreen() {
               )
             )
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -523,7 +514,6 @@ function FoodForm({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.bg },
-  kav: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",

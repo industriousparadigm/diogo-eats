@@ -15,13 +15,11 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, offsetShadow } from "@/lib/theme";
-import { Button, StatNumber } from "@/components/ui";
+import { Button, StatNumber, KeyboardAwareScrollView } from "@/components/ui";
 import { ApiError, composeMeal, fetchFoods } from "@/lib/api";
 import { composeVibe } from "@/lib/compose";
 import { totalsFromItems, type Item } from "@/lib/types";
@@ -123,29 +121,43 @@ export default function ComposeScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            accessibilityLabel="back"
-            style={styles.backBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.backBtnText}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>BUILD FROM LIBRARY</Text>
-          <View style={styles.backBtn} />
-        </View>
-
-        <ScrollView
-          style={styles.body}
-          contentContainerStyle={styles.bodyContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityLabel="back"
+          style={styles.backBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
+          <Text style={styles.backBtnText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>BUILD FROM LIBRARY</Text>
+        <View style={styles.backBtn} />
+      </View>
+
+      <KeyboardAwareScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        footer={
+          /* Sticky running totals + save — rides up with the keyboard so a
+             focused grams field above it stays visible. */
+          <View style={styles.totalsBar}>
+            {vibe && <Text style={styles.vibe}>{vibe}</Text>}
+            <View style={styles.totalsRow}>
+              <StatNumber label="kcal" value={fmtCal(totals.calories)} align="left" />
+              <StatNumber label="sat" value={`${totals.sat_fat_g.toFixed(1)}g`} align="left" />
+              <StatNumber label="fib" value={`${totals.soluble_fiber_g.toFixed(1)}g`} align="left" />
+              <StatNumber label="pro" value={`${fmt(totals.protein_g, 0)}g`} align="left" />
+              <StatNumber label="plant" value={`${totals.plant_pct}%`} color={palette.food.accent} align="left" />
+            </View>
+            <Button
+              label={busy ? "saving…" : forDate ? "save for that day" : "save meal"}
+              variant="primary"
+              onPress={save}
+              disabled={!canSave}
+            />
+          </View>
+        }
+      >
           {/* Search + autocomplete */}
           <TextInput
             style={styles.search}
@@ -271,33 +283,13 @@ export default function ComposeScreen() {
               <Text style={styles.errorCardText}>{error}</Text>
             </View>
           )}
-        </ScrollView>
-
-        {/* Sticky running totals + save */}
-        <View style={styles.totalsBar}>
-          {vibe && <Text style={styles.vibe}>{vibe}</Text>}
-          <View style={styles.totalsRow}>
-            <StatNumber label="kcal" value={fmtCal(totals.calories)} align="left" />
-            <StatNumber label="sat" value={`${totals.sat_fat_g.toFixed(1)}g`} align="left" />
-            <StatNumber label="fib" value={`${totals.soluble_fiber_g.toFixed(1)}g`} align="left" />
-            <StatNumber label="pro" value={`${fmt(totals.protein_g, 0)}g`} align="left" />
-            <StatNumber label="plant" value={`${totals.plant_pct}%`} color={palette.food.accent} align="left" />
-          </View>
-          <Button
-            label={busy ? "saving…" : forDate ? "save for that day" : "save meal"}
-            variant="primary"
-            onPress={save}
-            disabled={!canSave}
-          />
-        </View>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.bg },
-  kav: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",

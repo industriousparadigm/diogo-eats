@@ -7,4 +7,5 @@ export { SectionHeader } from "./SectionHeader";
 export { Chip } from "./Chip";
 export { Button } from "./Button";
 export { Input } from "./Input";
+export { KeyboardAwareScrollView } from "./KeyboardAwareScrollView";
 export { SkeletonBlock, SkeletonCard } from "./Skeleton";

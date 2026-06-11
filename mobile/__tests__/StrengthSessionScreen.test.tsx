@@ -4,6 +4,38 @@
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
 
+// Walks the serialized host tree: is there a TextInput with the given
+// a11y label sitting inside a scroll view that has iOS keyboard insets on?
+// That's the structural proof the focused field will scroll above the
+// keyboard instead of hiding behind it.
+type JsonChild = JsonNode | string;
+type JsonNode = {
+  type: string;
+  props: Record<string, unknown>;
+  children?: JsonChild[] | null;
+};
+function inputIsInsideKeyboardAwareScroll(
+  node: JsonNode | null,
+  label: string,
+  insideAware = false
+): boolean {
+  if (!node) return false;
+  const aware =
+    insideAware ||
+    (node.type === "RCTScrollView" &&
+      node.props.automaticallyAdjustKeyboardInsets === true);
+  if (
+    aware &&
+    node.type === "TextInput" &&
+    node.props.accessibilityLabel === label
+  ) {
+    return true;
+  }
+  return (node.children ?? [])
+    .filter((c): c is JsonNode => typeof c === "object" && c !== null)
+    .some((c) => inputIsInsideKeyboardAwareScroll(c, label, aware));
+}
+
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 
@@ -222,5 +254,21 @@ describe("StrengthSessionScreen", () => {
       const stored = await loadDraft();
       expect(stored?.note).toBe("10min warmup run");
     });
+  });
+
+  // Regression guard for the owner's bug: the picker view (where the note
+  // lives) shipped with NO keyboard avoider, so the focused note opened
+  // behind the keyboard. The note field must be a descendant of the shared
+  // KeyboardAwareScrollView, never a bare ScrollView.
+  it("renders the session note inside the keyboard-aware scroll (not behind the keyboard)", async () => {
+    const { getByText, getByLabelText, toJSON } = await render(
+      <StrengthSessionScreen />
+    );
+    await waitFor(() => getByText("+ add a note (optional)"));
+    await fireEvent.press(getByText("+ add a note (optional)"));
+    getByLabelText("session note"); // present
+    expect(
+      inputIsInsideKeyboardAwareScroll(toJSON() as unknown as JsonNode, "session note")
+    ).toBe(true);
   });
 });

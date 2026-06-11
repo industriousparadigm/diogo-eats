@@ -19,13 +19,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { palette, radii, borders, fontSize, spacing, condensedFamily } from "@/lib/theme";
-import { Button } from "@/components/ui";
+import { Button, KeyboardAwareScrollView } from "@/components/ui";
 
 type Step = "email" | "code";
 
@@ -98,12 +96,8 @@ export default function SignInScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        <View style={styles.container}>
-          <View style={styles.header}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}>
             <Text style={styles.logo}>eats</Text>
             <Text style={styles.tagline}>your food, honestly.</Text>
           </View>
@@ -169,8 +163,7 @@ export default function SignInScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </View>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -180,11 +173,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.bg,
   },
-  kav: {
-    flex: 1,
-  },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: spacing.xxl,
     justifyContent: "center",
   },

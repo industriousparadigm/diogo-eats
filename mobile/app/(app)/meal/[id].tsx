@@ -21,17 +21,14 @@ import {
   TouchableOpacity,
   Pressable,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, Chip, SectionHeader, Button, StatNumber, SkeletonBlock, Input } from "@/components/ui";
+import { Card, Chip, SectionHeader, Button, StatNumber, SkeletonBlock, Input, KeyboardAwareScrollView } from "@/components/ui";
 import { computeTotals } from "@/lib/editTotals";
 import { parseItems, type Item, type Meal } from "@/lib/types";
 import { fmt, fmtCal, fmtTime, fmtDayLabel } from "@/lib/format";
@@ -232,36 +229,63 @@ function Editor({ meal }: { meal: Meal }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.kav}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            accessibilityLabel="back"
-            style={styles.backBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.backBtnText}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{timeLabel.toUpperCase()}</Text>
-          <TouchableOpacity
-            onPress={confirmDelete}
-            disabled={busy}
-            accessibilityLabel="delete meal"
-            style={styles.deleteBtn}
-          >
-            <Text style={styles.deleteBtnText}>delete</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView
-          style={styles.body}
-          contentContainerStyle={styles.bodyContent}
-          keyboardShouldPersistTaps="handled"
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityLabel="back"
+          style={styles.backBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
+          <Text style={styles.backBtnText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{timeLabel.toUpperCase()}</Text>
+        <TouchableOpacity
+          onPress={confirmDelete}
+          disabled={busy}
+          accessibilityLabel="delete meal"
+          style={styles.deleteBtn}
+        >
+          <Text style={styles.deleteBtnText}>delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      <KeyboardAwareScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        footer={
+          /* Sticky live totals + save bar — rides up with the keyboard so a
+             focused item / quick-fix field above it stays visible. */
+          !isLegacy ? (
+            <View style={styles.saveBar}>
+              <View style={styles.liveRow}>
+                <StatNumber label="kcal" value={fmtCal(live.calories)} align="left" />
+                <StatNumber label="sat" value={`${live.sat_fat_g.toFixed(1)}g`} align="left" />
+                <StatNumber label="fib" value={`${live.soluble_fiber_g.toFixed(1)}g`} align="left" />
+                <StatNumber label="pro" value={`${fmt(live.protein_g, 0)}g`} align="left" />
+                <StatNumber label="plant" value={`${live.plant_pct}%`} color={palette.food.accent} align="left" />
+              </View>
+              <View style={styles.saveRow}>
+                <Button
+                  label="cancel"
+                  variant="secondary"
+                  accent={palette.textMuted}
+                  onPress={() => router.back()}
+                  disabled={busy}
+                  style={styles.cancelBtn}
+                />
+                <Button
+                  label={busy ? "saving…" : dirty ? "save" : "no changes"}
+                  variant="primary"
+                  onPress={save}
+                  disabled={!canSave}
+                  style={styles.saveBtn}
+                />
+              </View>
+            </View>
+          ) : undefined
+        }
+      >
           {/* Photo — tap to open the full-screen lightbox. */}
           {photoUrl ? (
             <Pressable
@@ -416,38 +440,7 @@ function Editor({ meal }: { meal: Meal }) {
               <Text style={styles.errorCardText}>{error}</Text>
             </View>
           )}
-        </ScrollView>
-
-        {/* Sticky live totals + save bar */}
-        {!isLegacy && (
-          <View style={styles.saveBar}>
-            <View style={styles.liveRow}>
-              <StatNumber label="kcal" value={fmtCal(live.calories)} align="left" />
-              <StatNumber label="sat" value={`${live.sat_fat_g.toFixed(1)}g`} align="left" />
-              <StatNumber label="fib" value={`${live.soluble_fiber_g.toFixed(1)}g`} align="left" />
-              <StatNumber label="pro" value={`${fmt(live.protein_g, 0)}g`} align="left" />
-              <StatNumber label="plant" value={`${live.plant_pct}%`} color={palette.food.accent} align="left" />
-            </View>
-            <View style={styles.saveRow}>
-              <Button
-                label="cancel"
-                variant="secondary"
-                accent={palette.textMuted}
-                onPress={() => router.back()}
-                disabled={busy}
-                style={styles.cancelBtn}
-              />
-              <Button
-                label={busy ? "saving…" : dirty ? "save" : "no changes"}
-                variant="primary"
-                onPress={save}
-                disabled={!canSave}
-                style={styles.saveBtn}
-              />
-            </View>
-          </View>
-        )}
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       <PhotoLightbox
         uri={photoUrl}
@@ -462,9 +455,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: palette.bg,
-  },
-  kav: {
-    flex: 1,
   },
   missingWrap: {
     flex: 1,

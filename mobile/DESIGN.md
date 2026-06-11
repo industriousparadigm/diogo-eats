@@ -136,6 +136,35 @@ the capture caption all read as one system:
 - A fixed unit goes in the field via `suffix` ("g", "kg"), not as a
   separate floating label.
 
+**Keyboard avoidance is part of the form contract.** A focused field that
+opens behind the keyboard is a broken field. Every screen that scrolls and
+holds an `Input` uses the **`KeyboardAwareScrollView`** primitive
+(`components/ui/`) as its scroll container — never a bare `ScrollView`, and
+never a hand-rolled `KeyboardAvoidingView` + `ScrollView` pair (they drifted:
+some screens had the avoider, some didn't, and the ones that did only shrank
+the viewport without scrolling a deep field up). The primitive wraps a
+`KeyboardAvoidingView` (`padding` on iOS) around a `ScrollView` with iOS's
+`automaticallyAdjustKeyboardInsets` — the native piece that lifts whatever
+field has focus above the keyboard, however deep in the scroll it sits.
+
+- Screens with a sticky bottom bar (save, "Session complete", running
+  totals) pass it as the **`footer`** slot, not as a sibling outside. The
+  footer rides up with the keyboard (it's inside the avoider) but stays
+  pinned (it's outside the scroll view).
+- A centered, non-list form (sign-in) still uses the primitive with
+  `contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}` so the
+  field stays reachable on the smallest device.
+- `__tests__/KeyboardAwareScrollView.test.tsx` guards the wiring
+  (insets-on, footer-outside-scroll); the strength session test guards the
+  specific regression where the note opened behind the keyboard.
+- **Verify with the on-screen keyboard rendered.** A connected hardware
+  keyboard in the simulator suppresses the software one, so avoidance "looks
+  fine" while it's actually broken. Toggle the simulator's software keyboard
+  ON (`I/O > Keyboard > Toggle Software Keyboard`, or
+  `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false`)
+  and confirm the keyboard is visible in the screenshot before calling a
+  keyboard fix verified.
+
 ## Uncertainty
 
 When the system is unsure (Vision guessing a portion, a low-confidence
