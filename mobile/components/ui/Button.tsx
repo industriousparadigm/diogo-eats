@@ -7,8 +7,13 @@
 //   variant="danger"     destructive fill (delete confirm)
 //
 // Pass `accent` to recolor a primary/secondary (strength uses amber, food
-// uses lime; an exercise screen uses its identity color). Primary buttons
-// carry a soft offset shadow so the main action reads as a physical block.
+// uses lime; an exercise screen uses its identity color).
+//
+// DEPTH: buttons are FLAT — controls, not content cards. The hard offset
+// block is a top-level content-card privilege (meal/exercise cards, the
+// headline, skeletons); a button earns its weight from the filled accent +
+// the black-ink label, not a shadow. See DESIGN.md "Depth rules" (item: the
+// block is a major-card privilege).
 
 import {
   Text,
@@ -19,7 +24,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { palette, radii, borders, fontSize, offsetShadow } from "@/lib/theme";
+import { palette, radii, borders, fontSize } from "@/lib/theme";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -55,12 +60,10 @@ export function Button({
 
   let container: ViewStyle = {};
   let labelColor: string = palette.text;
-  let withShadow = false;
 
   if (variant === "primary") {
     container = { backgroundColor: a, borderRadius: radii.md };
     labelColor = palette.onAccent;
-    withShadow = true;
   } else if (variant === "secondary") {
     container = {
       backgroundColor: "transparent",
@@ -81,7 +84,6 @@ export function Button({
   } else {
     container = { backgroundColor: palette.dangerStrong, borderRadius: radii.md };
     labelColor = palette.white;
-    withShadow = true;
   }
 
   return (
@@ -94,7 +96,6 @@ export function Button({
         styles.base,
         container,
         { paddingVertical: pad },
-        withShadow && offsetShadow(variant === "danger" ? palette.surfaceShadow : a, "soft"),
         (disabled || loading) && styles.disabled,
         style,
       ]}

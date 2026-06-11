@@ -98,7 +98,9 @@ export default function OverviewScreen() {
   const loading = aggs === null;
   const logged = (aggs ?? []).filter((a) => a.meal_count > 0).length;
   const headline = aggs ? buildHeadline(aggs, targets) : null;
-  const averages = aggs ? loggedAverages(aggs, 14) : null;
+  // The window governs everything (item 4): average over ALL logged days
+  // in the selected window, not a fixed last-14.
+  const averages = aggs ? loggedAverages(aggs, Number.MAX_SAFE_INTEGER) : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -170,12 +172,14 @@ export default function OverviewScreen() {
               onPickDate={onPickDate}
             />
 
-            {/* Coverage-honest averages — logged days only, and says so */}
+            {/* Coverage-honest averages — logged days in this window only,
+                and says so (the window governs everything — item 4). */}
             {averages && averages.loggedDays >= 3 && (
               <Card tone="recessed" style={styles.avgCard}>
-                <SectionHeader>
-                  {`AVERAGES · LAST ${averages.loggedDays} LOGGED DAY${averages.loggedDays === 1 ? "" : "S"}`}
-                </SectionHeader>
+                <SectionHeader>AVERAGES · LOGGED DAYS THIS WINDOW</SectionHeader>
+                <Text style={styles.avgCoverage}>
+                  {`${averages.loggedDays} logged day${averages.loggedDays === 1 ? "" : "s"} in this window`}
+                </Text>
                 <View style={styles.avgRow}>
                   <StatNumber label="plant" value={`${Math.round(averages.plant_pct)}%`} color={palette.food.accent} align="left" />
                   <StatNumber label="fiber" value={`${fmt(averages.soluble_fiber_g)}g`} align="left" />
@@ -190,14 +194,14 @@ export default function OverviewScreen() {
               <>
                 <TrendChart
                   aggregates={aggs ?? []}
-                  title="SOLUBLE FIBER · 7-DAY AVERAGE"
+                  title="SOLUBLE FIBER"
                   target={targets.soluble_fiber_g}
                   pick={(a) => a.soluble_fiber_g}
                   direction="keep_up"
                 />
                 <TrendChart
                   aggregates={aggs ?? []}
-                  title="SAT FAT · 7-DAY AVERAGE"
+                  title="SAT FAT"
                   target={targets.sat_fat_g}
                   pick={(a) => a.sat_fat_g}
                   direction="keep_down"
@@ -289,7 +293,12 @@ const styles = StyleSheet.create({
   avgCard: {
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  avgCoverage: {
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
+    marginTop: -2,
   },
   avgRow: {
     flexDirection: "row",

@@ -28,6 +28,27 @@ jest.mock("react-native-svg", () => ({
   default: "Svg",
   Line: "Line",
   Path: "Path",
+  Circle: "Circle",
+  Text: "SvgText",
+}));
+
+// The trend charts wrap their plot in a GestureDetector (touch scrubbing).
+// In tests the detector and gesture are inert pass-throughs.
+jest.mock("react-native-gesture-handler", () => ({
+  Gesture: {
+    Pan: () => ({
+      onBegin() {
+        return this;
+      },
+      onUpdate() {
+        return this;
+      },
+      onFinalize() {
+        return this;
+      },
+    }),
+  },
+  GestureDetector: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 const mockFetchStats = jest.fn();
@@ -116,13 +137,16 @@ describe("OverviewScreen", () => {
     });
   });
 
-  it("shows coverage-honest averages over logged days only", async () => {
+  it("shows coverage-honest averages over logged days in the window", async () => {
     const withGap = [...WEEK, day("2026-06-11", { meal_count: 0, calories: 0 })];
     mockFetchStats.mockResolvedValue(withGap);
     const { getByText } = await render(<OverviewScreen />);
     await waitFor(() => {
-      // 7 logged days — the unlogged 8th doesn't count.
-      expect(getByText("AVERAGES · LAST 7 LOGGED DAYS")).toBeTruthy();
+      // The averages card is window-scoped, logged-days-only (item 4).
+      expect(getByText("AVERAGES · LOGGED DAYS THIS WINDOW")).toBeTruthy();
+      // 7 logged days — the unlogged 8th doesn't count — said in the
+      // coverage line.
+      expect(getByText("7 logged days in this window")).toBeTruthy();
       expect(getByText("75%")).toBeTruthy();
     });
   });
@@ -155,10 +179,12 @@ describe("OverviewScreen", () => {
 
   it("renders both trend charts when there's enough data", async () => {
     mockFetchStats.mockResolvedValue(WEEK);
-    const { getByText } = await render(<OverviewScreen />);
+    const { getByText, getAllByText } = await render(<OverviewScreen />);
     await waitFor(() => {
-      expect(getByText("SOLUBLE FIBER · 7-DAY AVERAGE")).toBeTruthy();
-      expect(getByText("SAT FAT · 7-DAY AVERAGE")).toBeTruthy();
+      expect(getByText("SOLUBLE FIBER")).toBeTruthy();
+      expect(getByText("SAT FAT")).toBeTruthy();
+      // Both charts demote the smoothing window to a small "7d avg" label.
+      expect(getAllByText("7d avg").length).toBe(2);
     });
   });
 

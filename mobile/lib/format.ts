@@ -79,6 +79,24 @@ export function dayNavLabel(ymd: string, todayYmdStr: string = todayYmd()): stri
   return fmtDayLabel(ymd);
 }
 
+// Per-MEAL sat-fat coloring decision (the food side stays restrained).
+//
+// Judgment call (documented in DESIGN.md "Meal card metric hierarchy"): the
+// DAY strip is the honest place to flag over-target sat fat — a single meal
+// is only ever a fraction of the day, so coloring every meal's sat fat would
+// be the red-every-day-from-one-bite trap the product exists to avoid. So a
+// per-meal sat fat number stays NEUTRAL unless that one meal ALONE eats a
+// large share of the whole daily target — set at >= 60% here. At that point
+// it's a genuinely notable single meal, worth a calm amber (never red). A
+// non-positive/!finite target disables the flag (we don't guess).
+export const MEAL_SAT_FAT_HIGH_FRACTION = 0.6;
+
+export function mealSatFatIsHigh(satFatG: number, dailyTarget: number): boolean {
+  if (!Number.isFinite(dailyTarget) || dailyTarget <= 0) return false;
+  if (!Number.isFinite(satFatG)) return false;
+  return satFatG >= dailyTarget * MEAL_SAT_FAT_HIGH_FRACTION;
+}
+
 // Parse a meal's items_json and return total grams for a quick size hint.
 export function totalGrams(items_json: string): number {
   try {

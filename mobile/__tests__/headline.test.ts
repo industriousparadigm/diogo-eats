@@ -75,18 +75,36 @@ describe("buildHeadline", () => {
     expect(line).toContain("sat fat above target");
   });
 
-  it("mentions the trend when sat fat moved >=15% vs prior 14 days", () => {
-    const prior = days(14, { sat_fat_g: 20 });
-    const recent = Array.from({ length: 14 }, (_, i) =>
+  it("mentions the trend when sat fat moved >=15% (recent vs earlier half of the window)", () => {
+    // Window-scoped (item 4): the headline splits the window's logged days
+    // into earlier vs recent halves. Earlier half high, recent half low ->
+    // trending down.
+    const earlier = days(7, { sat_fat_g: 20 });
+    const recent = Array.from({ length: 7 }, (_, i) =>
       day(`2026-06-${String(i + 1).padStart(2, "0")}`, { sat_fat_g: 10 })
     );
-    const line = buildHeadline([...prior, ...recent], TARGETS);
+    const line = buildHeadline([...earlier, ...recent], TARGETS);
     expect(line).toContain("sat fat trending down");
+  });
+
+  it("ticks up when the recent half of the window is meaningfully higher", () => {
+    const earlier = days(7, { sat_fat_g: 8 });
+    const recent = Array.from({ length: 7 }, (_, i) =>
+      day(`2026-06-${String(i + 1).padStart(2, "0")}`, { sat_fat_g: 14 })
+    );
+    const line = buildHeadline([...earlier, ...recent], TARGETS);
+    expect(line).toContain("sat fat ticking up");
   });
 
   it("counts only logged days in the range copy", () => {
     const line = buildHeadline(days(5), TARGETS);
     expect(line).toContain("Last 5 logged days");
+  });
+
+  it("scopes the range copy to the whole window, not a fixed last-14", () => {
+    // 20 logged days -> the copy reflects all 20 (window-scoped), not 14.
+    const line = buildHeadline(days(20), TARGETS);
+    expect(line).toContain("Last 20 logged days");
   });
 });
 

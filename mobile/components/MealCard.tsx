@@ -1,22 +1,31 @@
 // Meal card — shown in the Today list.
-// Shows: photo thumbnail (if any), meal_vibe, items summary, cal/plant badge.
-// Swipe left or long-press to reveal delete affordance.
-// No grades, no streaks — identity language only.
 //
-// Restyled onto the design system: a chunky-ink-bordered Card with a hard
-// offset shadow (the calm food register — neutral ink, not a color identity).
-// The photo sits hard against the inked left edge (the card's photo-led DNA);
-// kcal is a condensed display numeral; plant % keeps its single-hue scale.
+// This is NOT a calorie counter. The card leads with the metrics that move
+// Diogo's LDL and protects the nudge (root README "Lead with what's working"):
+//   - the Vision one-liner (meal.notes) in the app's own italic voice, when
+//     present ("Good soluble-fiber start to the day") — truncated to ~2 lines.
+//   - FIBER and SAT FAT as the visible numbers (the keep-up + keep-down
+//     levers). Sat fat goes amber ONLY when this one meal alone is a large
+//     share of the daily target (mealSatFatIsHigh) — never red, see the
+//     helper for the threshold rationale.
+//   - plant share COMPACT — a small single-hue swatch + "%", not a big pill.
+//   - kcal DEMOTED — small, and last.
+//
+// No ↻ on the card (repeat lives in the capture-sheet recents + meal detail),
+// no grades, no streaks — identity language only.
+//
+// A chunky-ink-bordered Card with the hard offset block (a top-level content
+// card — it keeps the block). The photo sits hard against the inked left edge
+// (the card's photo-led DNA).
 
 import { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Image } from "expo-image";
 import { palette, radii, borders, fontSize, spacing, plantColor, condensedFamily } from "@/lib/theme";
-import { Card, Chip, SkeletonBlock } from "@/components/ui";
-import { fmtCal, fmtPlant, itemsSummary, fmtTime } from "@/lib/format";
+import { Card, SkeletonBlock } from "@/components/ui";
+import { fmt, fmtCal, fmtPlant, itemsSummary, fmtTime, mealSatFatIsHigh } from "@/lib/format";
 import { resolvePhotoUrl } from "@/lib/api";
-import type { Meal } from "@/lib/types";
-import { RepeatButton } from "./RepeatButton";
+import { DEFAULT_TARGETS, type Meal, type Targets } from "@/lib/types";
 import { PhotoLightbox } from "./PhotoLightbox";
 
 type Props = {
@@ -24,11 +33,13 @@ type Props = {
   onDelete: (id: string) => void;
   // Tap → meal detail/edit screen. Long-press keeps the quick-delete.
   onOpen?: () => void;
-  // Deterministic re-log at a scale. When provided, the ↻ chip shows.
-  onRepeat?: (scale: number) => Promise<void>;
+  // The user's daily targets — drives the per-meal sat-fat amber threshold.
+  // Reference numbers, not gates; never hardcoded. Defaults stand in until
+  // the profile resolves.
+  targets?: Targets;
 };
 
-export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
+export function MealCard({ meal, onDelete, onOpen, targets = DEFAULT_TARGETS }: Props) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [lightbox, setLightbox] = useState(false);
@@ -64,6 +75,7 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
   }
 
   const pc = plantColor(meal.plant_pct, true);
+  const satFatHigh = mealSatFatIsHigh(meal.sat_fat_g, targets.sat_fat_g);
 
   return (
     <Card
@@ -115,21 +127,34 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
           <Text style={styles.items} numberOfLines={1}>
             {itemsSummary(meal.items_json)}
           </Text>
-          <View style={styles.badges}>
+
+          {/* The app's voice — Vision's one-liner, when there is one. */}
+          {meal.notes ? (
+            <Text style={styles.notes} numberOfLines={2}>
+              {meal.notes}
+            </Text>
+          ) : null}
+
+          {/* Metric hierarchy: plant compact, then the two levers (fiber +
+              sat fat), kcal small + last. NOT a calorie counter. */}
+          <View style={styles.metrics}>
+            <View style={styles.plantWrap} accessibilityLabel={`${fmtPlant(meal.plant_pct)} plant`}>
+              <View style={[styles.plantSwatch, { backgroundColor: pc }]} />
+              <Text style={styles.plantPct}>{fmtPlant(meal.plant_pct)}</Text>
+            </View>
+            <Metric
+              label="fiber"
+              value={`${fmt(meal.soluble_fiber_g)}g`}
+            />
+            <Metric
+              label="sat fat"
+              value={`${fmt(meal.sat_fat_g)}g`}
+              color={satFatHigh ? palette.warn : undefined}
+            />
             <View style={styles.kcalWrap}>
               <Text style={styles.kcalNum}>{fmtCal(meal.calories)}</Text>
               <Text style={styles.kcalUnit}>kcal</Text>
             </View>
-            <Chip
-              label={`${fmtPlant(meal.plant_pct)} plant`}
-              fill={pc}
-              textColor={palette.text}
-            />
-            {onRepeat && (
-              <View style={styles.repeatWrap}>
-                <RepeatButton onRepeat={onRepeat} variant="card" />
-              </View>
-            )}
           </View>
         </View>
       </View>
@@ -156,6 +181,18 @@ export function MealCard({ meal, onDelete, onOpen, onRepeat }: Props) {
         </View>
       )}
     </Card>
+  );
+}
+
+// A small metric pair on the card: a condensed value over a tiny label.
+// The value wears `color` only when it's the point (sat fat over the
+// single-meal threshold) — otherwise the calm cream numeral.
+function Metric({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={[styles.metricValue, color ? { color } : null]}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -219,34 +256,82 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: palette.textMuted,
   },
-  badges: {
+  // Vision's one-liner — the app's voice. Italic, calm, ~2 lines.
+  notes: {
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
+    fontStyle: "italic",
+    lineHeight: 17,
+    marginTop: 1,
+  },
+  metrics: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: spacing.lg,
+    marginTop: spacing.xs,
+  },
+  // Plant share — compact: a small single-hue swatch + the %, not a big pill.
+  plantWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    marginTop: 2,
+    gap: 5,
   },
-  kcalWrap: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 3,
+  plantSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
   },
-  kcalNum: {
+  plantPct: {
     fontFamily: condensedFamily,
-    fontSize: fontSize.lead,
+    fontSize: fontSize.title,
+    fontWeight: "800",
+    color: palette.food.accentBright,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: condensedFamily ? 0.2 : -0.3,
+  },
+  // The two levers — the visible numbers on the card.
+  metric: {
+    alignItems: "flex-start",
+  },
+  metricValue: {
+    fontFamily: condensedFamily,
+    fontSize: fontSize.title,
     fontWeight: "800",
     color: palette.food.cream,
     fontVariant: ["tabular-nums"],
     letterSpacing: condensedFamily ? 0.2 : -0.3,
   },
+  metricLabel: {
+    fontSize: fontSize.micro,
+    fontWeight: "700",
+    color: palette.textSubtle,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  // kcal — demoted: small, and last in the row.
+  kcalWrap: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 3,
+    marginLeft: "auto",
+  },
+  kcalNum: {
+    fontFamily: condensedFamily,
+    fontSize: fontSize.body,
+    fontWeight: "700",
+    color: palette.textMuted,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: condensedFamily ? 0.2 : -0.3,
+  },
   kcalUnit: {
-    fontSize: fontSize.tiny,
+    fontSize: fontSize.micro,
     fontWeight: "700",
     color: palette.textSubtle,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-  repeatWrap: {
-    marginLeft: "auto",
   },
   deleteRow: {
     flexDirection: "row",

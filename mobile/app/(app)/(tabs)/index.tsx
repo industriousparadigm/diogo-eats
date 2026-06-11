@@ -24,15 +24,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
   fetchMeals,
+  fetchProfile,
   deleteMeal,
   parseMealPhoto,
   parseMealText,
-  repeatMeal,
   ApiError,
 } from "@/lib/api";
-import { computeDayTotals } from "@/lib/types";
+import { computeDayTotals, DEFAULT_TARGETS, type Targets } from "@/lib/types";
 import { dayNavLabel, shiftYmd, todayYmd } from "@/lib/format";
-import { palette, radii, borders, fontSize, spacing, offsetShadow } from "@/lib/theme";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
 import { consumePendingDay, onDayPicked, stashMeal, takeNewMeal } from "@/lib/stores";
 import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { MealCard } from "@/components/MealCard";
@@ -53,6 +53,10 @@ export default function DayScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [captureOpen, setCaptureOpen] = useState(false);
+  // The user's daily targets — drive the totals strip's semantic color
+  // (fiber lime at/above, sat fat amber over). Reference numbers, not gates;
+  // never hardcoded. Defaults stand in until the profile resolves.
+  const [targets, setTargets] = useState<Targets>(DEFAULT_TARGETS);
 
   const isToday = day === todayYmd();
   const dayRef = useRef(day);
@@ -106,6 +110,28 @@ export default function DayScreen() {
   useEffect(() => {
     loadMeals();
   }, [loadMeals]);
+
+  // Load the profile once for the totals-strip targets. A failure leaves
+  // the defaults in place (the strip stays honest, just uncolored-by-target).
+  useEffect(() => {
+    let cancelled = false;
+    fetchProfile()
+      .then((p) => {
+        if (cancelled) return;
+        setTargets({
+          sat_fat_g: numOrTarget(p.sat_fat_g, DEFAULT_TARGETS.sat_fat_g),
+          soluble_fiber_g: numOrTarget(p.soluble_fiber_g, DEFAULT_TARGETS.soluble_fiber_g),
+          calories: numOrTarget(p.calories, DEFAULT_TARGETS.calories),
+          protein_g: numOrTarget(p.protein_g, DEFAULT_TARGETS.protein_g),
+        });
+      })
+      .catch(() => {
+        // Keep defaults — the strip still renders, just uncolored-by-target.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // On re-focus (returning from the edit screen, switching back to this
   // tab): consume a day picked on the overview heatmap, else reload
@@ -192,20 +218,6 @@ export default function DayScreen() {
   function openMeal(meal: Meal) {
     stashMeal(meal);
     router.push(`/(app)/meal/${meal.id}`);
-  }
-
-  // Deterministic re-log. On a past day, land the copy on THAT day via
-  // for_date so a ↻ in yesterday's list stays in yesterday. Insert the
-  // returned meal if the user is still viewing the day it landed on.
-  async function repeatMealOnViewedDay(id: string, scale: number) {
-    const forDate = isToday ? undefined : day;
-    const meal = await repeatMeal(id, { scale, forDate });
-    const targetDay = forDate ?? todayYmd();
-    if (dayRef.current === targetDay) {
-      setMeals((prev) =>
-        [meal, ...prev].sort((a, b) => b.created_at - a.created_at)
-      );
-    }
   }
 
   // A composed meal (from the capture sheet → composer) lands like a parse
@@ -362,7 +374,7 @@ export default function DayScreen() {
                 <CopyDayButton meals={meals} ymd={day} />
               </View>
             )}
-            <DayTotalsStrip totals={totals} />
+            <DayTotalsStrip totals={totals} targets={targets} />
           </View>
         );
       case "pending":
@@ -379,7 +391,7 @@ export default function DayScreen() {
             meal={item.item}
             onDelete={handleDelete}
             onOpen={() => openMeal(item.item)}
-            onRepeat={(scale) => repeatMealOnViewedDay(item.item.id, scale)}
+            targets={targets}
           />
         );
       case "skeleton":
@@ -456,6 +468,10 @@ export default function DayScreen() {
       />
     </SafeAreaView>
   );
+}
+
+function numOrTarget(v: unknown, fallback: number): number {
+  return typeof v === "number" && isFinite(v) && v > 0 ? v : fallback;
 }
 
 const styles = StyleSheet.create({
@@ -553,6 +569,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   fab: {
+    // FLAT (no offset block): the + FAB is a small control, not a content
+    // card — the offset block is a top-level content-card privilege.
+    // A chunky border + the lime fill carry the affordance. See item 1.
     position: "absolute",
     bottom: 28,
     right: 24,
@@ -564,7 +583,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: borders.chunky,
     borderColor: palette.bg,
-    ...offsetShadow(palette.food.accentDeep, "loud"),
   },
   fabIcon: {
     fontSize: 32,

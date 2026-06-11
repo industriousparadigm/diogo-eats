@@ -91,6 +91,7 @@ jest.mock("../lib/supabase", () => ({
 const mockFetchMeals = jest.fn();
 const mockDeleteMeal = jest.fn();
 const mockFetchWhoopToday = jest.fn();
+const mockFetchProfile = jest.fn();
 const mockGetSnapshot = jest.fn();
 const mockSetSnapshot = jest.fn();
 
@@ -122,6 +123,8 @@ jest.mock("../lib/api", () => {
     resolvePhotoUrl: jest.fn(async () => "https://example.com/photo.jpg"),
     fetchWhoopToday: (...args: unknown[]) => mockFetchWhoopToday(...args),
     syncWhoop: jest.fn(async () => {}),
+    // The day screen loads the profile for the totals-strip targets.
+    fetchProfile: (...args: unknown[]) => mockFetchProfile(...args),
     ApiError,
   };
 });
@@ -163,6 +166,13 @@ describe("DayScreen", () => {
     mockPush.mockReset();
     mockFetchWhoopToday.mockReset();
     mockFetchWhoopToday.mockResolvedValue({ connected: false });
+    mockFetchProfile.mockReset();
+    mockFetchProfile.mockResolvedValue({
+      sat_fat_g: 18,
+      soluble_fiber_g: 10,
+      calories: 2000,
+      protein_g: 90,
+    });
     mockGetSnapshot.mockReset();
     mockGetSnapshot.mockResolvedValue(null); // cold cache by default
     mockSetSnapshot.mockReset();

@@ -36,6 +36,12 @@ type Props = {
   identity?: string;
   // Shadow block depth. "soft" = food/calm, "loud" = strength.
   depth?: "soft" | "loud";
+  // Drop the offset block entirely — a flat bordered surface, still on the
+  // opaque base. The offset block is a TOP-LEVEL content-card privilege (meal
+  // cards, exercise cards, the headline, skeletons). Supporting strips that
+  // are chrome rather than content — the totals strip — go flat so the block
+  // stays the signal it's meant to be. See DESIGN.md "Depth rules".
+  flat?: boolean;
   // "raised" (default) sits on palette.surface; "recessed" is a quieter
   // secondary surface for nested/less-important blocks.
   tone?: "raised" | "recessed";
@@ -61,6 +67,7 @@ export function Card({
   depth = "soft",
   tone = "raised",
   tint,
+  flat = false,
   dimmed = false,
   onPress,
   onLongPress,
@@ -73,7 +80,7 @@ export function Card({
     borderRadius: radii.lg,
     borderWidth: borders.chunky,
     borderColor: identity ?? palette.ink,
-    ...offsetShadow(identity ?? palette.surfaceShadow, depth),
+    ...(flat ? null : offsetShadow(identity ?? palette.surfaceShadow, depth)),
     opacity: dimmed ? 0.7 : 1,
   };
 

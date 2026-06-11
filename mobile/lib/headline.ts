@@ -5,10 +5,17 @@
 //
 // Tone rules:
 //   - Lead with what's WORKING — plant share + soluble fiber consistency
-//   - Sat fat is mentioned only when it's noteworthy (clear delta vs the
-//     prior 14 days, or clearly above target without prior context).
+//   - Sat fat is mentioned only when it's noteworthy (clear delta between
+//     the recent and earlier halves of the window, or clearly above target).
 //   - Below 3 logged days, return null — empty-state copy elsewhere
 //     handles the "just getting started" framing better.
+//
+// WINDOW-SCOPED (item 4): the headline characterizes the WHOLE visible
+// window, not a fixed last-14. `aggs` is the window the Overview screen
+// fetched (1M / 3M); every figure here is over that window's logged days,
+// and the range copy reads "Last N logged days" where N is the window's
+// logged-day count. The sat-fat trend note compares the recent half of the
+// window's logged days against the earlier half.
 
 import type { DayAggregate } from "./types";
 
@@ -24,17 +31,21 @@ export function buildHeadline(
   const logged = aggs.filter((a) => a.meal_count > 0);
   if (logged.length < 3) return null;
 
-  const last14 = logged.slice(-14);
-  const prev14 = logged.slice(-28, -14);
-
-  const plantAvg = avg(last14.map((a) => a.plant_pct));
-  const fiberAvg = avg(last14.map((a) => a.soluble_fiber_g));
-  const fiberDays = last14.filter(
+  const plantAvg = avg(logged.map((a) => a.plant_pct));
+  const fiberAvg = avg(logged.map((a) => a.soluble_fiber_g));
+  const fiberDays = logged.filter(
     (a) => a.soluble_fiber_g >= targets.soluble_fiber_g
   ).length;
-  const satFatAvg = avg(last14.map((a) => a.sat_fat_g));
-  const prevSatFatAvg =
-    prev14.length >= 3 ? avg(prev14.map((a) => a.sat_fat_g)) : null;
+  const satFatAvg = avg(logged.map((a) => a.sat_fat_g));
+
+  // Split the window's logged days in half (earlier vs recent) for the
+  // trend note. Only compares when each half has >= 3 days to lean on.
+  const mid = Math.floor(logged.length / 2);
+  const earlier = logged.slice(0, mid);
+  const recent = logged.slice(mid);
+  const earlierSatFatAvg =
+    earlier.length >= 3 ? avg(earlier.map((a) => a.sat_fat_g)) : null;
+  const recentSatFatAvg = recent.length >= 3 ? avg(recent.map((a) => a.sat_fat_g)) : null;
 
   const plantWord =
     plantAvg >= 80
@@ -46,7 +57,7 @@ export function buildHeadline(
       : "Mostly animal-based";
 
   let fiberPhrase: string;
-  if (fiberDays >= last14.length * 0.7) {
+  if (fiberDays >= logged.length * 0.7) {
     fiberPhrase = "fiber on track most days";
   } else if (fiberAvg >= targets.soluble_fiber_g * 0.7) {
     fiberPhrase = "fiber close to target";
@@ -58,9 +69,13 @@ export function buildHeadline(
 
   // Sat fat phrase — only if there's something noteworthy to say.
   let satPhrase: string | null = null;
-  if (prevSatFatAvg !== null && prevSatFatAvg > 0.5) {
-    const diff = satFatAvg - prevSatFatAvg;
-    const pctDiff = Math.abs(diff / prevSatFatAvg);
+  if (
+    earlierSatFatAvg !== null &&
+    recentSatFatAvg !== null &&
+    earlierSatFatAvg > 0.5
+  ) {
+    const diff = recentSatFatAvg - earlierSatFatAvg;
+    const pctDiff = Math.abs(diff / earlierSatFatAvg);
     if (pctDiff >= 0.15) {
       satPhrase = diff < 0 ? "sat fat trending down" : "sat fat ticking up";
     }
@@ -68,7 +83,7 @@ export function buildHeadline(
     satPhrase = "sat fat above target";
   }
 
-  const range = `Last ${last14.length} logged days`;
+  const range = `Last ${logged.length} logged days`;
   const parts: string[] = [plantWord.toLowerCase(), fiberPhrase];
   if (satPhrase) parts.push(satPhrase);
   return `${range}: ${parts.join("; ")}.`;

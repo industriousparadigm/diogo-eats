@@ -11,6 +11,8 @@ import {
   totalGrams,
   shiftYmd,
   dayNavLabel,
+  mealSatFatIsHigh,
+  MEAL_SAT_FAT_HIGH_FRACTION,
 } from "../lib/format";
 
 describe("fmt", () => {
@@ -169,6 +171,44 @@ describe("dayNavLabel", () => {
 
   it("handles yesterday across a month boundary", () => {
     expect(dayNavLabel("2026-05-31", "2026-06-01")).toBe("Yesterday");
+  });
+});
+
+describe("mealSatFatIsHigh", () => {
+  // The threshold: a single meal is "high" only when it alone eats >= 60%
+  // of the daily sat-fat target. This keeps per-meal sat fat NEUTRAL in the
+  // normal case (the day strip is where over-target is flagged) and only
+  // colors a genuinely notable single meal. Amber, never red.
+  it("is neutral when the meal is a normal fraction of the daily target", () => {
+    expect(mealSatFatIsHigh(5, 18)).toBe(false); // 5/18 ≈ 28%
+    expect(mealSatFatIsHigh(10, 18)).toBe(false); // 10/18 ≈ 56%, just under
+  });
+
+  it("flags a meal that alone is >= 60% of the daily target", () => {
+    expect(mealSatFatIsHigh(11, 18)).toBe(true); // 11/18 ≈ 61%
+    expect(mealSatFatIsHigh(18, 18)).toBe(true); // a whole day's worth in one
+  });
+
+  it("trips exactly at the threshold fraction", () => {
+    const target = 20;
+    expect(mealSatFatIsHigh(target * MEAL_SAT_FAT_HIGH_FRACTION, target)).toBe(true);
+    expect(mealSatFatIsHigh(target * MEAL_SAT_FAT_HIGH_FRACTION - 0.01, target)).toBe(false);
+  });
+
+  it("respects an injected (non-default) target — never hardcoded", () => {
+    // A tighter target trips on less sat fat; a looser one tolerates more.
+    expect(mealSatFatIsHigh(7, 10)).toBe(true); // 7/10 = 70%
+    expect(mealSatFatIsHigh(7, 30)).toBe(false); // 7/30 ≈ 23%
+  });
+
+  it("never flags when the target is missing or non-positive (no guessing)", () => {
+    expect(mealSatFatIsHigh(50, 0)).toBe(false);
+    expect(mealSatFatIsHigh(50, -1)).toBe(false);
+    expect(mealSatFatIsHigh(50, NaN)).toBe(false);
+  });
+
+  it("is safe with a non-finite meal value", () => {
+    expect(mealSatFatIsHigh(NaN, 18)).toBe(false);
   });
 });
 
