@@ -77,6 +77,18 @@ export function fmtSessionDate(ms: number): string {
   });
 }
 
+// The stat-strip's "last session" cell value. A compact "10 Jun" (no
+// weekday — the strip is tight and the number, not the day-name, is the
+// point); an em-free "none yet" when the user has never logged. Pass the
+// `lastSessionAt` from strengthStats (null = no sessions).
+export function fmtLastSession(ms: number | null): string {
+  if (ms == null) return "none yet";
+  return new Date(ms).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 // "Tue 10 Jun · 18:00" for the session-detail header.
 export function fmtSessionDateTime(ms: number): string {
   const d = new Date(ms);

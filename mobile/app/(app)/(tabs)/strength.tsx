@@ -1,10 +1,18 @@
-// Strength overview — the scoreboard's home. Most opens are NOT session
-// days; this screen is for checking progress: last + best per exercise,
-// session history with beats counts, and an unmissable Start session.
+// Strength landing — a DASHBOARD, not a catalog (redesigned). Most opens are
+// NOT session days; this screen is the scoreboard's home glance. Top to
+// bottom: the unmissable Start/Resume action, a loud stat strip (sessions +
+// beats this month, last-session date), the promoted RECENT SESSIONS list,
+// and a single "All exercises" row into the library.
 //
-// Unlike the food surfaces, strength is EXPLICITLY a scoreboard — beats
-// and streak language live here by design (different emotional contract
-// from food, same design system).
+// What LEFT: the per-exercise "THE NUMBERS TO BEAT" list. At 1000 exercises a
+// full per-exercise scoreboard on the landing is noise; that job is done
+// better by the in-session picker (the numbers you're about to beat) and by
+// the library + career detail (browsing the long view). The landing stays a
+// glance.
+//
+// Strength is EXPLICITLY a scoreboard — beats + month counts live here by
+// design (a different emotional contract from the calm food side, same design
+// system, loud register).
 
 import { useCallback, useRef, useState } from "react";
 import {
@@ -17,15 +25,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { palette, radii, borders, fontSize, spacing, exerciseIdentity, condensedFamily } from "@/lib/theme";
-import { Card, Chip, SectionHeader, Button } from "@/components/ui";
+import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { Card, Chip, StatNumber, SectionHeader, Button } from "@/components/ui";
 import { ApiError, fetchStrengthOverview } from "@/lib/api";
 import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOverviewSkeleton";
 import { loadDraft } from "@/lib/draftStorage";
-import { ExerciseImage } from "@/components/ExerciseImage";
-import { fmtBest, fmtSeriesList, fmtSessionDate } from "@/lib/strengthFormat";
+import { strengthStats } from "@/lib/strengthStats";
+import { fmtLastSession, fmtSessionDate } from "@/lib/strengthFormat";
 import type { StrengthOverview } from "@/lib/strengthTypes";
+
+// Recent sessions cap — the landing is a glance, not the full archive (the
+// library + each exercise's career timeline hold the long view).
+const RECENT_CAP = 10;
 
 export default function StrengthScreen() {
   const router = useRouter();
@@ -74,15 +86,17 @@ export default function StrengthScreen() {
     router.push("/(app)/strength/session");
   }
 
-  function openExercise(exerciseId: string) {
-    router.push(`/(app)/strength/exercise/${exerciseId}`);
-  }
-
   function openSession(sessionId: string) {
     router.push(`/(app)/strength/log/${sessionId}`);
   }
 
-  const byId = new Map((overview?.exercises ?? []).map((e) => [e.id, e]));
+  function openLibrary() {
+    router.push("/(app)/strength/exercises");
+  }
+
+  const nameById = new Map((overview?.exercises ?? []).map((e) => [e.id, e.name]));
+  const stats = overview ? strengthStats(overview.sessions, Date.now()) : null;
+  const recent = (overview?.sessions ?? []).slice(0, RECENT_CAP);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -103,7 +117,7 @@ export default function StrengthScreen() {
       >
         <Text style={styles.title}>Strength</Text>
 
-        {/* Start / resume — the screen's one unmissable action */}
+        {/* Start / resume — the screen's one unmissable action, the hero. */}
         <Button
           label={hasDraft ? "Resume session" : "Start session"}
           hint={hasDraft ? "a session is in progress" : undefined}
@@ -127,92 +141,88 @@ export default function StrengthScreen() {
           </View>
         )}
 
-        {overview && (
+        {overview && stats && (
           <>
-            {/* Per-exercise scoreboard */}
-            <SectionHeader color={palette.strength.brand} style={styles.section}>
-              THE NUMBERS TO BEAT
-            </SectionHeader>
-            <View style={styles.cardList}>
-              {overview.states.map((state) => {
-                const ex = byId.get(state.exercise_id);
-                if (!ex) return null;
-                const accent = exerciseIdentity(ex.id).accent;
-                return (
-                  <Card
-                    key={ex.id}
-                    identity={accent}
-                    depth="loud"
-                    style={styles.exCard}
-                    onPress={() => openExercise(ex.id)}
-                    accessibilityLabel={`${ex.name} detail`}
-                  >
-                    <ExerciseImage imageKey={ex.image_key} style={styles.exImage} />
-                    <View style={styles.exBody}>
-                      <Text style={[styles.exName, { color: accent }]}>{ex.name}</Text>
-                      {state.last ? (
-                        <>
-                          <View style={styles.numRow}>
-                            <Text style={styles.numKey}>LAST</Text>
-                            <Text style={styles.numValue}>
-                              {fmtSeriesList(state.last.series, ex.measurement_type)}
-                            </Text>
-                          </View>
-                          {state.best && (
-                            <View style={styles.numRow}>
-                              <Text style={styles.numKey}>BEST</Text>
-                              <Text style={styles.numValue}>
-                                {fmtBest(state.best, ex.measurement_type)}
-                              </Text>
-                            </View>
-                          )}
-                        </>
-                      ) : (
-                        <Text style={styles.neverDone}>not done yet</Text>
-                      )}
-                    </View>
-                  </Card>
-                );
-              })}
-            </View>
+            {/* Stat strip — the scoreboard glance. Loud register, condensed
+                numerals. A flat Card (it's a supporting strip, not a content
+                card — the offset block stays the signal for the session
+                rows). */}
+            <Card flat depth="loud" style={styles.statStrip} accessibilityLabel="month stats">
+              <StatNumber
+                value={String(stats.sessionsThisMonth)}
+                label="sessions · mo"
+                color={palette.strength.brandBright}
+                flex
+              />
+              <View style={styles.statDivider} />
+              <StatNumber
+                value={String(stats.beatsThisMonth)}
+                label="beats · mo"
+                color={palette.strength.brandBright}
+                flex
+              />
+              <View style={styles.statDivider} />
+              <StatNumber
+                value={fmtLastSession(stats.lastSessionAt)}
+                label="last session"
+                flex
+              />
+            </Card>
 
-            {/* Session history */}
-            <SectionHeader style={styles.section}>SESSIONS</SectionHeader>
-            {overview.sessions.length === 0 ? (
+            {/* Recent sessions — promoted to the landing's body. Newest
+                first, capped; date + exercise names + beats badge → detail. */}
+            <SectionHeader color={palette.strength.brand} style={styles.section}>
+              RECENT SESSIONS
+            </SectionHeader>
+            {recent.length === 0 ? (
               <Text style={styles.emptyHistory}>
                 No sessions yet. The first one sets the numbers to beat.
               </Text>
             ) : (
               <View style={styles.historyList}>
-                {overview.sessions.map((s) => (
-                  <Card
-                    key={s.id}
-                    tone="recessed"
-                    style={styles.historyRow}
-                    onPress={() => openSession(s.id)}
-                    accessibilityLabel={`session ${fmtSessionDate(s.completed_at)}`}
-                  >
-                    <View style={styles.historyMain}>
-                      <Text style={styles.historyDate}>
-                        {fmtSessionDate(s.completed_at)}
-                      </Text>
-                      <Text style={styles.historyDetail} numberOfLines={1}>
-                        {s.exercise_ids.length} exercise
-                        {s.exercise_ids.length === 1 ? "" : "s"}
-                        {s.note ? ` · ${s.note}` : ""}
-                      </Text>
-                    </View>
-                    <Chip
-                      label={`${s.beats_count} beat${s.beats_count === 1 ? "" : "s"}`}
-                      tone={s.beats_count === 0 ? "neutral" : "accent"}
-                      identity={palette.strength.brandBright}
-                      fill={s.beats_count === 0 ? palette.surfaceMuted : palette.strength.brandSoft}
-                      textColor={s.beats_count === 0 ? palette.textMuted : palette.strength.brandBright}
-                    />
-                  </Card>
-                ))}
+                {recent.map((s) => {
+                  const names = s.exercise_ids
+                    .map((id) => nameById.get(id) ?? id)
+                    .join(" · ");
+                  return (
+                    <Card
+                      key={s.id}
+                      tone="recessed"
+                      style={styles.historyRow}
+                      onPress={() => openSession(s.id)}
+                      accessibilityLabel={`session ${fmtSessionDate(s.completed_at)}`}
+                    >
+                      <View style={styles.historyMain}>
+                        <Text style={styles.historyDate}>
+                          {fmtSessionDate(s.completed_at)}
+                        </Text>
+                        <Text style={styles.historyDetail} numberOfLines={1}>
+                          {names || `${s.exercise_ids.length} exercises`}
+                        </Text>
+                      </View>
+                      <Chip
+                        label={`${s.beats_count} beat${s.beats_count === 1 ? "" : "s"}`}
+                        tone={s.beats_count === 0 ? "neutral" : "accent"}
+                        identity={palette.strength.brandBright}
+                        fill={s.beats_count === 0 ? palette.surfaceMuted : palette.strength.brandSoft}
+                        textColor={s.beats_count === 0 ? palette.textMuted : palette.strength.brandBright}
+                      />
+                    </Card>
+                  );
+                })}
               </View>
             )}
+
+            {/* The catalog lives one tap away — browsing belongs in the
+                library, not on the landing (and it scales to 1000). */}
+            <TouchableOpacity
+              style={styles.libraryRow}
+              onPress={openLibrary}
+              accessibilityLabel="all exercises"
+            >
+              <Text style={styles.libraryLabel}>All exercises</Text>
+              <Text style={styles.libraryChevron}>›</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -243,58 +253,22 @@ const styles = StyleSheet.create({
   section: {
     marginTop: spacing.sm,
   },
-  cardList: {
-    gap: spacing.md,
-  },
-  exCard: {
+
+  // Stat strip
+  statStrip: {
     flexDirection: "row",
-    padding: spacing.md,
-    gap: spacing.md,
     alignItems: "center",
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
-  exImage: {
-    width: 64,
-    height: 48,
-    borderRadius: radii.sm,
-    backgroundColor: palette.white,
-    borderWidth: borders.bold,
-    borderColor: palette.ink,
+  statDivider: {
+    width: borders.hairline,
+    alignSelf: "stretch",
+    marginVertical: spacing.xs,
+    backgroundColor: palette.hairline,
   },
-  exBody: {
-    flex: 1,
-    gap: 3,
-  },
-  exName: {
-    fontSize: fontSize.bodyLg,
-    fontWeight: "800",
-    letterSpacing: -0.2,
-  },
-  numRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: spacing.sm,
-  },
-  numKey: {
-    fontSize: fontSize.micro,
-    color: palette.textSubtle,
-    letterSpacing: 0.8,
-    fontWeight: "700",
-    width: 30,
-  },
-  numValue: {
-    fontFamily: condensedFamily,
-    fontSize: fontSize.bodyLg,
-    color: palette.text,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-    letterSpacing: condensedFamily ? 0.2 : 0,
-    flexShrink: 1,
-  },
-  neverDone: {
-    fontSize: fontSize.caption,
-    color: palette.textSubtle,
-    fontStyle: "italic",
-  },
+
+  // Recent sessions
   historyList: {
     gap: spacing.sm,
   },
@@ -322,6 +296,29 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: palette.textSubtle,
   },
+
+  // "All exercises" row → library
+  libraryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  libraryLabel: {
+    fontSize: fontSize.body,
+    fontWeight: "700",
+    color: palette.textMuted,
+    letterSpacing: 0.2,
+  },
+  libraryChevron: {
+    fontSize: fontSize.lead,
+    color: palette.textSubtle,
+    fontWeight: "700",
+  },
+
+  // Errors
   errorWrap: {
     alignItems: "center",
     gap: spacing.md,

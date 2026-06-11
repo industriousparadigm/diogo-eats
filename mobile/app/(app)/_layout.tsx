@@ -20,6 +20,7 @@ export default function AppLayout() {
       <Stack.Screen name="strength/highlights" options={{ gestureEnabled: false }} />
       <Stack.Screen name="strength/log/[id]" />
       <Stack.Screen name="strength/exercise/[id]" />
+      <Stack.Screen name="strength/exercises" />
     </Stack>
   );
 }

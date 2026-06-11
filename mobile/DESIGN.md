@@ -176,6 +176,46 @@ reads as a status light the user must decode; a one-word chip just tells
 them. This is also why food never gets a stoplight — uncertainty is
 labeled, not color-coded.
 
+## Strength landing (a dashboard, not a catalog)
+
+The strength tab's landing is a SCOREBOARD GLANCE, not a browse surface.
+Most opens are not session days, so the landing answers "where am I at?" in
+one screenful and gets out of the way. Top to bottom:
+
+- **Start / Resume** (hero): the one unmissable action — a `lg` primary
+  `Button` in strength amber. "Resume session" with the in-progress hint when
+  a draft exists, "Start session" otherwise.
+- **Stat strip** (loud register): three `StatNumber`s on a single **flat**
+  `Card` (it's a supporting strip, so it goes flat — the offset block stays
+  the signal reserved for the session row Cards beneath it). Sessions this
+  month, beats this month (amber numerals — the scoreboard's pulse), and the
+  last-session date (neutral). Derived client-side by a pure helper
+  (`lib/strengthStats`) from the overview's session summaries; **month
+  bucketing is phone-local** (a 23:30 session on the last of the month counts
+  in that month, whatever UTC says). Display-only.
+- **RECENT SESSIONS** (promoted, amber `SectionHeader`): newest first, capped
+  (~10 — the landing is a glance, the long view lives in the library + each
+  exercise's career timeline). Each row is a recessed `Card`: date · exercise
+  NAMES (not a bare count) + a beats `Chip` (amber when ≥1, neutral at 0).
+  Tap → session detail.
+- **"All exercises"** (single row, bottom): a quiet chevron row into the
+  library. Browsing belongs there, not on the landing.
+
+What is NOT here: the per-exercise "THE NUMBERS TO BEAT" catalog. At a
+1000-exercise catalog a full per-exercise scoreboard on the landing is noise;
+that job is done better by the in-session picker (the numbers you're about to
+beat) and the library + career detail (browsing the long view). The landing
+stays a glance.
+
+**The library** (`strength/exercises`) is the full catalog, one tap behind
+the "All exercises" row. A strength-accent search `Input` (client-side
+contains-match over the names already in the overview payload — a pure helper,
+`lib/strengthLibrary`, that scales to 1000) sits in a `KeyboardAwareScrollView`
+above one loud `Card` per exercise: image thumb + name in the exercise's
+identity + a compact LAST / BEST subline ("not done yet" when untrained).
+Tapping a card opens the CAREER detail (browsing → the long view; no
+`from=session`). A no-match search says so plainly, never a blank gap.
+
 ## Picker zones (the live-session exercise list)
 
 The live-session picker is split into named zones by a `SectionHeader`, so

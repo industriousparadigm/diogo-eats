@@ -1,5 +1,10 @@
-// Component tests for the Strength overview tab — start/resume button,
-// per-exercise last/best numbers, session history with beats counts.
+// Component tests for the redesigned Strength LANDING (a dashboard, not a
+// catalog): start/resume hero, the month stat strip, the promoted RECENT
+// SESSIONS list, and the "All exercises" row into the library.
+//
+// The per-exercise "THE NUMBERS TO BEAT" catalog LEFT the landing — there's
+// an explicit assertion below that the landing does NOT render the exercise
+// list (it lives in the library + each exercise's career detail now).
 
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
@@ -56,8 +61,15 @@ import { mockStrengthOverview } from "../lib/strengthFixtures";
 import { saveDraft, clearDraft } from "../lib/draftStorage";
 import { createDraft } from "../lib/strengthSession";
 
-describe("StrengthScreen", () => {
+// The fixture's lone session completed 10 Jun 2026 18:00 local. Freeze "now"
+// to mid-June 2026 so the stat strip's month bucketing is deterministic
+// (the session is in-month).
+const NOW = new Date(2026, 5, 11, 9, 0).getTime();
+
+describe("StrengthScreen (landing)", () => {
   beforeEach(async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
     mockFetchStrengthOverview.mockReset();
     mockPush.mockReset();
     await clearDraft();
@@ -67,28 +79,29 @@ describe("StrengthScreen", () => {
     mockSetSnapshot.mockReset();
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("shows a skeleton scoreboard (not a blank screen) while loading", async () => {
     mockFetchStrengthOverview.mockReturnValue(new Promise(() => {}));
     const { findByLabelText, queryByText } = await render(<StrengthScreen />);
     expect(await findByLabelText("loading strength")).toBeTruthy();
-    // The Start action is always present; the scoreboard numbers are not yet.
-    expect(queryByText("Leg press")).toBeNull();
+    // The Start action is always present; the dashboard body is not yet.
+    expect(queryByText("RECENT SESSIONS")).toBeNull();
   });
 
-  it("renders the cached scoreboard immediately, then refreshes silently", async () => {
+  it("renders the cached dashboard immediately, then refreshes silently", async () => {
     const cached = mockStrengthOverview();
-    cached.exercises = cached.exercises.map((e) =>
-      e.id === "leg-press" ? { ...e, name: "Cached leg press" } : e
-    );
+    cached.sessions = cached.sessions.map((s) => ({ ...s, note: "cached" }));
     mockGetSnapshot.mockResolvedValue(cached);
-    // Hold the fresh fetch open so the cached render is observable.
     let resolveFresh: (o: ReturnType<typeof mockStrengthOverview>) => void = () => {};
     mockFetchStrengthOverview.mockReturnValue(new Promise((res) => (resolveFresh = res)));
     const { getByText, queryByLabelText } = await render(<StrengthScreen />);
-    await waitFor(() => expect(getByText("Cached leg press")).toBeTruthy());
+    await waitFor(() => expect(getByText("RECENT SESSIONS")).toBeTruthy());
     expect(queryByLabelText("loading strength")).toBeNull();
     resolveFresh(mockStrengthOverview());
-    await waitFor(() => expect(getByText("Leg press")).toBeTruthy());
+    await waitFor(() => expect(getByText("RECENT SESSIONS")).toBeTruthy());
   });
 
   it("writes the snapshot after a successful overview fetch", async () => {
@@ -114,42 +127,55 @@ describe("StrengthScreen", () => {
     });
   });
 
-  it("renders every exercise with last and best numbers", async () => {
-    const { getByText, getAllByText } = await render(<StrengthScreen />);
-    await waitFor(() => {
-      expect(getByText("Leg press")).toBeTruthy();
-      expect(getByText("Back extension")).toBeTruthy();
-      expect(getByText("Chest press")).toBeTruthy();
-      expect(getByText("Seated row")).toBeTruthy();
-      expect(getByText("Farmer's carry")).toBeTruthy();
-    });
-    // Day-1 numbers, formatted.
-    expect(getByText("32kg × 12  ·  39kg × 12")).toBeTruthy(); // leg press last
-    expect(getByText("24 reps total")).toBeTruthy(); // back extension best
-    expect(getAllByText("2 × (16kg × 60 steps)").length).toBeGreaterThan(0); // carry last
+  it("does NOT render the per-exercise catalog on the landing (it moved to the library)", async () => {
+    const { queryByText, getByText } = await render(<StrengthScreen />);
+    // The dashboard is up…
+    await waitFor(() => expect(getByText("RECENT SESSIONS")).toBeTruthy());
+    // …but the old per-exercise list and its header are gone.
+    expect(queryByText("THE NUMBERS TO BEAT")).toBeNull();
+    expect(queryByText("Leg press")).toBeNull();
+    expect(queryByText("Chest press")).toBeNull();
+    expect(queryByText("Farmer's carry")).toBeNull();
   });
 
-  it("shows 'not done yet' for a never-done exercise", async () => {
+  it("renders the month stat strip from the session data", async () => {
+    const { getByText } = await render(<StrengthScreen />);
+    await waitFor(() => {
+      // 1 session this (frozen) month, 0 beats, last session 10 Jun.
+      expect(getByText("sessions · mo")).toBeTruthy();
+      expect(getByText("beats · mo")).toBeTruthy();
+      expect(getByText("last session")).toBeTruthy();
+      expect(getByText("10 Jun")).toBeTruthy(); // last-session date cell
+    });
+  });
+
+  it("promotes RECENT SESSIONS with exercise names + a beats badge → detail", async () => {
+    const { getByText, getByLabelText } = await render(<StrengthScreen />);
+    await waitFor(() => {
+      expect(getByText("RECENT SESSIONS")).toBeTruthy();
+      expect(getByText("Wed 10 Jun")).toBeTruthy();
+      expect(getByText("0 beats")).toBeTruthy();
+      // Exercise NAMES, not a bare count.
+      expect(getByText(/Leg press · Back extension/)).toBeTruthy();
+    });
+    await fireEvent.press(getByLabelText("session Wed 10 Jun"));
+    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/log/fixture-day1");
+  });
+
+  it("opens the library from the 'All exercises' row", async () => {
+    const { getByLabelText } = await render(<StrengthScreen />);
+    await waitFor(() => getByLabelText("all exercises"));
+    await fireEvent.press(getByLabelText("all exercises"));
+    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/exercises");
+  });
+
+  it("shows an empty state when there are no sessions", async () => {
     const overview = mockStrengthOverview();
-    overview.states[0] = {
-      ...overview.states[0],
-      last: null,
-      best: null,
-      prefill: { series: [{ weight_kg: null, reps: 10 }], never_done: true },
-    };
+    overview.sessions = [];
     mockFetchStrengthOverview.mockResolvedValue(overview);
     const { getByText } = await render(<StrengthScreen />);
     await waitFor(() => {
-      expect(getByText("not done yet")).toBeTruthy();
-    });
-  });
-
-  it("lists session history with a beats count", async () => {
-    const { getByText } = await render(<StrengthScreen />);
-    await waitFor(() => {
-      expect(getByText("Wed 10 Jun")).toBeTruthy();
-      expect(getByText("0 beats")).toBeTruthy();
-      expect(getByText(/5 exercises/)).toBeTruthy();
+      expect(getByText(/No sessions yet/)).toBeTruthy();
     });
   });
 
