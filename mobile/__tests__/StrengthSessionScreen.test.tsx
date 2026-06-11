@@ -54,20 +54,34 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 
 const mockFetchStrengthOverview = jest.fn();
 const mockCompleteStrengthSession = jest.fn();
+const mockCreateStrengthExercise = jest.fn();
+const mockFetchAlternatives = jest.fn();
 
 jest.mock("../lib/api", () => {
   class ApiError extends Error {
     code: string;
-    constructor(code: string, message: string) {
+    status?: number;
+    constructor(code: string, message: string, status?: number) {
       super(message);
       this.code = code;
+      this.status = status;
+    }
+  }
+  class ExerciseConflictError extends ApiError {
+    exercise: unknown;
+    constructor(message: string, exercise: unknown) {
+      super("EXERCISE_CONFLICT", message, 409);
+      this.exercise = exercise;
     }
   }
   return {
     fetchStrengthOverview: (...args: unknown[]) => mockFetchStrengthOverview(...args),
     completeStrengthSession: (...args: unknown[]) =>
       mockCompleteStrengthSession(...args),
+    createStrengthExercise: (...args: unknown[]) => mockCreateStrengthExercise(...args),
+    fetchAlternatives: (...args: unknown[]) => mockFetchAlternatives(...args),
     ApiError,
+    ExerciseConflictError,
   };
 });
 
@@ -81,6 +95,8 @@ describe("StrengthSessionScreen", () => {
   beforeEach(async () => {
     mockFetchStrengthOverview.mockReset();
     mockCompleteStrengthSession.mockReset();
+    mockCreateStrengthExercise.mockReset();
+    mockFetchAlternatives.mockReset();
     mockBack.mockReset();
     mockReplace.mockReset();
     await clearDraft();
@@ -253,6 +269,99 @@ describe("StrengthSessionScreen", () => {
     await waitFor(async () => {
       const stored = await loadDraft();
       expect(stored?.note).toBe("10min warmup run");
+    });
+  });
+
+  it("groups the picker into YOUR USUAL and offers + new exercise", async () => {
+    const { getByText, getByLabelText } = await render(<StrengthSessionScreen />);
+    await waitFor(() => getByText("Leg press"));
+    // Day-1 mock has all five logged → all are "usual".
+    expect(getByText("YOUR USUAL")).toBeTruthy();
+    // The add-new affordance is always present at the bottom.
+    expect(getByLabelText("add a new exercise")).toBeTruthy();
+    // Every usable card carries an alts affordance.
+    expect(getByLabelText("Leg press alternatives")).toBeTruthy();
+  });
+
+  it("shows EVERYTHING ELSE with a search field when the catalog has un-trained exercises", async () => {
+    // An overview where only leg-press has been trained: the rest fall to
+    // everything-else.
+    mockFetchStrengthOverview.mockResolvedValue({
+      ...mockStrengthOverview(),
+      sessions: [
+        {
+          id: "s1",
+          started_at: 1,
+          completed_at: 2,
+          note: null,
+          exercise_ids: ["leg-press"],
+          beats_count: 0,
+        },
+      ],
+    });
+    const { getByText, getByLabelText } = await render(<StrengthSessionScreen />);
+    await waitFor(() => getByText("EVERYTHING ELSE"));
+    expect(getByText("YOUR USUAL")).toBeTruthy();
+    expect(getByLabelText("search exercises")).toBeTruthy();
+  });
+
+  // The owner's real failure made whole: improvising an exercise on the gym
+  // floor when the machine he wanted was taken. The "+ new exercise" form
+  // posts, and on a case-insensitive dupe (409) it offers "use that one"
+  // and opens that exercise's entry — never minting a near-duplicate.
+  it("add-new 409: offers 'use that one' and opens the existing exercise", async () => {
+    const { ExerciseConflictError } = jest.requireMock("../lib/api") as {
+      ExerciseConflictError: new (m: string, ex: unknown) => Error;
+    };
+    const existing = {
+      id: "leg-press",
+      name: "Leg press",
+      description: "push",
+      measurement_type: "weight_reps",
+      image_key: "leg-press",
+      created_by: null,
+      sort_order: 1,
+    };
+    mockCreateStrengthExercise.mockRejectedValue(
+      new ExerciseConflictError("exercise already exists", existing)
+    );
+    const { getByText, getByLabelText, queryByText } = await render(
+      <StrengthSessionScreen />
+    );
+    await waitFor(() => getByLabelText("add a new exercise"));
+    await fireEvent.press(getByLabelText("add a new exercise"));
+    await fireEvent.changeText(getByLabelText("new exercise name"), "leg press");
+    await fireEvent.press(getByLabelText("add the new exercise"));
+    // The dupe state appears with a "use that one" affordance.
+    await waitFor(() => getByText("Already in your catalog"));
+    await fireEvent.press(getByLabelText("use the existing exercise"));
+    // Opens the existing exercise's entry (the loud header in its name).
+    await waitFor(() => {
+      expect(getByText("LEG PRESS")).toBeTruthy();
+    });
+    // The add form is gone.
+    expect(queryByText("Already in your catalog")).toBeNull();
+  });
+
+  it("add-new success: creates the exercise and opens its entry to log immediately", async () => {
+    const created = {
+      id: "tricep-pulley",
+      name: "Tricep pulley",
+      description: "Elbows pinned, push down.",
+      measurement_type: "weight_reps",
+      image_key: null,
+      created_by: "u1",
+      sort_order: 6,
+    };
+    mockCreateStrengthExercise.mockResolvedValue(created);
+    const { getByText, getByLabelText } = await render(<StrengthSessionScreen />);
+    await waitFor(() => getByLabelText("add a new exercise"));
+    await fireEvent.press(getByLabelText("add a new exercise"));
+    await fireEvent.changeText(getByLabelText("new exercise name"), "Tricep pulley");
+    await fireEvent.press(getByLabelText("add the new exercise"));
+    // Opens straight into the new exercise's entry, never-done defaults ready.
+    await waitFor(() => {
+      expect(getByText("TRICEP PULLEY")).toBeTruthy();
     });
   });
 

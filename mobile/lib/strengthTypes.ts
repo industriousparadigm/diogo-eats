@@ -12,7 +12,8 @@ export type Exercise = {
   name: string;
   description: string;
   measurement_type: MeasurementType;
-  image_key: string;
+  image_key: string | null; // null = no bundled asset (user-created); mobile renders a placeholder
+  created_by: string | null; // null = seeded shared catalog; a uuid = user-created
   sort_order: number;
 };
 
@@ -134,6 +135,36 @@ export type SessionPayload = {
   completed_at: number;
   note: string | null;
   sets: StrengthSet[];
+};
+
+// ---- create exercise ----
+
+// POST /api/strength/exercises body. description optional (server fills a
+// blank default). measurement_type is the three-way plain-language choice
+// from the add-new form ("weight × reps" / "bodyweight reps" / "carry").
+export type CreateExerciseInput = {
+  name: string;
+  measurement_type: MeasurementType;
+  description?: string;
+};
+
+// ---- alternatives ("machine taken") ----
+
+// POST /api/strength/alternatives → { alternatives, suggestions }.
+//   alternatives = ranked catalog substitutes (best-first), excluding the
+//     blocked exercise + anything logged today. reason = the one-line why.
+//   suggestions  = 0-2 NEW exercises to add, only when catalog overlap is
+//     weak; created via POST /api/strength/exercises when tapped.
+export type CatalogAlternative = { exercise_id: string; reason: string };
+export type NewSuggestion = {
+  name: string;
+  measurement_type: MeasurementType;
+  description: string;
+  reason: string;
+};
+export type AlternativesResult = {
+  alternatives: CatalogAlternative[];
+  suggestions: NewSuggestion[];
 };
 
 // Defaults for a never-done exercise: weight empty, reps 10, two series

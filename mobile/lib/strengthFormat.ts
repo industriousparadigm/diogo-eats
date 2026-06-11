@@ -100,3 +100,12 @@ export function repsUnit(type: MeasurementType): string {
 export function weightUnit(type: MeasurementType): string {
   return type === "carry" ? "kg / hand" : "kg";
 }
+
+// Plain-language label for a measurement type — the same wording the
+// add-new form uses, reused on the alternatives sheet's "or add:" cards so
+// a suggested new exercise reads in human terms, not a raw enum.
+export function fmtMeasurementType(type: MeasurementType): string {
+  if (type === "bodyweight_reps") return "bodyweight reps";
+  if (type === "carry") return "carry: kg per hand + steps";
+  return "weight × reps";
+}

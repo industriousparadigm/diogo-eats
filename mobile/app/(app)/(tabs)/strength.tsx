@@ -14,7 +14,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -24,7 +23,7 @@ import { ApiError, fetchStrengthOverview } from "@/lib/api";
 import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOverviewSkeleton";
 import { loadDraft } from "@/lib/draftStorage";
-import { exerciseImage } from "@/lib/exerciseImages";
+import { ExerciseImage } from "@/components/ExerciseImage";
 import { fmtBest, fmtSeriesList, fmtSessionDate } from "@/lib/strengthFormat";
 import type { StrengthOverview } from "@/lib/strengthTypes";
 
@@ -139,7 +138,6 @@ export default function StrengthScreen() {
                 const ex = byId.get(state.exercise_id);
                 if (!ex) return null;
                 const accent = exerciseIdentity(ex.id).accent;
-                const img = exerciseImage(ex.image_key);
                 return (
                   <Card
                     key={ex.id}
@@ -149,7 +147,7 @@ export default function StrengthScreen() {
                     onPress={() => openExercise(ex.id)}
                     accessibilityLabel={`${ex.name} detail`}
                   >
-                    {img && <Image source={img} style={styles.exImage} />}
+                    <ExerciseImage imageKey={ex.image_key} style={styles.exImage} />
                     <View style={styles.exBody}>
                       <Text style={[styles.exName, { color: accent }]}>{ex.name}</Text>
                       {state.last ? (

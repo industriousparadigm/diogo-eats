@@ -13,7 +13,10 @@ import { supabase } from "./supabase";
 import type { DayAggregate, Item, Meal, Per100g, Targets } from "./types";
 import type { Food } from "./foods";
 import type {
+  AlternativesResult,
   CompleteSessionResult,
+  CreateExerciseInput,
+  Exercise,
   SessionDetail,
   SessionPayload,
   StrengthOverview,
@@ -511,6 +514,108 @@ export async function completeStrengthSession(
     },
     30_000
   );
+}
+
+// POST /api/strength/alternatives — the "machine taken" brain. Body
+// { exercise_id } → { alternatives, suggestions }. ~2-4s (a Sonnet call);
+// 404 = unknown exercise, 502 = "couldn't fetch alternatives" (surfaced
+// cleanly with a retry). Longer timeout to match the model call.
+export async function fetchAlternatives(exerciseId: string): Promise<AlternativesResult> {
+  return request<AlternativesResult>(
+    "/api/strength/alternatives",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exercise_id: exerciseId }),
+    },
+    60_000
+  );
+}
+
+// Thrown by createStrengthExercise on a 409 case-insensitive dupe. Carries
+// the echoed existing exercise so the UI can offer "use that one" instead
+// of minting a near-duplicate.
+export class ExerciseConflictError extends ApiError {
+  constructor(
+    message: string,
+    public readonly exercise: Exercise
+  ) {
+    super("EXERCISE_CONFLICT", message, 409);
+    this.name = "ExerciseConflictError";
+  }
+}
+
+// POST /api/strength/exercises — create a user exercise. 200 { exercise } |
+// 400 (validation) | 409 { error, exercise } (case-insensitive dupe). The
+// 409 is intercepted here and re-thrown as ExerciseConflictError carrying
+// the echoed exercise; everything else flows through the shared error path.
+// A bespoke fetch (not the shared `request`) so the 409 body is read before
+// it's collapsed into a generic SERVER_ERROR.
+export async function createStrengthExercise(
+  input: CreateExerciseInput
+): Promise<Exercise> {
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError("AUTH_ERROR", "Could not get auth token");
+  }
+
+  const doFetch = (bearer: string) =>
+    fetchWithTimeout(
+      `${BASE_URL}/api/strength/exercises`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${bearer}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      },
+      30_000
+    );
+
+  let resp = await doFetch(token);
+  if (resp.status === 401) {
+    const { error } = await supabase.auth.refreshSession();
+    if (error) {
+      throw new ApiError("AUTH_ERROR", "Session expired — please sign in again", 401);
+    }
+    token = await getAccessToken();
+    resp = await doFetch(token);
+  }
+
+  // 409 — the dupe path. Read the echoed exercise so the caller can offer
+  // "use that one".
+  if (resp.status === 409) {
+    let exercise: Exercise | null = null;
+    let msg = "exercise already exists";
+    try {
+      const body = await resp.json();
+      if (typeof body?.error === "string") msg = body.error;
+      if (body?.exercise) exercise = body.exercise as Exercise;
+    } catch {
+      // keep defaults
+    }
+    if (exercise) throw new ExerciseConflictError(msg, exercise);
+    // Defensive: a 409 with no echoed exercise still shouldn't crash.
+    throw new ApiError("SERVER_ERROR", msg, 409);
+  }
+
+  if (!resp.ok) {
+    let msg = `Server error (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (typeof body?.error === "string") msg = body.error;
+    } catch {
+      // keep default
+    }
+    throw new ApiError("SERVER_ERROR", msg, resp.status);
+  }
+
+  const data = (await resp.json()) as { exercise: Exercise };
+  return data.exercise;
 }
 
 // GET /api/photo/{filename} returns a 302 redirect to a signed URL.

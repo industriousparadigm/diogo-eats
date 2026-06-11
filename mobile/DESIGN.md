@@ -176,6 +176,53 @@ reads as a status light the user must decode; a one-word chip just tells
 them. This is also why food never gets a stoplight — uncertainty is
 labeled, not color-coded.
 
+## Picker zones (the live-session exercise list)
+
+The live-session picker is split into named zones by a `SectionHeader`, so
+a 06:30 gym user reaches the thing they actually train without scrolling
+the whole catalog — and always has a way out when a machine is taken.
+
+- **YOUR USUAL** (top, strength-amber header): the exercises that appear in
+  the user's session history, in the overview's "most likely next" order
+  (`picker_order`). This is the original picker, now named.
+- **EVERYTHING ELSE** (below, neutral header): the rest of the catalog —
+  seeded movements never logged, plus user-created exercises not yet
+  trained. It carries a search `Input` (the strength accent) and is
+  **rendered only when non-empty**. A no-match search says so in
+  `textSubtle` and points at the add affordance, never a blank gap.
+- **"+ new exercise"** (bottom, always): a dashed `ghost`-style affordance
+  that opens the inline add form (name + a three-way measurement-type
+  choice in plain language: "weight × reps" / "bodyweight reps" / "carry:
+  kg per hand + steps" + an optional form cue). It posts, handles the 409
+  dupe with a calm "use that one", and on success opens the new exercise's
+  entry immediately — a 10-second gym-floor flow.
+
+Each pickable card carries a small **"alts"** affordance (a hairline-bordered
+chip in the card's identity color, right-aligned) — discoverable, not noisy.
+Done-today cards drop it (and sink to the bottom of their own zone, dimmed).
+The zone split is a pure helper (`lib/pickerZones.ts`) over the draft — it
+only re-buckets the server's order, never recomputes engine state.
+
+## Alternatives sheet ("machine taken?")
+
+Tapping a card's "alts" opens a `pageSheet` modal titled
+**"<Exercise> taken? Try:"** in that exercise's color identity. It answers
+the real gym failure: the machine you wanted is occupied, now what.
+
+- **Loading** is a **skeleton, never a spinner** — it's a Sonnet call
+  (~2-4s). Three `SkeletonCard`s in the blocked exercise's identity, under
+  a "FROM YOUR CATALOG" header.
+- **Ranked** shows catalog substitutes as tappable identity-colored cards
+  (the model's one-line `reason` is the subline); tapping jumps straight
+  into that exercise's entry. When the catalog overlap is weak the backend
+  also returns 0-2 **suggestions** — new movements worth adding — under an
+  amber **"OR ADD:"** header; tapping one creates it (POST, 409 reuses the
+  existing) and opens its entry.
+- **Empty** (no catalog match and nothing worth adding) says so plainly —
+  wait for the machine or pick another. Never a dead end, never a fake.
+- **Error** (502) is a clean message + a Retry button. The network is flaky
+  at 06:30; the sheet recovers in place.
+
 ## Depth rules (the offset block is container-only)
 
 The hard offset block is the signature of the look — and it is a **container

@@ -14,10 +14,13 @@
 //     it becomes the set order in the payload (the engine derives
 //     "most likely next" from it next time).
 
-import type {
-  SessionPayload,
-  StrengthOverview,
-  StrengthSet,
+import {
+  NEVER_DONE_REPS,
+  NEVER_DONE_SERIES_COUNT,
+  type Exercise,
+  type SessionPayload,
+  type StrengthOverview,
+  type StrengthSet,
 } from "./strengthTypes";
 
 export type DraftSeries = {
@@ -168,6 +171,57 @@ export function addSeries(draft: SessionDraft, exerciseId: string): SessionDraft
 
 export function setNote(draft: SessionDraft, note: string): SessionDraft {
   return { ...draft, note };
+}
+
+// Inject an exercise into the live draft after creation — for the picker's
+// "+ new exercise" flow and the alternatives sheet's "or add:" path, where
+// a freshly-created (or just-discovered-existing) exercise must be loggable
+// immediately without re-fetching the overview (gym networks are flaky;
+// the draft is the source of truth until completion).
+//
+// A never-done exercise opens with the standard defaults: NEVER_DONE_SERIES
+// rows at NEVER_DONE_REPS, weight blank (null) — the same shape the server's
+// prefill builds for a never-logged catalog entry. It slots to the FRONT of
+// picker_order because the user just reached for it (it's the most-likely
+// next thing they'll log). Idempotent: if the exercise is already in the
+// draft (the 409 "use that one" can echo a catalog exercise the draft
+// already holds), the draft is returned unchanged so its entry — possibly
+// mid-edit — is preserved.
+export function addExerciseToDraft(
+  draft: SessionDraft,
+  exercise: Exercise
+): SessionDraft {
+  if (draft.overview.exercises.some((e) => e.id === exercise.id)) {
+    return draft;
+  }
+  const series = Array.from({ length: NEVER_DONE_SERIES_COUNT }, () => ({
+    weight_kg: null,
+    reps: NEVER_DONE_REPS,
+  }));
+  return {
+    ...draft,
+    overview: {
+      ...draft.overview,
+      exercises: [...draft.overview.exercises, exercise],
+      states: [
+        ...draft.overview.states,
+        {
+          exercise_id: exercise.id,
+          last: null,
+          best: null,
+          prefill: { series, never_done: true },
+        },
+      ],
+      picker_order: [exercise.id, ...draft.overview.picker_order],
+    },
+    entries: {
+      ...draft.entries,
+      [exercise.id]: {
+        exercise_id: exercise.id,
+        series: series.map((s) => ({ ...s, confirmed: false })),
+      },
+    },
+  };
 }
 
 export function confirmedCount(draft: SessionDraft, exerciseId?: string): number {

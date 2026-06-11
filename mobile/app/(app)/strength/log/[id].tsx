@@ -17,7 +17,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,7 +24,7 @@ import { palette, radii, borders, fontSize, spacing, exerciseIdentity, condensed
 import { Card, Chip, SectionHeader } from "@/components/ui";
 import { ApiError, fetchStrengthOverview, fetchStrengthSession } from "@/lib/api";
 import { getSnapshot } from "@/lib/snapshot";
-import { exerciseImage } from "@/lib/exerciseImages";
+import { ExerciseImage } from "@/components/ExerciseImage";
 import { groupSetsByExercise } from "@/lib/strengthHistory";
 import { fmtBeat, fmtSeries, fmtSessionDateTime } from "@/lib/strengthFormat";
 import { SessionDetailSkeleton } from "@/components/skeletons/SessionDetailSkeleton";
@@ -135,11 +134,10 @@ export default function SessionDetailScreen() {
                 const ex = byId.get(group.exercise_id);
                 const accent = exerciseIdentity(group.exercise_id).accent;
                 const beat = beatsByExercise.get(group.exercise_id);
-                const img = ex ? exerciseImage(ex.image_key) : null;
                 return (
                   <Card key={group.exercise_id} identity={accent} depth="loud" style={styles.exCard}>
                     <View style={styles.exHeader}>
-                      {img && <Image source={img} style={styles.exImage} />}
+                      <ExerciseImage imageKey={ex?.image_key ?? null} style={styles.exImage} />
                       <View style={styles.exHeaderText}>
                         <Text style={[styles.exName, { color: accent }]}>
                           {ex?.name ?? group.exercise_id}

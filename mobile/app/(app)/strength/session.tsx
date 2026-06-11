@@ -18,25 +18,24 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, exerciseIdentity } from "@/lib/theme";
-import { Card, Button, Input, KeyboardAwareScrollView } from "@/components/ui";
+import { Card, Button, Input, SectionHeader, KeyboardAwareScrollView } from "@/components/ui";
 import { SessionPickerSkeleton } from "@/components/skeletons/SessionPickerSkeleton";
 import { ApiError, completeStrengthSession, fetchStrengthOverview } from "@/lib/api";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draftStorage";
-import { exerciseImage } from "@/lib/exerciseImages";
+import { ExerciseImage } from "@/components/ExerciseImage";
 import { fmtSeriesList } from "@/lib/strengthFormat";
 import {
+  addExerciseToDraft,
   addSeries,
   canConfirmSeries,
   confirmSeries,
   confirmedCount,
   createDraft,
   exerciseDone,
-  liveCardOrder,
   setNote,
   setSeriesReps,
   setSeriesWeight,
@@ -44,9 +43,13 @@ import {
   unconfirmSeries,
   type SessionDraft,
 } from "@/lib/strengthSession";
+import { filterByName, pickerZones } from "@/lib/pickerZones";
+import { AddExerciseForm } from "@/components/AddExerciseForm";
+import { AlternativesSheet } from "@/components/AlternativesSheet";
 import { stashSessionResult } from "@/lib/stores";
 import { beatBuzz, sessionDone } from "@/lib/haptics";
 import { SeriesRow } from "@/components/SeriesRow";
+import type { Exercise } from "@/lib/strengthTypes";
 
 type View_ = { kind: "picker" } | { kind: "entry"; exerciseId: string };
 
@@ -58,6 +61,11 @@ export default function StrengthSessionScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  // Picker overhaul state: the everything-else search query, the "+ new
+  // exercise" form toggle, and the exercise whose alternatives sheet is open.
+  const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [altsFor, setAltsFor] = useState<Exercise | null>(null);
 
   // ---- startup: resume or create ----
   const boot = useCallback(async () => {
@@ -96,6 +104,26 @@ export default function StrengthSessionScreen() {
 
   function update(fn: (d: SessionDraft) => SessionDraft) {
     setDraft((d) => (d ? fn(d) : d));
+  }
+
+  // ---- picker actions (zones, add-new, alternatives) ----
+
+  // A freshly created (or "use that one") exercise: inject it into the
+  // draft, close any open add-form/alts sheet, and jump straight into its
+  // entry so logging it is the very next thing. Idempotent in the draft, so
+  // a "use that one" on an exercise already in the catalog just opens it.
+  function handleCreated(exercise: Exercise) {
+    update((d) => addExerciseToDraft(d, exercise));
+    setAddOpen(false);
+    setSearch("");
+    setAltsFor(null);
+    setView({ kind: "entry", exerciseId: exercise.id });
+  }
+
+  // Picked a catalog alternative from the sheet → open its entry.
+  function pickAlternative(exerciseId: string) {
+    setAltsFor(null);
+    setView({ kind: "entry", exerciseId });
   }
 
   // ---- leaving / discarding ----
@@ -207,9 +235,73 @@ export default function StrengthSessionScreen() {
     );
   }
 
-  const order = liveCardOrder(draft);
-  const byId = new Map(draft.overview.exercises.map((e) => [e.id, e]));
-  const totalConfirmed = confirmedCount(draft);
+  // `draft` is non-null past the boot guard above; bind a narrowed local so
+  // the closures below (renderPickCard) keep the narrowing.
+  const activeDraft = draft;
+  const zones = pickerZones(activeDraft);
+  const byId = new Map(activeDraft.overview.exercises.map((e) => [e.id, e]));
+  const totalConfirmed = confirmedCount(activeDraft);
+  // The everything-else zone is searchable; only the filtered subset shows.
+  const everythingElse = filterByName(activeDraft, zones.everythingElse, search);
+
+  // One picker card. Pulled out so both zones render identical cards (the
+  // only zone difference is the section header above them, plus the alts
+  // affordance that every card carries).
+  function renderPickCard(id: string) {
+    const ex = byId.get(id);
+    if (!ex) return null;
+    const state = activeDraft.overview.states.find((s) => s.exercise_id === id);
+    const accent = exerciseIdentity(id).accent;
+    const done = exerciseDone(activeDraft, id);
+    const confirmed = confirmedCount(activeDraft, id);
+    return (
+      <Card
+        key={id}
+        identity={done ? palette.ink : accent}
+        depth="loud"
+        dimmed={done}
+        tone={done ? "recessed" : "raised"}
+        style={styles.pickCard}
+        onPress={() => setView({ kind: "entry", exerciseId: id })}
+        accessibilityLabel={`${ex.name}${done ? ", logged" : ""}`}
+      >
+        <ExerciseImage imageKey={ex.image_key} style={styles.pickImage} dimmed={done} />
+        <View style={styles.pickBody}>
+          <Text
+            style={[styles.pickName, { color: done ? palette.textMuted : accent }]}
+          >
+            {ex.name}
+          </Text>
+          {done ? (
+            <Text style={styles.pickDoneLine}>
+              ✓ {confirmed} set{confirmed === 1 ? "" : "s"} logged
+            </Text>
+          ) : state?.prefill.never_done ? (
+            <Text style={styles.pickLast}>first time — defaults ready</Text>
+          ) : (
+            <Text style={styles.pickLast}>
+              last: {fmtSeriesList(state?.prefill.series ?? [], ex.measurement_type)}
+            </Text>
+          )}
+        </View>
+        {/* "alts" — a small, discoverable affordance on every card. The
+            owner's seated row was taken with no way out; this is the way
+            out. Stops the card press from bubbling so a tap opens the
+            sheet, not the entry. */}
+        {!done && (
+          <TouchableOpacity
+            onPress={() => setAltsFor(ex)}
+            style={styles.altsBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={`${ex.name} alternatives`}
+          >
+            <Text style={[styles.altsText, { color: accent }]}>alts</Text>
+          </TouchableOpacity>
+        )}
+        {done && <Text style={[styles.pickCheck, { color: accent }]}>✓</Text>}
+      </Card>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -257,56 +349,54 @@ export default function StrengthSessionScreen() {
             : `${totalConfirmed} set${totalConfirmed === 1 ? "" : "s"} logged`}
         </Text>
 
-        {order.map((id) => {
-          const ex = byId.get(id);
-          if (!ex) return null;
-          const state = draft.overview.states.find((s) => s.exercise_id === id);
-          const accent = exerciseIdentity(id).accent;
-          const done = exerciseDone(draft, id);
-          const img = exerciseImage(ex.image_key);
-          const confirmed = confirmedCount(draft, id);
-          return (
-            <Card
-              key={id}
-              identity={done ? palette.ink : accent}
-              depth="loud"
-              dimmed={done}
-              tone={done ? "recessed" : "raised"}
-              style={styles.pickCard}
-              onPress={() => setView({ kind: "entry", exerciseId: id })}
-              accessibilityLabel={`${ex.name}${done ? ", logged" : ""}`}
-            >
-              {img && (
-                <Image
-                  source={img}
-                  style={[styles.pickImage, done && styles.pickImageDone]}
-                />
-              )}
-              <View style={styles.pickBody}>
-                <Text
-                  style={[
-                    styles.pickName,
-                    { color: done ? palette.textMuted : accent },
-                  ]}
-                >
-                  {ex.name}
-                </Text>
-                {done ? (
-                  <Text style={styles.pickDoneLine}>
-                    ✓ {confirmed} set{confirmed === 1 ? "" : "s"} logged
-                  </Text>
-                ) : state?.prefill.never_done ? (
-                  <Text style={styles.pickLast}>first time — defaults ready</Text>
-                ) : (
-                  <Text style={styles.pickLast}>
-                    last: {fmtSeriesList(state?.prefill.series ?? [], ex.measurement_type)}
-                  </Text>
-                )}
-              </View>
-              {done && <Text style={[styles.pickCheck, { color: accent }]}>✓</Text>}
-            </Card>
-          );
-        })}
+        {/* YOUR USUAL — the exercises you actually train, most-likely-next
+            order. This is the pre-overhaul picker, now named. */}
+        {zones.usual.length > 0 && (
+          <>
+            <SectionHeader color={palette.strength.brand} style={styles.zoneHeader}>
+              YOUR USUAL
+            </SectionHeader>
+            {zones.usual.map(renderPickCard)}
+          </>
+        )}
+
+        {/* EVERYTHING ELSE — the rest of the catalog, searchable. Only
+            rendered when there's anything beyond your usual to show. */}
+        {zones.everythingElse.length > 0 && (
+          <>
+            <SectionHeader style={styles.zoneHeader}>EVERYTHING ELSE</SectionHeader>
+            <Input
+              value={search}
+              onChangeText={setSearch}
+              accent={palette.strength.brand}
+              placeholder="search exercises..."
+              autoCapitalize="none"
+              accessibilityLabel="search exercises"
+              style={styles.searchField}
+            />
+            {everythingElse.length > 0 ? (
+              everythingElse.map(renderPickCard)
+            ) : (
+              <Text style={styles.searchEmpty}>
+                Nothing matches “{search.trim()}”. Add it below.
+              </Text>
+            )}
+          </>
+        )}
+
+        {/* + new exercise — always here, bottom of the picker. The way out
+            of the owner's failure: improvise an exercise and log it now. */}
+        {addOpen ? (
+          <AddExerciseForm onCreated={handleCreated} onCancel={() => setAddOpen(false)} />
+        ) : (
+          <TouchableOpacity
+            style={styles.addExerciseBtn}
+            onPress={() => setAddOpen(true)}
+            accessibilityLabel="add a new exercise"
+          >
+            <Text style={styles.addExerciseText}>+ new exercise</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Optional note — reachable, skippable, never blocking */}
         {noteOpen ? (
@@ -336,6 +426,16 @@ export default function StrengthSessionScreen() {
 
         {submitError && <Text style={styles.submitError}>{submitError}</Text>}
       </KeyboardAwareScrollView>
+
+      {/* "Machine taken?" sheet — opened from any card's alts affordance. */}
+      <AlternativesSheet
+        visible={altsFor !== null}
+        exercise={altsFor}
+        catalogById={byId}
+        onClose={() => setAltsFor(null)}
+        onPickExisting={pickAlternative}
+        onCreated={handleCreated}
+      />
     </SafeAreaView>
   );
 }
@@ -359,7 +459,6 @@ function EntryView({
   // entries are created for every catalog exercise at draft creation).
   if (!ex || !entry) return null;
   const accent = exerciseIdentity(exerciseId).accent;
-  const img = exerciseImage(ex.image_key);
   const confirmed = confirmedCount(draft, exerciseId);
 
   return (
@@ -399,8 +498,10 @@ function EntryView({
         }
       >
         <Card identity={accent} depth="loud" style={styles.entryHero}>
-          {img && <Image source={img} style={styles.entryImage} />}
-          <Text style={styles.entryDesc}>{ex.description}</Text>
+          <ExerciseImage imageKey={ex.image_key} style={styles.entryImage} />
+          <Text style={styles.entryDesc}>
+            {ex.description?.trim() || "Your exercise — log the numbers below."}
+          </Text>
         </Card>
 
         {entry.series.map((s, i) => (
@@ -482,6 +583,31 @@ const styles = StyleSheet.create({
     color: palette.textSubtle,
     marginBottom: 2,
   },
+  zoneHeader: {
+    marginTop: spacing.sm,
+  },
+  searchField: {
+    marginBottom: spacing.xs,
+  },
+  searchEmpty: {
+    fontSize: fontSize.caption,
+    color: palette.textSubtle,
+    paddingVertical: spacing.sm,
+  },
+  addExerciseBtn: {
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: palette.borderDashed,
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: spacing.xs,
+  },
+  addExerciseText: {
+    fontSize: fontSize.body,
+    color: palette.strength.brandBright,
+    fontWeight: "700",
+  },
   pickCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -496,8 +622,18 @@ const styles = StyleSheet.create({
     borderWidth: borders.bold,
     borderColor: palette.ink,
   },
-  pickImageDone: {
-    opacity: 0.5,
+  altsBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: borders.hairline,
+    borderColor: palette.inkSoft,
+    borderRadius: radii.sm,
+  },
+  altsText: {
+    fontSize: fontSize.tiny,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   pickBody: {
     flex: 1,

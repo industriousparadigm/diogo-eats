@@ -4,6 +4,7 @@
 // persistence (spec 6.2.5: backgrounding must never lose a set).
 
 import {
+  addExerciseToDraft,
   addSeries,
   canConfirmSeries,
   confirmSeries,
@@ -20,6 +21,17 @@ import {
   unconfirmSeries,
 } from "../lib/strengthSession";
 import { mockStrengthOverview } from "../lib/strengthFixtures";
+import type { Exercise } from "../lib/strengthTypes";
+
+const NEW_EXERCISE: Exercise = {
+  id: "tricep-pulley",
+  name: "Tricep pulley",
+  description: "Elbows pinned, push down, control the way up.",
+  measurement_type: "weight_reps",
+  image_key: "tricep-pulley",
+  created_by: "u1",
+  sort_order: 99,
+};
 
 const NOW = new Date("2026-06-12T18:00:00").getTime();
 
@@ -224,5 +236,51 @@ describe("serialization round-trip", () => {
     expect(deserializeDraft(JSON.stringify({ version: 2 }))).toBeNull();
     expect(deserializeDraft(JSON.stringify({ version: 1 }))).toBeNull();
     expect(deserializeDraft(JSON.stringify(null))).toBeNull();
+  });
+});
+
+describe("addExerciseToDraft", () => {
+  it("injects a new exercise with the never-done defaults (2 series, 10 reps, no weight)", () => {
+    const draft = addExerciseToDraft(fresh(), NEW_EXERCISE);
+    // Catalog + state + picker_order + entry all gain it.
+    expect(draft.overview.exercises.some((e) => e.id === "tricep-pulley")).toBe(true);
+    const state = draft.overview.states.find((s) => s.exercise_id === "tricep-pulley");
+    expect(state?.prefill.never_done).toBe(true);
+    expect(state?.prefill.series).toEqual([
+      { weight_kg: null, reps: 10 },
+      { weight_kg: null, reps: 10 },
+    ]);
+    expect(state?.last).toBeNull();
+    expect(state?.best).toBeNull();
+    const entry = draft.entries["tricep-pulley"];
+    expect(entry?.series).toEqual([
+      { weight_kg: null, reps: 10, confirmed: false },
+      { weight_kg: null, reps: 10, confirmed: false },
+    ]);
+  });
+
+  it("puts the new exercise at the front of picker_order (most likely next)", () => {
+    const draft = addExerciseToDraft(fresh(), NEW_EXERCISE);
+    expect(draft.overview.picker_order[0]).toBe("tricep-pulley");
+  });
+
+  it("is idempotent: re-adding an exercise already in the draft is a no-op", () => {
+    const once = addExerciseToDraft(fresh(), NEW_EXERCISE);
+    // Pretend the user started editing its entry, then a 'use that one'
+    // re-injected the same exercise — the in-progress entry must survive.
+    const edited = setSeriesWeight(once, "tricep-pulley", 0, 27);
+    const twice = addExerciseToDraft(edited, NEW_EXERCISE);
+    expect(twice).toBe(edited); // unchanged reference — entry preserved
+    expect(twice.entries["tricep-pulley"].series[0].weight_kg).toBe(27);
+    // No duplicate catalog row.
+    const count = twice.overview.exercises.filter((e) => e.id === "tricep-pulley").length;
+    expect(count).toBe(1);
+  });
+
+  it("does not duplicate an existing seeded exercise", () => {
+    const seeded = mockStrengthOverview().exercises[0]; // leg-press
+    const draft = addExerciseToDraft(fresh(), seeded);
+    const count = draft.overview.exercises.filter((e) => e.id === seeded.id).length;
+    expect(count).toBe(1);
   });
 });

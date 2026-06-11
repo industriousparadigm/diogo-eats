@@ -17,7 +17,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,7 +24,7 @@ import { palette, radii, borders, fontSize, spacing, exerciseIdentity, condensed
 import { Card, StatNumber, SectionHeader } from "@/components/ui";
 import { ApiError, fetchStrengthOverview, fetchStrengthSessions } from "@/lib/api";
 import { getSnapshot } from "@/lib/snapshot";
-import { exerciseImage } from "@/lib/exerciseImages";
+import { ExerciseImage } from "@/components/ExerciseImage";
 import { exerciseHistory, progression } from "@/lib/strengthHistory";
 import { fmtBest, fmtSeriesList, fmtSessionDate, weightUnit } from "@/lib/strengthFormat";
 import { ProgressionSparkline } from "@/components/ProgressionSparkline";
@@ -75,7 +74,6 @@ export default function ExerciseDetailScreen() {
   }, [load]);
 
   const accent = id ? exerciseIdentity(id).accent : palette.strength.brand;
-  const img = exercise ? exerciseImage(exercise.image_key) : null;
   const history = exercise && sessions ? exerciseHistory(sessions, exercise.id) : [];
   const points =
     exercise && sessions ? progression(sessions, exercise.id, exercise.measurement_type) : [];
@@ -113,7 +111,7 @@ export default function ExerciseDetailScreen() {
           <>
             {/* Image hero + form cue */}
             <Card identity={accent} depth="loud" style={styles.hero}>
-              {img && <Image source={img} style={styles.heroImage} />}
+              <ExerciseImage imageKey={exercise.image_key} style={styles.heroImage} />
               <Text style={styles.heroDesc}>{exercise.description}</Text>
             </Card>
 
