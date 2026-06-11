@@ -5,8 +5,18 @@
 // hands back a new file URI.
 //
 // Conceptually mirrors the web's cropMath (display→source mapping, contain
-// scaling, corner-resize, clamp) but with RN PanResponder gestures, never
-// window listeners. The geometry math is the pure, unit-tested lib/cropMath.
+// scaling, corner-resize, clamp). The geometry math is the pure, unit-tested
+// lib/cropMath.
+//
+// GESTURES: react-native-gesture-handler, NOT PanResponder. This sheet is a
+// Modal nested inside the capture sheet's Modal. On iOS every RN Modal renders
+// into its OWN native view hierarchy that is NOT a descendant of the app
+// root's GestureHandlerRootView (app/_layout.tsx) — and a PanResponder inside
+// that doubly-nested modal never even gets asked to claim the touch, so every
+// gesture was dead on device. The fix mirrors PhotoLightbox exactly: give the
+// Modal its OWN GestureHandlerRootView and drive RNGH Gesture detectors. No
+// reanimated dep (none installed) — callbacks run on the JS thread and set
+// React state directly, same as PhotoLightbox.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,16 +25,19 @@ import {
   Modal,
   StyleSheet,
   TouchableOpacity,
-  PanResponder,
   ActivityIndicator,
   type LayoutChangeEvent,
 } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import { Image } from "expo-image";
 import * as ImageManipulator from "expo-image-manipulator";
 import { colors, radii } from "@/lib/colors";
 import {
   containedDisplayDims,
-  clampRectToBox,
   resizeRectFromCorner,
   moveRectWithin,
   displayRectToSourceCrop,
@@ -52,7 +65,12 @@ export function PhotoCropSheet({ visible, photo, onCancel, onApply }: Props) {
       presentationStyle="pageSheet"
       onRequestClose={onCancel}
     >
-      <CropEditor photo={photo} onCancel={onCancel} onApply={onApply} />
+      {/* A nested Modal renders into its own native view tree, OUTSIDE the
+          app-root GestureHandlerRootView. RNGH needs a root in THIS tree or
+          no gesture in the sheet fires. (Same pattern as PhotoLightbox.) */}
+      <GestureHandlerRootView style={styles.fill}>
+        <CropEditor photo={photo} onCancel={onCancel} onApply={onApply} />
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -113,39 +131,65 @@ function CropEditor({
 
   const bounds = display ? { w: display.w, h: display.h } : { w: 0, h: 0 };
 
-  // Move gesture (drag inside the rect translates it).
+  // Gesture callbacks read the live rect/bounds off refs so the detectors
+  // never need to re-subscribe mid-drag (RNGH builds the gesture once).
+  const rectRef = useRef<Rect | null>(rect);
+  rectRef.current = rect;
+  const boundsRef = useRef(bounds);
+  boundsRef.current = bounds;
   const rectStartRef = useRef<Rect | null>(null);
-  const moveResponder = useMemo(
+
+  // Move gesture: drag anywhere inside the rect to translate it.
+  const moveGesture = useMemo(
     () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          rectStartRef.current = rect;
-        },
-        onPanResponderMove: (_e, g) => {
+      Gesture.Pan()
+        .onStart(() => {
+          rectStartRef.current = rectRef.current;
+        })
+        .onUpdate((e) => {
           const start = rectStartRef.current;
           if (!start) return;
-          setRect(moveRectWithin(start, g.dx, g.dy, bounds));
-        },
-      }),
-    [rect, bounds.w, bounds.h]
+          setRect(
+            moveRectWithin(start, e.translationX, e.translationY, boundsRef.current)
+          );
+        }),
+    []
   );
 
-  function cornerResponder(corner: Corner) {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        rectStartRef.current = rect;
-      },
-      onPanResponderMove: (_e, g) => {
+  // One resize gesture per corner; the dragged corner moves, opposite anchors.
+  // A corner handle sits ON TOP of the rect-move pan, so a touch starting on it
+  // must resize, not move. .blocksExternalGesture(moveGesture) makes the corner
+  // win the arbitration over the underlying move pan.
+  function cornerGesture(corner: Corner) {
+    return Gesture.Pan()
+      .blocksExternalGesture(moveGesture)
+      .onStart(() => {
+        rectStartRef.current = rectRef.current;
+      })
+      .onUpdate((e) => {
         const start = rectStartRef.current;
         if (!start) return;
-        setRect(resizeRectFromCorner(start, corner, g.dx, g.dy, bounds));
-      },
-    });
+        setRect(
+          resizeRectFromCorner(
+            start,
+            corner,
+            e.translationX,
+            e.translationY,
+            boundsRef.current
+          )
+        );
+      });
   }
+  const cornerGestures = useMemo(
+    () => ({
+      tl: cornerGesture("tl"),
+      tr: cornerGesture("tr"),
+      bl: cornerGesture("bl"),
+      br: cornerGesture("br"),
+    }),
+    // moveGesture is stable (built once); corners reference it for blocking.
+    [moveGesture]
+  );
 
   async function apply() {
     if (!source || !display || !rect) return;
@@ -201,8 +245,11 @@ function CropEditor({
           <ActivityIndicator color={colors.brand} />
         ) : display && rect ? (
           <View style={{ width: display.w, height: display.h }}>
+            {/* The image is display-only; it must never compete for touches
+                with the selection / handles layered above it. */}
             <Image
               source={{ uri: photo.uri }}
+              pointerEvents="none"
               style={{
                 width: display.w,
                 height: display.h,
@@ -210,24 +257,26 @@ function CropEditor({
               }}
               contentFit="contain"
             />
-            {/* Selection rectangle (move) */}
-            <View
-              {...moveResponder.panHandlers}
-              accessibilityLabel="crop selection"
-              style={[
-                styles.selection,
-                { left: rect.x, top: rect.y, width: rect.width, height: rect.height },
-              ]}
-            >
-              {(["tl", "tr", "bl", "br"] as Corner[]).map((c) => (
-                <View
-                  key={c}
-                  {...cornerResponder(c).panHandlers}
-                  accessibilityLabel={`crop handle ${c}`}
-                  style={[styles.handle, handlePos(c)]}
-                />
-              ))}
-            </View>
+            {/* Selection rectangle (drag to move). */}
+            <GestureDetector gesture={moveGesture}>
+              <View
+                accessibilityLabel="crop selection"
+                style={[
+                  styles.selection,
+                  { left: rect.x, top: rect.y, width: rect.width, height: rect.height },
+                ]}
+              >
+                {(["tl", "tr", "bl", "br"] as Corner[]).map((c) => (
+                  <GestureDetector key={c} gesture={cornerGestures[c]}>
+                    <View
+                      accessibilityLabel={`crop handle ${c}`}
+                      hitSlop={HANDLE / 2}
+                      style={[styles.handle, handlePos(c)]}
+                    />
+                  </GestureDetector>
+                ))}
+              </View>
+            </GestureDetector>
           </View>
         ) : null}
       </View>
@@ -270,6 +319,9 @@ function handlePos(c: Corner) {
 }
 
 const styles = StyleSheet.create({
+  fill: {
+    flex: 1,
+  },
   sheet: {
     flex: 1,
     backgroundColor: colors.bg,
