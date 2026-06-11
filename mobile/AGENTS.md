@@ -1,3 +1,7 @@
+# SIMULATOR IS HEADLESS — THE OWNER IS WORKING ON THIS MAC
+
+Violating this disrupts a human's workday, NOT just a build. Never `open -a Simulator`, never `npx expo start --ios` (both launch the GUI and steal window focus), never AppleScript/System Events UI-scripting of Simulator menus (synthetic clicks land in the owner's Slack and apps). The headless way does everything: `xcrun simctl boot <udid>`, `npx expo start` (no --ios) + `xcrun simctl openurl booted "exp://127.0.0.1:8081"`, interact via `idb`, capture via `xcrun simctl io booted screenshot`. Screenshots render fine without the GUI, and headless boots show the software keyboard by default.
+
 # Expo HAS CHANGED
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
@@ -13,6 +17,3 @@ two-register rule (food = calm, strength = loud), the do/don't list, and a
 new-screen checklist. Every surface shares one look; that file is how it stays
 that way. Do not introduce raw hexes, magic sizes, blurred shadows, borderless
 cards, red on food surfaces, or mode-chooser UIs — DESIGN.md explains why.
-
-## Simulator verification is HEADLESS — the owner works on this Mac
-Never `open -a Simulator`, never `npx expo start --ios` (it launches the GUI and steals window focus), never AppleScript/UI-script Simulator menus (synthetic clicks land in the owner's apps). Instead: `xcrun simctl boot <udid>` (headless), `npx expo start` (no --ios) + `xcrun simctl openurl booted "exp://127.0.0.1:8081"`, interact via `idb`, capture via `xcrun simctl io booted screenshot`. All of it works without the GUI; headless boots show the software keyboard by default.
