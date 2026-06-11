@@ -8,13 +8,78 @@ import type { SessionPayload } from "./validate";
 
 type SetRow = StrengthSet & { session_id: string; position: number };
 
+const EXERCISE_COLUMNS =
+  "id, name, description, measurement_type, image_key, created_by, sort_order";
+
 export async function getExercises(): Promise<Exercise[]> {
   const { data, error } = await getSupabase()
     .from("strength_exercises")
-    .select("id, name, description, measurement_type, image_key, sort_order")
+    .select(EXERCISE_COLUMNS)
     .order("sort_order", { ascending: true });
   if (error) throw new Error(`getExercises: ${error.message}`);
   return (data as Exercise[]) ?? [];
+}
+
+// Case-insensitive name lookup across the WHOLE catalog (seeded + every
+// user's), so a duplicate-name create returns the existing exercise to
+// reuse rather than minting a near-dupe. ilike with no wildcards is an
+// exact case-insensitive match. Returns the first hit or null.
+export async function findExerciseByName(name: string): Promise<Exercise | null> {
+  const { data, error } = await getSupabase()
+    .from("strength_exercises")
+    .select(EXERCISE_COLUMNS)
+    .ilike("name", name)
+    .order("sort_order", { ascending: true })
+    .limit(1);
+  if (error) throw new Error(`findExerciseByName: ${error.message}`);
+  const rows = (data as Exercise[]) ?? [];
+  return rows.length > 0 ? rows[0] : null;
+}
+
+// The highest sort_order currently in the catalog, so a new exercise can
+// slot in after everything else. 0 when the catalog is somehow empty
+// (never in practice — the seeded five exist).
+export async function maxExerciseSortOrder(): Promise<number> {
+  const { data, error } = await getSupabase()
+    .from("strength_exercises")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`maxExerciseSortOrder: ${error.message}`);
+  const rows = (data as { sort_order: number }[]) ?? [];
+  return rows.length > 0 ? rows[0].sort_order : 0;
+}
+
+// Insert a user-created exercise. The route resolves a collision-free id
+// and the sort_order; this is the thin write. image_key is null (no
+// bundled asset — mobile renders a placeholder). Returns the full row in
+// the same shape getExercises serves, so it drops straight into the
+// catalog the client already holds.
+export async function insertExercise(exercise: {
+  id: string;
+  name: string;
+  description: string;
+  measurement_type: Exercise["measurement_type"];
+  created_by: string;
+  sort_order: number;
+}): Promise<Exercise> {
+  const { data, error } = await getSupabase()
+    .from("strength_exercises")
+    .insert({
+      id: exercise.id,
+      name: exercise.name,
+      description: exercise.description,
+      measurement_type: exercise.measurement_type,
+      image_key: null,
+      created_by: exercise.created_by,
+      sort_order: exercise.sort_order,
+    })
+    .select(EXERCISE_COLUMNS)
+    .single();
+  if (error || !data) {
+    throw new Error(`insertExercise: ${error?.message ?? "no row returned"}`);
+  }
+  return data as Exercise;
 }
 
 // All completed sessions for the user, with sets in logged order,

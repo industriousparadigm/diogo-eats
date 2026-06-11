@@ -12,7 +12,8 @@ export type Exercise = {
   name: string;
   description: string;
   measurement_type: MeasurementType;
-  image_key: string;
+  image_key: string | null; // null = no bundled asset (user-created); mobile renders a placeholder
+  created_by: string | null; // null = seeded shared catalog; a uuid = user-created
   sort_order: number;
 };
 

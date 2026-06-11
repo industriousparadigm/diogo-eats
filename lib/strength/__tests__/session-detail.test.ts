@@ -13,6 +13,7 @@ const LEG: Exercise = {
   description: "",
   measurement_type: "weight_reps",
   image_key: "leg-press",
+  created_by: null,
   sort_order: 1,
 };
 const BACK: Exercise = {
@@ -21,6 +22,7 @@ const BACK: Exercise = {
   description: "",
   measurement_type: "bodyweight_reps",
   image_key: "back-extension",
+  created_by: null,
   sort_order: 2,
 };
 const ROW: Exercise = {
@@ -29,6 +31,7 @@ const ROW: Exercise = {
   description: "",
   measurement_type: "weight_reps",
   image_key: "seated-row",
+  created_by: null,
   sort_order: 3,
 };
 const EXERCISES = [LEG, BACK, ROW];
