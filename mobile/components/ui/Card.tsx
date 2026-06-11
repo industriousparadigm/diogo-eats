@@ -13,6 +13,17 @@
 // Keep it a pure presentational wrapper — no behavior. For a tappable card,
 // wrap children in a Pressable/TouchableOpacity inside, or set `as` to a
 // touchable via the `onPress` passthrough below.
+//
+// DEPTH SAFETY (read mobile/DESIGN.md "Depth rules"): the offset block is a
+// container effect and MUST cast from an opaque rectangle. On iOS a view with
+// shadowOpacity > 0 + shadowRadius 0 + a TRANSLUCENT background casts the hard
+// block from the view's rendered alpha — its border stroke AND its child text
+// glyphs — producing a displaced double-copy of the text (the "doubling up on
+// outlines" defect). So the shadow always lives on an opaque base layer, and a
+// register tint wash (e.g. strength brandSoft, food accentSoft) is rendered as
+// an inner layer ON TOP of that opaque base via the `tint` prop — never as a
+// translucent backgroundColor on the shadow-bearing view. Do not pass a
+// translucent color through `style.backgroundColor`; use `tint`.
 
 import { View, Pressable, StyleSheet, type ViewStyle, type StyleProp } from "react-native";
 import type { ReactNode } from "react";
@@ -28,6 +39,12 @@ type Props = {
   // "raised" (default) sits on palette.surface; "recessed" is a quieter
   // secondary surface for nested/less-important blocks.
   tone?: "raised" | "recessed";
+  // An optional translucent identity wash over the opaque base (e.g. the
+  // amber brandSoft on a strength beats card, the lime accentSoft on a
+  // selected food card). Rendered as an inner layer so the offset block
+  // still casts from the opaque rect — NEVER set a translucent
+  // backgroundColor via `style` on a shadowed card (it doubles the text).
+  tint?: string;
   // Optional dimmer for "done"/disabled states (keeps the structure, drops
   // the volume) — used by the strength picker's logged cards.
   dimmed?: boolean;
@@ -43,6 +60,7 @@ export function Card({
   identity,
   depth = "soft",
   tone = "raised",
+  tint,
   dimmed = false,
   onPress,
   onLongPress,
@@ -59,6 +77,19 @@ export function Card({
     opacity: dimmed ? 0.7 : 1,
   };
 
+  // The tint wash sits inside the border, on top of the opaque base, behind
+  // the children (so text/numerals read on the wash). It is inset by the
+  // chunky border width and uses the interior radius so it stays inside the
+  // rounded box WITHOUT clipping the card itself — `overflow: hidden` would
+  // swallow the offset shadow (it's painted outside the bounds), so we never
+  // clip the shadow-bearing view; we size the wash to fit instead.
+  const tintLayer = tint ? (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { backgroundColor: tint, borderRadius: radii.md }]}
+    />
+  ) : null;
+
   if (onPress || onLongPress) {
     return (
       <Pressable
@@ -68,6 +99,7 @@ export function Card({
         accessibilityLabel={accessibilityLabel}
         style={({ pressed }) => [base, pressed && styles.pressed, style]}
       >
+        {tintLayer}
         {children}
       </Pressable>
     );
@@ -75,6 +107,7 @@ export function Card({
 
   return (
     <View accessibilityLabel={accessibilityLabel} style={[base, style]}>
+      {tintLayer}
       {children}
     </View>
   );

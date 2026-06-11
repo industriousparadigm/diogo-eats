@@ -51,6 +51,12 @@ export const palette = {
     accentBright: "#a3e635",
     accentDeep: "#65a30d",
     accentSoft: "rgba(132,204,22,0.14)", // tint fills (vibe pill, mergeselect)
+    // OPAQUE lime wash for SHADOW-BEARING surfaces (a selected food card). A
+    // translucent fill on a card that also casts the offset block makes the
+    // hard shadow cast from the text glyphs (the doubling defect) — so the
+    // shadowed selected-card state uses this pre-composited opaque tone, the
+    // visual twin of accentSoft over `surface`. See DESIGN.md "Depth rules".
+    selectedSurface: "#252f18",
     cream: "#e8e6cf", // a warm off-white for food display numerals
   },
 

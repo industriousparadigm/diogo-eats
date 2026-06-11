@@ -109,7 +109,12 @@ export default function SessionDetailScreen() {
                 <SectionHeader color={palette.strength.brand} style={styles.section}>
                   {detail.beats.length === 1 ? "1 NUMBER BEATEN" : `${detail.beats.length} NUMBERS BEATEN`}
                 </SectionHeader>
-                <Card identity={palette.strength.brand} depth="loud" style={styles.beatsCard}>
+                <Card
+                  identity={palette.strength.brand}
+                  depth="loud"
+                  tint={palette.strength.brandSoft}
+                  style={styles.beatsCard}
+                >
                   {detail.beats.map((b) => {
                     const ex = byId.get(b.exercise_id);
                     return (
@@ -210,7 +215,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   section: { marginTop: spacing.sm },
-  beatsCard: { padding: spacing.md, gap: spacing.sm, backgroundColor: palette.strength.brandSoft },
+  beatsCard: { padding: spacing.md, gap: spacing.sm },
   beatRow: {
     flexDirection: "row",
     alignItems: "baseline",

@@ -147,6 +147,38 @@ reads as a status light the user must decode; a one-word chip just tells
 them. This is also why food never gets a stoplight — uncertainty is
 labeled, not color-coded.
 
+## Depth rules (the offset block is container-only)
+
+The hard offset block is the signature of the look — and it is a **container
+effect**. Two rules keep it from turning into the "boxes doubling up on
+outlines" defect (a real shipped bug on the highlights + session-detail beats
+cards):
+
+1. **Offset shadows live on containers, never on text.** No `textShadow*` on
+   any `Text`, ever. Loud emphasis comes from **color + weight + the Card
+   treatment around the text** — never a shadow on the glyphs. A displaced
+   copy of a glyph reads as a fuzzy double outline (worst on amber-on-dark).
+2. **The block must cast from an OPAQUE rectangle.** On iOS a view with
+   `shadowOpacity > 0` + `shadowRadius: 0` (the offset block) **and a
+   translucent `backgroundColor`** casts the hard block from the view's
+   rendered alpha — its border stroke *and its child text glyphs* — not a
+   solid rect. That is literally a hard-displaced copy of the text. So a
+   shadowed card's fill is always opaque. To put a register wash on a shadowed
+   card (amber `brandSoft`, lime `accentSoft`), pass it as the **`Card`
+   `tint` prop** (an inner layer over the opaque base) — never as a
+   translucent `style.backgroundColor`. For a hand-rolled shadowed surface
+   (not the `Card` primitive), use a pre-composited **opaque** tone (e.g.
+   `palette.food.selectedSurface`), not the translucent `*Soft` token.
+3. **One chunky border + offset block per visual unit.** Bordered rows inside
+   a bordered Card double the ink. Interior subdivisions are **hairline
+   separators or plain spacing** — never their own chunky border + shadow.
+   (Sibling cards in a list are fine; nesting a chunky-bordered Card inside
+   another is not.)
+
+`__tests__/DepthRules.test.tsx` guards all three: the theme carries no
+`textShadow*`, and the rendered highlights + session-detail trees contain no
+`Text` shadow and no offset-block-over-translucent-fill view.
+
 ## Do / Don't
 
 **Do**
@@ -159,6 +191,11 @@ labeled, not color-coded.
 
 **Don't**
 - ❌ Blurred drop shadows (`shadowRadius > 0`). The shadow is a **hard block**.
+- ❌ A shadow on text (`textShadow*`) — or an offset block over a translucent
+  fill (it casts the block from the glyphs → doubled text). Block = container,
+  opaque base; washes go through the `Card` `tint` prop. See "Depth rules".
+- ❌ A chunky-bordered row inside a chunky-bordered Card. One border + block
+  per visual unit; interiors are hairline/spacing. See "Depth rules".
 - ❌ Borderless floating cards. If it's a card, it has a chunky border.
 - ❌ Red on a food surface as a verdict. Amber is as loud as food gets.
 - ❌ Streaks / badges / grades / stoplight color on food.
@@ -183,6 +220,10 @@ labeled, not color-coded.
 4. Every block is a `Card`. Every number that matters is a `StatNumber` /
    condensed numeral. Every section opens with a `SectionHeader`. Every action
    is a `Button`.
+   **Depth check:** no `textShadow*` anywhere; any shadowed card with a
+   register wash uses the `Card` `tint` prop (opaque base), not a translucent
+   `backgroundColor`; no chunky border nested inside a chunky-bordered card
+   (interiors are hairline/spacing). See "Depth rules".
 5. Inputs: the `Input` primitive (never a raw `TextInput`) — see "Form
    fields". Uncertainty is a labeled chip, never a colored dot.
 6. Run tests + `tsc`, then **launch it in the simulator and look at it** —

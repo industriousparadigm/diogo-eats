@@ -56,7 +56,12 @@ export default function HighlightsScreen() {
         </Text>
 
         {lead && (
-          <Card identity={palette.strength.brand} depth="loud" style={styles.leadCard}>
+          <Card
+            identity={palette.strength.brand}
+            depth="loud"
+            tint={palette.strength.brandSoft}
+            style={styles.leadCard}
+          >
             <Text style={styles.leadText}>{lead.line}</Text>
           </Card>
         )}
@@ -120,7 +125,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   leadCard: {
-    backgroundColor: palette.strength.brandSoft,
     borderRadius: radii.xl,
     padding: spacing.xl,
   },

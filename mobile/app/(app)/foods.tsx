@@ -635,7 +635,10 @@ const styles = StyleSheet.create({
     ...offsetShadow(palette.surfaceShadow, "soft"),
   },
   foodCardSelected: {
-    backgroundColor: palette.food.accentSoft,
+    // Opaque wash (not translucent accentSoft): this card casts an offset
+    // block, and a translucent fill would route the hard shadow onto the
+    // text glyphs (the doubling defect). See DESIGN.md "Depth rules".
+    backgroundColor: palette.food.selectedSurface,
     borderColor: palette.food.accent,
   },
   foodTop: {
