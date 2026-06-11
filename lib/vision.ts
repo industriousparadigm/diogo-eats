@@ -320,15 +320,32 @@ const EDIT_SCHEMA = {
   type: "object",
   properties: {
     items: PARSE_SCHEMA.properties.items,
+    // Meal-total values the user's message explicitly pinned, AS EATEN.
+    // The server recomputes totals from the edited items and verifies
+    // against these — the model declaring its own arithmetic is what
+    // makes per-100g/total confusion catchable.
+    expected_totals: {
+      type: "object",
+      properties: {
+        soluble_fiber_g: { type: "number" },
+        sat_fat_g: { type: "number" },
+        calories: { type: "number" },
+        protein_g: { type: "number" },
+      },
+      additionalProperties: false,
+    },
   },
   required: ["items"],
   additionalProperties: false,
 };
 
-const EDIT_SYSTEM = `The user is correcting a previously parsed meal log entry. You receive the current items array and a short message from the user. Return the updated items array in the same shape.
+// Exported for tests.
+export const EDIT_SYSTEM = `The user is correcting a previously parsed meal log entry. You receive the current items array and a short message from the user. Return the updated items array in the same shape.
 
 Rules:
 - Be conservative. Change ONLY what the user explicitly says or strongly implies. Keep everything else unchanged.
+- **Per-100g vs as-eaten totals — the most common failure mode; read carefully.** Item nutrition is stored PER 100 GRAMS, but the user sees and talks about MEAL TOTALS as eaten. When the user states a number ("this should have around 0.8g soluble fiber", "make it 300 kcal"), they mean the TOTAL. To make an item weighing G grams contribute total T: per_100g value = T / (G / 100). Example: 40g pastry, user wants 0.8g soluble fiber → per_100g.soluble_fiber_g = 0.8 / 0.4 = 2.0. Writing 0.8 into per_100g would yield a 0.32g total — the exact mistake to avoid. Do this arithmetic explicitly before answering.
+- **Declare your arithmetic.** When the user's message pins a numeric value for soluble fiber, sat fat, calories, or protein, set expected_totals for exactly those metrics to the meal total your edited items produce. Omit metrics the user didn't constrain. The server verifies your edit against this.
 - Common corrections:
   - "It's all plant" / "100% vegan" / "the milk is oat milk" → flip is_plant=true on the misclassified items (and update per_100g if a swap implies different nutrition, e.g. dairy milk → oat milk).
   - "Smaller portion" / "half of that" → reduce grams (~50%) on the relevant items.
@@ -341,39 +358,124 @@ Rules:
 - If the message is vague, do your best, but err toward minimal change.
 - Always return the FULL updated items array (not a diff).`;
 
+export type ExpectedTotals = Partial<
+  Record<"soluble_fiber_g" | "sat_fat_g" | "calories" | "protein_g", number>
+>;
+
+// Compare the totals an edit actually produces against the totals the
+// model declared the user asked for. Tolerance is the larger of 10% of
+// the expected value and an absolute floor (gram metrics drift in
+// tenths; calories in whole numbers). Exported for tests.
+export function expectedTotalsMismatches(
+  expected: ExpectedTotals,
+  actual: { soluble_fiber_g: number; sat_fat_g: number; calories: number; protein_g: number }
+): { metric: string; expected: number; actual: number }[] {
+  const out: { metric: string; expected: number; actual: number }[] = [];
+  for (const [metric, want] of Object.entries(expected)) {
+    if (typeof want !== "number") continue;
+    const got = actual[metric as keyof typeof actual];
+    const floor = metric === "calories" ? 15 : 0.15;
+    const tolerance = Math.max(Math.abs(want) * 0.1, floor);
+    if (Math.abs(got - want) > tolerance) {
+      out.push({ metric, expected: want, actual: got });
+    }
+  }
+  return out;
+}
+
+// Thrown when a correction can't be made to land on the user's stated
+// numbers even after a corrective retry. Routes surface this as a 422
+// with a human message — an honest failure beats silently-wrong data.
+export class CorrectionVerificationError extends Error {
+  mismatches: { metric: string; expected: number; actual: number }[];
+  constructor(mismatches: { metric: string; expected: number; actual: number }[]) {
+    super(
+      "the correction didn't land on the numbers you asked for — try rewording (e.g. name the item and the exact value)"
+    );
+    this.name = "CorrectionVerificationError";
+    this.mismatches = mismatches;
+  }
+}
+
 export async function editMealItems(
   currentItems: Item[],
   message: string,
   knownFoods?: KnownFood[],
   recentMeals?: RecentMeal[]
 ): Promise<Item[]> {
-  const response = await client.messages.create({
+  const system =
+    EDIT_SYSTEM + knownFoodsBlock(knownFoods ?? []) + recentMealsBlock(recentMeals ?? []);
+  const userText = `Current items:\n${JSON.stringify(currentItems, null, 2)}\n\nUser correction: "${message}"\n\nReturn the full updated items array.`;
+
+  const first = await client.messages.create({
     model: "claude-opus-4-7",
     max_tokens: 4096,
     output_config: {
       format: { type: "json_schema", schema: EDIT_SCHEMA },
     },
-    system:
-      EDIT_SYSTEM + knownFoodsBlock(knownFoods ?? []) + recentMealsBlock(recentMeals ?? []),
+    system,
+    messages: [{ role: "user", content: [{ type: "text", text: userText }] }],
+  });
+
+  const firstBlock = first.content.find((b) => b.type === "text");
+  if (!firstBlock || firstBlock.type !== "text") {
+    throw new Error("No text response from model");
+  }
+  const firstParsed = JSON.parse(firstBlock.text) as {
+    items: Item[];
+    expected_totals?: ExpectedTotals;
+  };
+
+  // No numeric constraints declared → nothing to verify.
+  const expected = firstParsed.expected_totals ?? {};
+  let mismatches = expectedTotalsMismatches(expected, totalsFromItems(firstParsed.items));
+  if (mismatches.length === 0) return firstParsed.items;
+
+  // The model's own arithmetic missed its declared target (the classic
+  // per-100g vs total confusion). One corrective retry with the
+  // discrepancy spelled out.
+  const correction = mismatches
+    .map(
+      (m) =>
+        `${m.metric}: your items produce ${m.actual} but the user asked for ~${m.expected}. per_100g = desired_total / (grams / 100) — redo the arithmetic.`
+    )
+    .join("\n");
+  const second = await client.messages.create({
+    model: "claude-opus-4-7",
+    max_tokens: 4096,
+    output_config: {
+      format: { type: "json_schema", schema: EDIT_SCHEMA },
+    },
+    system,
     messages: [
+      { role: "user", content: [{ type: "text", text: userText }] },
+      { role: "assistant", content: [{ type: "text", text: firstBlock.text }] },
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: `Current items:\n${JSON.stringify(currentItems, null, 2)}\n\nUser correction: "${message}"\n\nReturn the full updated items array.`,
+            text: `Verification failed:\n${correction}\n\nReturn the corrected full items array (and expected_totals).`,
           },
         ],
       },
     ],
   });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
+  const secondBlock = second.content.find((b) => b.type === "text");
+  if (!secondBlock || secondBlock.type !== "text") {
     throw new Error("No text response from model");
   }
-  const parsed = JSON.parse(textBlock.text) as { items: Item[] };
-  return parsed.items;
+  const secondParsed = JSON.parse(secondBlock.text) as {
+    items: Item[];
+    expected_totals?: ExpectedTotals;
+  };
+  mismatches = expectedTotalsMismatches(
+    secondParsed.expected_totals ?? expected,
+    totalsFromItems(secondParsed.items)
+  );
+  if (mismatches.length > 0) throw new CorrectionVerificationError(mismatches);
+  return secondParsed.items;
 }
 
 export async function parseMealText(

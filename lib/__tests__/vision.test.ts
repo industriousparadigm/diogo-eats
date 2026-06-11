@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { totalsFromItems, PARSE_SYSTEM, TEXT_SYSTEM } from "../vision";
+import { totalsFromItems, expectedTotalsMismatches, EDIT_SYSTEM, PARSE_SYSTEM, TEXT_SYSTEM } from "../vision";
 import type { Item } from "../vision";
 
 const oats: Item = {
@@ -116,5 +116,47 @@ describe("text-entry authored-list invariant", () => {
 
   it("PARSE_SYSTEM (photos) keeps visual-evidence inference", () => {
     expect(PARSE_SYSTEM).toContain("Include implicit ingredients");
+  });
+});
+
+describe("fix-it verification (the 0.8g-became-0.3g incident)", () => {
+  it("EDIT_SYSTEM teaches per-100g vs total arithmetic and demands declared totals", () => {
+    expect(EDIT_SYSTEM).toContain("PER 100 GRAMS");
+    expect(EDIT_SYSTEM).toContain("per_100g value = T / (G / 100)");
+    expect(EDIT_SYSTEM).toContain("Declare your arithmetic");
+  });
+
+  it("flags the classic per-100g-as-total mistake", () => {
+    // 40g pastry: model wrote 0.8 into per_100g -> 0.32 total vs wanted 0.8
+    const items: Item[] = [{
+      name: "ikea pastry", grams: 40, confidence: "medium", is_plant: false,
+      per_100g: { sat_fat_g: 8, soluble_fiber_g: 0.8, calories: 380, protein_g: 6 },
+    }];
+    const mism = expectedTotalsMismatches({ soluble_fiber_g: 0.8 }, totalsFromItems(items));
+    expect(mism).toHaveLength(1);
+    expect(mism[0].metric).toBe("soluble_fiber_g");
+    expect(mism[0].actual).toBeCloseTo(0.3, 1);
+  });
+
+  it("passes when the arithmetic is right", () => {
+    // per_100g = 0.8 / 0.4 = 2.0 -> total 0.8
+    const items: Item[] = [{
+      name: "ikea pastry", grams: 40, confidence: "medium", is_plant: false,
+      per_100g: { sat_fat_g: 8, soluble_fiber_g: 2.0, calories: 380, protein_g: 6 },
+    }];
+    expect(expectedTotalsMismatches({ soluble_fiber_g: 0.8 }, totalsFromItems(items))).toHaveLength(0);
+  });
+
+  it("tolerates rounding but not unit confusion", () => {
+    const actual = { soluble_fiber_g: 0.74, sat_fat_g: 0, calories: 0, protein_g: 0 };
+    expect(expectedTotalsMismatches({ soluble_fiber_g: 0.8 }, actual)).toHaveLength(0);
+    const calories = { soluble_fiber_g: 0, sat_fat_g: 0, calories: 310, protein_g: 0 };
+    expect(expectedTotalsMismatches({ calories: 300 }, calories)).toHaveLength(0);
+    expect(expectedTotalsMismatches({ calories: 300 }, { ...calories, calories: 360 })).toHaveLength(1);
+  });
+
+  it("ignores unconstrained metrics entirely", () => {
+    const actual = { soluble_fiber_g: 99, sat_fat_g: 99, calories: 9999, protein_g: 99 };
+    expect(expectedTotalsMismatches({}, actual)).toHaveLength(0);
   });
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
-import { editMealItems, Item, KnownFood, RecentMeal } from "@/lib/vision";
+import { CorrectionVerificationError, editMealItems, Item, KnownFood, RecentMeal } from "@/lib/vision";
 import { requireUser } from "@/lib/user";
 
 export const runtime = "nodejs";
@@ -72,6 +72,14 @@ export async function POST(
     const items = await editMealItems(currentItems, message, known, recent);
     return NextResponse.json({ items });
   } catch (err: any) {
+    if (err instanceof CorrectionVerificationError) {
+      // The model couldn't land the user's stated numbers even after a
+      // corrective retry. Honest failure beats silently-wrong data.
+      return NextResponse.json(
+        { error: err.message, mismatches: err.mismatches },
+        { status: 422 }
+      );
+    }
     console.error(err);
     return NextResponse.json({ error: err.message ?? "talk failed" }, { status: 500 });
   }
