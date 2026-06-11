@@ -13,3 +13,6 @@ two-register rule (food = calm, strength = loud), the do/don't list, and a
 new-screen checklist. Every surface shares one look; that file is how it stays
 that way. Do not introduce raw hexes, magic sizes, blurred shadows, borderless
 cards, red on food surfaces, or mode-chooser UIs — DESIGN.md explains why.
+
+## Simulator verification is HEADLESS — the owner works on this Mac
+Never `open -a Simulator`, never `npx expo start --ios` (it launches the GUI and steals window focus), never AppleScript/UI-script Simulator menus (synthetic clicks land in the owner's apps). Instead: `xcrun simctl boot <udid>` (headless), `npx expo start` (no --ios) + `xcrun simctl openurl booted "exp://127.0.0.1:8081"`, interact via `idb`, capture via `xcrun simctl io booted screenshot`. All of it works without the GUI; headless boots show the software keyboard by default.
