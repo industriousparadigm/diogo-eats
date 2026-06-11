@@ -1,5 +1,8 @@
 // Day totals strip shown at the top of the Today screen.
 // Shows calories, protein, sat fat, soluble fiber, plant %.
+// Day-level numbers render as INTEGERS — 36.3g protein is false
+// precision at day scale (meal cards keep one decimal, where 0.4g
+// fiber genuinely informs).
 // Reference numbers, not gates — no grades, never red.
 //
 // DEPTH: the strip is CHROME, not a content card — it's the day's headline
@@ -41,11 +44,11 @@ export function DayTotalsStrip({ totals, targets = DEFAULT_TARGETS }: Props) {
       <View style={styles.strip}>
         <StatNumber value={fmtCal(totals.calories)} label="kcal" flex />
         <Divider />
-        <StatNumber value={`${fmt(totals.protein_g)}g`} label="protein" flex />
+        <StatNumber value={`${fmt(totals.protein_g, 0)}g`} label="protein" flex />
         <Divider />
-        <StatNumber value={`${fmt(totals.sat_fat_g)}g`} label="sat fat" color={satFatColor} flex />
+        <StatNumber value={`${fmt(totals.sat_fat_g, 0)}g`} label="sat fat" color={satFatColor} flex />
         <Divider />
-        <StatNumber value={`${fmt(totals.soluble_fiber_g)}g`} label="fiber" color={fiberColor} flex />
+        <StatNumber value={`${fmt(totals.soluble_fiber_g, 0)}g`} label="fiber" color={fiberColor} flex />
         <Divider />
         <StatNumber value={fmtPlant(totals.plant_pct)} label="plant" color={palette.food.accent} flex />
       </View>

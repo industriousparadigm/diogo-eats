@@ -102,8 +102,9 @@ describe("MealCard — metric hierarchy (item 2)", () => {
       <MealCard meal={makeMeal()} onDelete={jest.fn()} targets={TARGETS} />
     );
     await waitFor(() => {
-      expect(getByText("fiber")).toBeTruthy();
-      expect(getByText("sat fat")).toBeTruthy();
+      expect(getByText("fib")).toBeTruthy();
+      expect(getByText("sat")).toBeTruthy();
+      expect(getByText("pro")).toBeTruthy();
       expect(getByText("8g")).toBeTruthy(); // fiber value
       expect(getByText("2g")).toBeTruthy(); // sat fat value
     });
@@ -152,13 +153,15 @@ describe("MealCard — metric hierarchy (item 2)", () => {
     walk(toJSON());
     const seq = texts.join("|");
     const iPlant = seq.indexOf("78%");
-    const iFiber = seq.indexOf("fiber");
-    const iSat = seq.indexOf("sat fat");
+    const iFiber = seq.indexOf("fib");
+    const iSat = seq.indexOf("sat");
+    const iPro = seq.indexOf("pro");
     const iKcal = seq.indexOf("kcal");
     expect(iPlant).toBeGreaterThanOrEqual(0);
     expect(iFiber).toBeGreaterThan(iPlant);
     expect(iSat).toBeGreaterThan(iFiber);
-    expect(iKcal).toBeGreaterThan(iSat); // kcal is last
+    expect(iPro).toBeGreaterThan(iSat);
+    expect(iKcal).toBeGreaterThan(iPro); // kcal is last
   });
 
   it("has NO repeat (↻) affordance on the card", async () => {

@@ -146,19 +146,14 @@ export function MealCard({ meal, onDelete, onOpen, targets = DEFAULT_TARGETS }: 
           <View style={[styles.plantSwatch, { backgroundColor: pc }]} />
           <Text style={styles.plantPct}>{fmtPlant(meal.plant_pct)}</Text>
         </View>
+        <Metric label="fib" value={`${fmt(meal.soluble_fiber_g)}g`} />
         <Metric
-          label="fiber"
-          value={`${fmt(meal.soluble_fiber_g)}g`}
-        />
-        <Metric
-          label="sat fat"
+          label="sat"
           value={`${fmt(meal.sat_fat_g)}g`}
           color={satFatHigh ? palette.warn : undefined}
         />
-        <View style={styles.kcalWrap}>
-          <Text style={styles.kcalNum}>{fmtCal(meal.calories)}</Text>
-          <Text style={styles.kcalUnit}>kcal</Text>
-        </View>
+        <Metric label="pro" value={`${fmt(meal.protein_g)}g`} />
+        <Metric label="kcal" value={fmtCal(meal.calories)} color={palette.textMuted} />
       </View>
 
       <PhotoLightbox uri={photoUrl} visible={lightbox} onClose={() => setLightbox(false)} />
@@ -186,9 +181,10 @@ export function MealCard({ meal, onDelete, onOpen, targets = DEFAULT_TARGETS }: 
   );
 }
 
-// A small metric pair on the card: a condensed value over a tiny label.
-// The value wears `color` only when it's the point (sat fat over the
-// single-meal threshold) — otherwise the calm cream numeral.
+// An inline metric pair: condensed value beside a tiny uppercase label,
+// baseline-aligned — every cell in the footer shares this shape. `color`
+// carries the meaning: amber when sat fat is the point, muted for the
+// demoted kcal, calm cream otherwise.
 function Metric({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <View style={styles.metric}>
@@ -296,19 +292,22 @@ const styles = StyleSheet.create({
   },
   plantPct: {
     fontFamily: condensedFamily,
-    fontSize: fontSize.title,
+    fontSize: fontSize.bodyLg,
     fontWeight: "800",
     color: palette.food.accentBright,
     fontVariant: ["tabular-nums"],
     letterSpacing: condensedFamily ? 0.2 : -0.3,
   },
-  // The two levers — the visible numbers on the card.
+  // Inline cells — value beside label, baseline-aligned, one shape for
+  // every metric. kcal is demoted by COLOR (muted), not size.
   metric: {
-    alignItems: "flex-start",
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 3,
   },
   metricValue: {
     fontFamily: condensedFamily,
-    fontSize: fontSize.title,
+    fontSize: fontSize.bodyLg,
     fontWeight: "800",
     color: palette.food.cream,
     fontVariant: ["tabular-nums"],
@@ -320,28 +319,6 @@ const styles = StyleSheet.create({
     color: palette.textSubtle,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 1,
-  },
-  // kcal — demoted: small, and last in the row.
-  kcalWrap: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 3,
-  },
-  kcalNum: {
-    fontFamily: condensedFamily,
-    fontSize: fontSize.body,
-    fontWeight: "700",
-    color: palette.textMuted,
-    fontVariant: ["tabular-nums"],
-    letterSpacing: condensedFamily ? 0.2 : -0.3,
-  },
-  kcalUnit: {
-    fontSize: fontSize.micro,
-    fontWeight: "700",
-    color: palette.textSubtle,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
   },
   deleteRow: {
     flexDirection: "row",
