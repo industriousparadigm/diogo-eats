@@ -19,6 +19,7 @@ export const FIXTURE_EXERCISES: Exercise[] = [
       "Feet mid-platform, shoulder-width. Lower slow, push. Don't snap knees straight.",
     measurement_type: "weight_reps",
     image_key: "leg-press",
+    created_by: null,
     sort_order: 1,
   },
   {
@@ -28,6 +29,7 @@ export const FIXTURE_EXERCISES: Exercise[] = [
       "Arms crossed. Bow down, lift to a straight line (not beyond), squeeze the butt.",
     measurement_type: "bodyweight_reps",
     image_key: "back-extension",
+    created_by: null,
     sort_order: 2,
   },
   {
@@ -36,6 +38,7 @@ export const FIXTURE_EXERCISES: Exercise[] = [
     description: "Handles at mid-chest. Push out, return slow, don't lock elbows.",
     measurement_type: "weight_reps",
     image_key: "chest-press",
+    created_by: null,
     sort_order: 3,
   },
   {
@@ -44,6 +47,7 @@ export const FIXTURE_EXERCISES: Exercise[] = [
     description: "Sit tall, pull to belly, squeeze shoulder blades. No yanking.",
     measurement_type: "weight_reps",
     image_key: "seated-row",
+    created_by: null,
     sort_order: 4,
   },
   {
@@ -52,6 +56,7 @@ export const FIXTURE_EXERCISES: Exercise[] = [
     description: "Heavy-ish dumbbell each hand. Stand tall, walk, turn, walk back.",
     measurement_type: "carry",
     image_key: "farmers-carry",
+    created_by: null,
     sort_order: 5,
   },
 ];
