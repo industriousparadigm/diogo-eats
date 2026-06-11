@@ -1,7 +1,14 @@
 // Looking back — the satisfaction surface, native render of the web's
-// History composition. Order is deliberate and load-bearing:
-//   headline (what's working, rule-based) -> calendar -> averages ->
-//   fiber trend (the lever to KEEP UP) -> sat fat trend (keep down).
+// History composition. ONE period selector governs the whole page (headline
+// window, averages window, signals, both trend charts, the heatmap range).
+//
+// Order is deliberate and load-bearing (owner feedback, rebuilt):
+//   headline (what's working, rule-based)
+//   -> averages (logged-days-only, coverage-honest)
+//   -> signals (honest day-level counts for the window)
+//   -> fiber trend (the lever to KEEP UP)
+//   -> sat fat trend (the lever to keep DOWN)
+//   -> heatmap + legend (the green squares, now at the BOTTOM)
 // No streaks, no badges, no grades — identity language only.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,18 +27,27 @@ import { Card, SectionHeader, StatNumber } from "@/components/ui";
 import { OverviewSkeleton } from "@/components/skeletons/OverviewSkeleton";
 import { ApiError, fetchProfile, fetchStats } from "@/lib/api";
 import { buildHeadline, loggedAverages } from "@/lib/headline";
+import { deriveSignals } from "@/lib/signals";
 import { DEFAULT_TARGETS, type DayAggregate, type Targets } from "@/lib/types";
 import { fmt, fmtCal, todayYmd } from "@/lib/format";
 import { pickDay } from "@/lib/stores";
 import { Heatmap } from "@/components/Heatmap";
 import { TrendChart } from "@/components/TrendChart";
+import { SignalsRow } from "@/components/SignalsRow";
 
-// Overview window options — a month vs a quarter. Drives both the fetch
-// size and how much of the heatmap / trends the screen renders.
-const WINDOWS = [
-  { days: 30, label: "1M" },
-  { days: 90, label: "3M" },
+// Period options — 7d / 15d / 1mo / 3mo / 1y, DEFAULT 15d. ONE selector
+// governs the whole page: it sets the fetch size (days) and every surface
+// derives from that same window. /api/stats?days=N serves arbitrary N from
+// 7 to 365 (clamped server-side), so these map straight through.
+const PERIODS = [
+  { days: 7, label: "7d" },
+  { days: 15, label: "15d" },
+  { days: 30, label: "1mo" },
+  { days: 90, label: "3mo" },
+  { days: 365, label: "1y" },
 ] as const;
+
+const DEFAULT_DAYS = 15;
 
 export default function OverviewScreen() {
   const router = useRouter();
@@ -39,13 +55,13 @@ export default function OverviewScreen() {
   const [targets, setTargets] = useState<Targets>(DEFAULT_TARGETS);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [windowDays, setWindowDays] = useState<number>(90);
+  const [periodDays, setPeriodDays] = useState<number>(DEFAULT_DAYS);
   const loadedOnce = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const [stats, profile] = await Promise.all([
-        fetchStats(windowDays),
+        fetchStats(periodDays),
         fetchProfile().catch(() => null),
       ]);
       setAggs(stats);
@@ -65,7 +81,7 @@ export default function OverviewScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [windowDays]);
+  }, [periodDays]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,21 +89,21 @@ export default function OverviewScreen() {
     }, [load])
   );
 
-  // Refetch when the window changes (focus already covers the first load).
-  const windowMountRef = useRef(true);
+  // Refetch when the period changes (focus already covers the first load).
+  const periodMountRef = useRef(true);
   useEffect(() => {
-    if (windowMountRef.current) {
-      windowMountRef.current = false;
+    if (periodMountRef.current) {
+      periodMountRef.current = false;
       return;
     }
     load();
-  }, [windowDays, load]);
+  }, [periodDays, load]);
 
-  // Switching the window refetches immediately (don't wait for re-focus).
-  function changeWindow(days: number) {
-    if (days === windowDays) return;
+  // Switching the period refetches immediately (don't wait for re-focus).
+  function changePeriod(days: number) {
+    if (days === periodDays) return;
     setAggs(null);
-    setWindowDays(days);
+    setPeriodDays(days);
   }
 
   function onPickDate(ymd: string) {
@@ -98,9 +114,11 @@ export default function OverviewScreen() {
   const loading = aggs === null;
   const logged = (aggs ?? []).filter((a) => a.meal_count > 0).length;
   const headline = aggs ? buildHeadline(aggs, targets) : null;
-  // The window governs everything (item 4): average over ALL logged days
-  // in the selected window, not a fixed last-14.
+  // The period governs everything: average over ALL logged days in the
+  // selected window (logged-days-only semantics + the coverage line stay).
   const averages = aggs ? loggedAverages(aggs, Number.MAX_SAFE_INTEGER) : null;
+  // Day-level signals — honest counts over the same window.
+  const signals = aggs ? deriveSignals(aggs, { caloriesTarget: targets.calories }) : [];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -121,24 +139,28 @@ export default function OverviewScreen() {
       >
         <View style={styles.headerRow}>
           <Text style={styles.title}>Looking back</Text>
-          <View style={styles.windowToggle}>
-            {WINDOWS.map((w) => {
-              const active = w.days === windowDays;
-              return (
-                <TouchableOpacity
-                  key={w.days}
-                  onPress={() => changeWindow(w.days)}
-                  style={[styles.windowBtn, active && styles.windowBtnActive]}
-                  accessibilityLabel={`show ${w.label}`}
-                >
-                  <Text style={[styles.windowText, active && styles.windowTextActive]}>
-                    {w.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </View>
+
+        {/* The one period selector — full row of its own so the five
+            options have room (the old two-toggle sat beside the title). */}
+        <View style={styles.periodToggle}>
+          {PERIODS.map((p) => {
+            const active = p.days === periodDays;
+            return (
+              <TouchableOpacity
+                key={p.days}
+                onPress={() => changePeriod(p.days)}
+                style={[styles.periodBtn, active && styles.periodBtnActive]}
+                accessibilityLabel={`show ${p.label}`}
+              >
+                <Text style={[styles.periodText, active && styles.periodTextActive]}>
+                  {p.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {!loading && (
           <Text style={styles.loggedCount}>
             {logged} day{logged === 1 ? "" : "s"} logged in this window
@@ -166,14 +188,8 @@ export default function OverviewScreen() {
               )
             )}
 
-            <Heatmap
-              aggregates={aggs ?? []}
-              selectedDate={todayYmd()}
-              onPickDate={onPickDate}
-            />
-
             {/* Coverage-honest averages — logged days in this window only,
-                and says so (the window governs everything — item 4). */}
+                and says so (the period governs everything). */}
             {averages && averages.loggedDays >= 3 && (
               <Card tone="recessed" style={styles.avgCard}>
                 <SectionHeader>AVERAGES · LOGGED DAYS THIS WINDOW</SectionHeader>
@@ -190,6 +206,10 @@ export default function OverviewScreen() {
               </Card>
             )}
 
+            {/* Day-level signals — honest counts over the window. */}
+            {logged >= 3 && <SignalsRow signals={signals} />}
+
+            {/* Trend charts — fiber (keep up), sat fat (keep down). */}
             {logged >= 3 && (
               <>
                 <TrendChart
@@ -208,6 +228,13 @@ export default function OverviewScreen() {
                 />
               </>
             )}
+
+            {/* The heatmap moves to the BOTTOM of the page (owner feedback). */}
+            <Heatmap
+              aggregates={aggs ?? []}
+              selectedDate={todayYmd()}
+              onPickDate={onPickDate}
+            />
 
             {error && (
               <View style={styles.errorRow}>
@@ -253,8 +280,10 @@ const styles = StyleSheet.create({
   loggedCount: {
     fontSize: fontSize.caption,
     color: palette.textSubtle,
+    marginTop: -spacing.sm,
   },
-  windowToggle: {
+  // The period selector spreads its five options evenly across the row.
+  periodToggle: {
     flexDirection: "row",
     backgroundColor: palette.surfaceAlt,
     borderWidth: borders.bold,
@@ -263,21 +292,22 @@ const styles = StyleSheet.create({
     padding: 3,
     gap: 2,
   },
-  windowBtn: {
-    paddingHorizontal: spacing.md,
+  periodBtn: {
+    flex: 1,
+    alignItems: "center",
     paddingVertical: spacing.xs,
     borderRadius: radii.xs,
   },
-  windowBtnActive: {
+  periodBtnActive: {
     backgroundColor: palette.food.accentSoft,
   },
-  windowText: {
+  periodText: {
     fontSize: fontSize.caption,
     fontWeight: "700",
     color: palette.textSubtle,
     letterSpacing: 0.3,
   },
-  windowTextActive: {
+  periodTextActive: {
     color: palette.food.accentBright,
   },
   headlineCard: {

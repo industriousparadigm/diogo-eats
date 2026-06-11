@@ -159,21 +159,45 @@ describe("OverviewScreen", () => {
     });
   });
 
-  it("defaults the window to 90 days (3M)", async () => {
+  it("defaults the period to 15 days (15d)", async () => {
     mockFetchStats.mockResolvedValue(WEEK);
     await render(<OverviewScreen />);
     await waitFor(() => {
-      expect(mockFetchStats).toHaveBeenCalledWith(90);
+      expect(mockFetchStats).toHaveBeenCalledWith(15);
     });
   });
 
-  it("refetches with 30 days when the 1M window is picked", async () => {
+  it("the one selector drives the fetch — every period maps straight to days", async () => {
     mockFetchStats.mockResolvedValue(WEEK);
     const { getByLabelText } = await render(<OverviewScreen />);
+    await waitFor(() => expect(mockFetchStats).toHaveBeenCalledWith(15));
+
+    await fireEvent.press(getByLabelText("show 7d"));
+    await waitFor(() => expect(mockFetchStats).toHaveBeenCalledWith(7));
+
+    await fireEvent.press(getByLabelText("show 1mo"));
+    await waitFor(() => expect(mockFetchStats).toHaveBeenCalledWith(30));
+
+    await fireEvent.press(getByLabelText("show 3mo"));
     await waitFor(() => expect(mockFetchStats).toHaveBeenCalledWith(90));
-    await fireEvent.press(getByLabelText("show 1M"));
+
+    await fireEvent.press(getByLabelText("show 1y"));
+    await waitFor(() => expect(mockFetchStats).toHaveBeenCalledWith(365));
+  });
+
+  it("renders the day-level signals card over the window", async () => {
+    // 7 logged days, one with alcohol, all fully plant=false (plant_pct 75).
+    const withAlcohol = [
+      ...WEEK.slice(0, 6),
+      day("2026-06-10", { alcohol_g: 14 }),
+    ];
+    mockFetchStats.mockResolvedValue(withAlcohol);
+    const { getByText } = await render(<OverviewScreen />);
     await waitFor(() => {
-      expect(mockFetchStats).toHaveBeenCalledWith(30);
+      expect(getByText("SIGNALS · THIS WINDOW")).toBeTruthy();
+      // One alcohol day -> the singular label (a calm fact, never red).
+      expect(getByText("day with alcohol")).toBeTruthy();
+      expect(getByText("days fully logged")).toBeTruthy();
     });
   });
 

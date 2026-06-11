@@ -197,6 +197,38 @@ Two honesty rules the panel must keep:
 - **The alcohol row only appears when the meal contains alcohol** (> 0).
   Most meals are 0; a permanent "0.0g alcohol" row is noise, not signal.
 
+## Looking-back surface (one period, calm register)
+
+The looking-back tab (`overview`) is the satisfaction surface. It stays in
+the **food register**: calm, identity language, no streaks/badges/grades.
+One thing governs the whole page — the **period selector** (7d / 15d / 1mo /
+3mo / 1y, default 15d). It sets the fetch size and EVERY surface derives from
+that same window; there is no per-component horizon. Order is load-bearing,
+top to bottom: headline → averages (logged-days-only, with a coverage line)
+→ **signals** → fiber trend (keep up) → sat fat trend (keep down) → the
+heatmap + legend at the BOTTOM.
+
+**Signals (`SIGNALS · THIS WINDOW`).** A recessed `Card` of honest day-level
+COUNTS over the window — facts, never grades (no shame language; alcohol is a
+fact, not a sin). A two-up grid of "N of M" + a plain noun phrase: days 100%
+plant (the one celebrated lever, its numeral in food lime), days with
+alcohol, days over kcal target (omitted when there's no target — never guess
+a threshold), days fully logged (coverage honesty, over the whole window).
+Derived by a pure helper (`lib/signals.ts`, tested for empty window and
+no-target).
+
+**Trend charts follow the selector.** The X-RANGE is the selected period, not
+a fixed tail. Per-day ranges keep the 7-day rolling-average smoothing (small
+"7d avg" label); the year range is decimated to weekly buckets first (label
+flips to "weekly") so a 365-point SVG path stays light. Geometry +
+decimation live in `lib/trendChart.ts` (tested).
+
+**The alcohol marker on the heatmap is a NEUTRAL fact-marker, never red.** A
+tiny dot in the cell's bottom-right corner, drawn in neutral ink
+(`palette.text` at 85% opacity) — NOT a color. The plant scale owns the
+single hue; an alcohol day is a fact surfaced calmly, never a stoplight or a
+verdict (protect-the-nudge). The legend carries a quiet "alcohol" key for it.
+
 ## Strength landing (a dashboard, not a catalog)
 
 The strength tab's landing is a SCOREBOARD GLANCE, not a browse surface.

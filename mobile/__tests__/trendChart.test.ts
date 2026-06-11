@@ -10,6 +10,8 @@ import {
   shortDateLabel,
   plotMax,
   dayAtIndex,
+  decimateToWeekly,
+  DECIMATE_THRESHOLD_DAYS,
 } from "../lib/trendChart";
 import type { DayAggregate } from "../lib/types";
 
@@ -137,5 +139,82 @@ describe("dayAtIndex", () => {
     expect(dayAtIndex(win, 1)?.date).toBe("2026-06-02");
     expect(dayAtIndex(win, 2)).toBeNull();
     expect(dayAtIndex(win, -1)).toBeNull();
+  });
+});
+
+describe("decimateToWeekly (1y decimation)", () => {
+  function ymd(i: number): string {
+    // 2026-01-01 + i days, kept simple (Jan has 31 days, enough headroom
+    // for the small fixtures here — we don't cross into Feb in counts).
+    const d = String(i + 1).padStart(2, "0");
+    return `2026-01-${d}`;
+  }
+  function day(i: number, overrides: Partial<DayAggregate> = {}): DayAggregate {
+    return {
+      date: ymd(i),
+      meal_count: 1,
+      plant_pct: 70,
+      sat_fat_g: 10,
+      soluble_fiber_g: 12,
+      calories: 1800,
+      protein_g: 80,
+      carbs_g: 200,
+      alcohol_g: 0,
+      kcal_burn: null,
+      ...overrides,
+    };
+  }
+
+  it("buckets a year into ~52 weekly points (a light SVG path)", () => {
+    const year = Array.from({ length: 365 }, (_, i) => day(i % 31));
+    const weekly = decimateToWeekly(year);
+    // 365 / 7 = 52.1 -> 53 buckets (the oldest is a short 1-day bucket).
+    expect(weekly.length).toBe(53);
+    // Far fewer points than the raw window — the whole point of decimation.
+    expect(weekly.length).toBeLessThan(year.length / 6);
+  });
+
+  it("threshold leaves 3mo (90d) per-day and only buckets above 120d", () => {
+    // 90 days is under the threshold -> the chart plots per-day, no bucketing.
+    expect(90).toBeLessThanOrEqual(DECIMATE_THRESHOLD_DAYS);
+    expect(365).toBeGreaterThan(DECIMATE_THRESHOLD_DAYS);
+  });
+
+  it("a weekly bucket averages its logged days' values", () => {
+    // 7 days, fiber 6..12 -> mean 9.
+    const week = [6, 7, 8, 9, 10, 11, 12].map((v, i) =>
+      day(i, { soluble_fiber_g: v })
+    );
+    const [bucket] = decimateToWeekly(week);
+    expect(bucket.soluble_fiber_g).toBeCloseTo(9);
+    expect(bucket.meal_count).toBe(7); // all 7 logged
+    expect(bucket.date).toBe(ymd(0)); // anchored to the week's first day
+  });
+
+  it("an all-empty week becomes a gap bucket (meal_count 0) — never pulls to zero", () => {
+    const week = Array.from({ length: 7 }, (_, i) => day(i, { meal_count: 0 }));
+    const [bucket] = decimateToWeekly(week);
+    expect(bucket.meal_count).toBe(0);
+    // A downstream rollingAverage / the chart's per-bucket NaN treats this
+    // as missing, not a real zero.
+  });
+
+  it("a partial trailing week only averages the days it has", () => {
+    // 10 days: newest 7 form one bucket, oldest 3 form a short bucket.
+    const ten = Array.from({ length: 10 }, (_, i) => day(i, { sat_fat_g: 10 }));
+    const weekly = decimateToWeekly(ten);
+    expect(weekly.length).toBe(2);
+    expect(weekly[0].meal_count).toBe(3); // the short bucket sits oldest
+    expect(weekly[1].meal_count).toBe(7);
+  });
+
+  it("stays chronological ascending (oldest first)", () => {
+    const fourteen = Array.from({ length: 14 }, (_, i) => day(i));
+    const weekly = decimateToWeekly(fourteen);
+    expect(weekly[0].date < weekly[1].date).toBe(true);
+  });
+
+  it("handles an empty window", () => {
+    expect(decimateToWeekly([])).toEqual([]);
   });
 });

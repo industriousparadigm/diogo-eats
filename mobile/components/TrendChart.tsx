@@ -5,10 +5,12 @@
 // value at the finger). Targets are reference numbers, not gates: nothing
 // red-alerts; sat fat over target is amber at most, never red.
 //
-// WINDOW-SCOPED (item 4): the chart plots the window the Overview screen
-// passes in (1M / 3M) — it does NOT re-derive its own horizon. The line is
-// still a 7-day rolling average (the smoothing label says "7d avg"); the
-// range follows the selected window.
+// WINDOW-SCOPED: the chart plots the window the Overview screen passes in
+// (7d / 15d / 1mo / 3mo / 1y) — it does NOT re-derive its own horizon. The
+// X-RANGE FOLLOWS THE SELECTOR. For per-day ranges the line is a 7-day
+// rolling average (the smoothing label says "7d avg"). For the year range
+// the window is decimated to weekly buckets first (label flips to "weekly")
+// so a 365-point SVG path stays light.
 //
 // CHART ANATOMY (see DESIGN.md):
 //   - left gutter: 2-3 Y value gridlines + right-aligned g labels
@@ -31,6 +33,8 @@ import {
   xTickIndices,
   shortDateLabel,
   plotMax,
+  decimateToWeekly,
+  DECIMATE_THRESHOLD_DAYS,
 } from "@/lib/trendChart";
 import { fmt } from "@/lib/format";
 import type { DayAggregate } from "@/lib/types";
@@ -59,9 +63,22 @@ export function TrendChart({
   pick: (a: DayAggregate) => number;
   direction: "keep_up" | "keep_down";
 }) {
-  // Plot the window verbatim (item 4) — the parent already scoped it.
-  const window = aggregates;
-  const points = useMemo(() => rollingAverage(window, pick), [window, pick]);
+  // Plot the window the parent scoped it to. For a large range (1y) the
+  // per-day path is too dense to draw cleanly, so it's decimated to weekly
+  // buckets first — the line then reads as a weekly trend (the smoothing
+  // label flips to "weekly"). 7d/15d/1mo/3mo stay per-day.
+  const decimated = aggregates.length > DECIMATE_THRESHOLD_DAYS;
+  const window = useMemo(
+    () => (decimated ? decimateToWeekly(aggregates) : aggregates),
+    [aggregates, decimated]
+  );
+  // Per-day windows keep the 7-day rolling-average smoothing. Weekly buckets
+  // are already an average, so a further 7-bucket roll would smear ~7 weeks
+  // into a line — plot the bucket values directly (per(a)) instead.
+  const points = useMemo(
+    () => (decimated ? window.map((a) => (a.meal_count > 0 ? pick(a) : NaN)) : rollingAverage(window, pick)),
+    [window, pick, decimated]
+  );
 
   // Measured plot width (the SVG is laid out at real px, not a stretched
   // viewBox, so scrub math maps touch px → day index honestly).
@@ -251,7 +268,7 @@ export function TrendChart({
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={styles.smoothing}>7d avg</Text>
+          <Text style={styles.smoothing}>{decimated ? "weekly" : "7d avg"}</Text>
         </View>
         <View style={styles.latestWrap}>
           <Text style={[styles.latest, { color: latestColor }]}>{latest.toFixed(1)}g</Text>

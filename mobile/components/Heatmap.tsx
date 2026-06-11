@@ -73,18 +73,20 @@ export function Heatmap({
                     <TouchableOpacity
                       key={cell.date}
                       onPress={() => onPickDate(cell.date)}
-                      accessibilityLabel={
-                        cell.meal_count > 0
-                          ? `${cell.date}: ${cell.meal_count} meals, ${cell.plant_pct}% plant`
-                          : `${cell.date}: no meals`
-                      }
+                      accessibilityLabel={accessibilityLabelFor(cell)}
                       style={[
                         styles.cell,
                         { backgroundColor: plantColor(cell.plant_pct, cell.meal_count > 0) },
                         cell.meal_count === 0 && styles.cellEmpty,
                         cell.date === selectedDate && styles.cellSelected,
                       ]}
-                    />
+                    >
+                      {/* Alcohol marker — a tiny NEUTRAL-INK dot in the
+                          bottom-right corner. Single-hue rule: the plant
+                          scale owns color; an alcohol day is a neutral fact,
+                          never red, never a stoplight (DESIGN.md). */}
+                      {cell.alcohol_g > 0 && <View style={styles.alcoholDot} />}
+                    </TouchableOpacity>
                   ) : (
                     <View key={`pad-${wi}-${di}`} style={styles.cellPad} />
                   )
@@ -108,9 +110,21 @@ export function Heatmap({
           <View key={i} style={[styles.legendSwatch, { backgroundColor: c }]} />
         ))}
         <Text style={styles.legendText}>more</Text>
+        {/* The alcohol marker key — a neutral dot, calmly explained. */}
+        <View style={styles.alcoholKey}>
+          <View style={styles.alcoholDotKey} />
+          <Text style={styles.legendText}>alcohol</Text>
+        </View>
       </View>
     </View>
   );
+}
+
+// The cell's accessibility label, alcohol noted as a neutral fact.
+function accessibilityLabelFor(cell: DayAggregate): string {
+  if (cell.meal_count === 0) return `${cell.date}: no meals`;
+  const base = `${cell.date}: ${cell.meal_count} meals, ${cell.plant_pct}% plant`;
+  return cell.alcohol_g > 0 ? `${base}, alcohol` : base;
 }
 
 const styles = StyleSheet.create({
@@ -161,6 +175,18 @@ const styles = StyleSheet.create({
     width: CELL,
     height: CELL,
     borderRadius: 3,
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+  },
+  // A tiny neutral-ink dot tucked into the cell's bottom-right corner — a
+  // calm fact-marker, never a colored status light (single-hue rule).
+  alcoholDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    margin: 2,
+    backgroundColor: palette.text,
+    opacity: 0.85,
   },
   cellEmpty: {
     borderWidth: 1,
@@ -188,5 +214,18 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 2,
+  },
+  alcoholKey: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: 10,
+  },
+  alcoholDotKey: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: palette.text,
+    opacity: 0.85,
   },
 });
