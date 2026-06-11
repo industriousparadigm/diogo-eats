@@ -2,13 +2,14 @@
 // date/note, per-exercise logged series, and the beats achieved that day.
 
 import React from "react";
-import { render, waitFor } from "@testing-library/react-native";
+import { render, fireEvent, waitFor } from "@testing-library/react-native";
 
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 let mockParams: { id?: string } = { id: "fixture-day1" };
 
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ back: mockBack, push: jest.fn() }),
+  useRouter: () => ({ back: mockBack, push: mockPush }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -57,6 +58,7 @@ describe("SessionDetailScreen", () => {
     mockFetchStrengthOverview.mockReset();
     mockGetSnapshot.mockReset();
     mockBack.mockReset();
+    mockPush.mockReset();
     // Exercise metadata comes from the cached overview by default.
     mockGetSnapshot.mockResolvedValue(mockStrengthOverview());
     mockFetchStrengthSession.mockResolvedValue(mockSessionDetail("fixture-day1"));
@@ -96,6 +98,13 @@ describe("SessionDetailScreen", () => {
     });
     // Beaten exercises wear a "beat ↑" chip in their card.
     expect(getAllByText("beat ↑").length).toBeGreaterThan(0);
+  });
+
+  it("opens an exercise's career detail when its logged-series card is tapped", async () => {
+    const { getByLabelText, getByText } = await render(<SessionDetailScreen />);
+    await waitFor(() => getByText("Leg press"));
+    await fireEvent.press(getByLabelText("Leg press detail"));
+    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/exercise/leg-press");
   });
 
   it("shows an error with retry on failure", async () => {

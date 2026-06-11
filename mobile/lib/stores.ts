@@ -77,3 +77,25 @@ export function takeSessionResult(): CompleteSessionResult | null {
   lastResult = null;
   return r;
 }
+
+// ---- "log this" handoff: exercise detail (from=session) -> live session ----
+//
+// The live session is ONE route that toggles its own picker<->entry view
+// internally — there is no `/session/entry/[id]` URL to push. So when the
+// gym-now detail (opened with `from=session`) fires "Log this", it stashes
+// the exercise id here and calls router.back(); the session screen, which
+// regains focus underneath, consumes the id and opens that exercise's entry.
+// Keeps the URL clean and the picker<->entry state machine the single owner
+// of which view is showing.
+
+let pendingLogExercise: string | null = null;
+
+export function stashLogExercise(exerciseId: string): void {
+  pendingLogExercise = exerciseId;
+}
+
+export function takeLogExercise(): string | null {
+  const id = pendingLogExercise;
+  pendingLogExercise = null;
+  return id;
+}

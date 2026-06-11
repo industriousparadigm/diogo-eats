@@ -20,7 +20,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { palette, radii, borders, fontSize, spacing, exerciseIdentity } from "@/lib/theme";
 import { Card, Button, Input, SectionHeader, KeyboardAwareScrollView } from "@/components/ui";
 import { SessionPickerSkeleton } from "@/components/skeletons/SessionPickerSkeleton";
@@ -46,7 +46,7 @@ import {
 import { filterByName, pickerZones } from "@/lib/pickerZones";
 import { AddExerciseForm } from "@/components/AddExerciseForm";
 import { AlternativesSheet } from "@/components/AlternativesSheet";
-import { stashSessionResult } from "@/lib/stores";
+import { stashSessionResult, takeLogExercise } from "@/lib/stores";
 import { beatBuzz, sessionDone } from "@/lib/haptics";
 import { SeriesRow } from "@/components/SeriesRow";
 import type { Exercise } from "@/lib/strengthTypes";
@@ -104,6 +104,23 @@ export default function StrengthSessionScreen() {
 
   function update(fn: (d: SessionDraft) => SessionDraft) {
     setDraft((d) => (d ? fn(d) : d));
+  }
+
+  // ---- "Log this" handoff from the gym-now exercise detail ----
+  // The detail screen (opened with from=session) stashes an exercise id and
+  // pops back here; on regaining focus we consume it and open that
+  // exercise's entry. detail → picker → entry, with back staying sane.
+  useFocusEffect(
+    useCallback(() => {
+      const exerciseId = takeLogExercise();
+      if (exerciseId) setView({ kind: "entry", exerciseId });
+    }, [])
+  );
+
+  // Open this exercise's detail in gym-now mode (info affordance / entry
+  // header). Pushes on top of the session — back returns to where we were.
+  function openExerciseDetail(exerciseId: string) {
+    router.push(`/(app)/strength/exercise/${exerciseId}?from=session`);
   }
 
   // ---- picker actions (zones, add-new, alternatives) ----
@@ -230,6 +247,7 @@ export default function StrengthSessionScreen() {
         draft={draft}
         exerciseId={view.exerciseId}
         onBack={() => setView({ kind: "picker" })}
+        onOpenDetail={() => openExerciseDetail(view.exerciseId)}
         update={update}
       />
     );
@@ -265,7 +283,23 @@ export default function StrengthSessionScreen() {
         onPress={() => setView({ kind: "entry", exerciseId: id })}
         accessibilityLabel={`${ex.name}${done ? ", logged" : ""}`}
       >
-        <ExerciseImage imageKey={ex.image_key} style={styles.pickImage} dimmed={done} />
+        {/* The thumbnail is the info affordance: tap it for the gym-now
+            detail (big image, the numbers to beat, today's sets) — a
+            subtle ⓘ hints it's tappable. Tapping it does NOT log; the card
+            BODY stays the sacred 2-4-tap path into series entry. */}
+        <TouchableOpacity
+          onPress={() => openExerciseDetail(id)}
+          activeOpacity={0.7}
+          accessibilityLabel={`${ex.name} info`}
+          style={styles.pickImageWrap}
+        >
+          <ExerciseImage imageKey={ex.image_key} style={styles.pickImage} dimmed={done} />
+          <View style={[styles.infoBadge, { borderColor: done ? palette.ink : accent }]}>
+            <Text style={[styles.infoBadgeText, { color: done ? palette.textMuted : accent }]}>
+              ⓘ
+            </Text>
+          </View>
+        </TouchableOpacity>
         <View style={styles.pickBody}>
           <Text
             style={[styles.pickName, { color: done ? palette.textMuted : accent }]}
@@ -446,11 +480,13 @@ function EntryView({
   draft,
   exerciseId,
   onBack,
+  onOpenDetail,
   update,
 }: {
   draft: SessionDraft;
   exerciseId: string;
   onBack: () => void;
+  onOpenDetail: () => void;
   update: (fn: (d: SessionDraft) => SessionDraft) => void;
 }) {
   const ex = draft.overview.exercises.find((e) => e.id === exerciseId);
@@ -472,9 +508,19 @@ function EntryView({
         >
           <Text style={styles.headerBtnText}>‹</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: accent }]}>
-          {ex.name.toUpperCase()}
-        </Text>
+        {/* The title is tappable → the gym-now detail (big image, the
+            numbers to beat). A trailing ⓘ marks it as more-than-a-label. */}
+        <TouchableOpacity
+          onPress={onOpenDetail}
+          style={styles.headerTitleBtn}
+          accessibilityLabel={`${ex.name} info`}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[styles.headerTitle, { color: accent }]} numberOfLines={1}>
+            {ex.name.toUpperCase()}
+          </Text>
+          <Text style={[styles.headerTitleInfo, { color: accent }]}>ⓘ</Text>
+        </TouchableOpacity>
         <View style={styles.headerBtn} />
       </View>
 
@@ -568,6 +614,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: palette.text,
     letterSpacing: 1,
+    flexShrink: 1,
+  },
+  headerTitleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexShrink: 1,
+  },
+  headerTitleInfo: {
+    fontSize: fontSize.caption,
+    fontWeight: "700",
   },
   discardText: {
     fontSize: 12,
@@ -614,6 +671,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
+  pickImageWrap: {
+    position: "relative",
+  },
   pickImage: {
     width: 72,
     height: 52,
@@ -621,6 +681,24 @@ const styles = StyleSheet.create({
     backgroundColor: palette.white,
     borderWidth: borders.bold,
     borderColor: palette.ink,
+  },
+  // A small ⓘ hint pinned to the thumbnail's corner — "there's more here".
+  infoBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: radii.pill,
+    backgroundColor: palette.bg,
+    borderWidth: borders.hairline,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoBadgeText: {
+    fontSize: fontSize.tiny,
+    fontWeight: "800",
+    lineHeight: 13,
   },
   altsBtn: {
     paddingHorizontal: spacing.sm,

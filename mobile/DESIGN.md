@@ -223,6 +223,46 @@ the real gym failure: the machine you wanted is occupied, now what.
 - **Error** (502) is a clean message + a Retry button. The network is flaky
   at 06:30; the sheet recovers in place.
 
+## Context-aware exercise detail (one screen, two modes)
+
+The exercise detail (`strength/exercise/[id]`) is ONE screen that flips its
+content by a `from` route param, so the same surface serves two jobs without
+a mode-chooser. Both modes share the **loud register** and the same core.
+
+- **Shared core (both modes):** the image is the HERO — full-width, framed
+  in the exercise's color identity, the single loudest `Card` in the app
+  (chunky identity border + the `loud` offset block). The name sits below as
+  condensed display type in the identity color; then the form-cue
+  description. Placeholder-safe for a null `image_key` (the `ExerciseImage`
+  primitive). This replaced the old cramped thumbnail-beside-text card.
+- **Gym-now (`from=session`):** what a 06:30 lifter needs mid-session and
+  nothing else. "LAST TIME" series numbers BIG (the numbers to beat),
+  TODAY's already-logged sets if any (read from the live draft), and a
+  primary "Log this" button. No career clutter — no BEST card, no
+  sparkline, no full timeline. "Log this" hands the exercise back to the
+  session via a module store (`stashLogExercise`) and pops back, so the
+  session's own picker↔entry state machine opens the entry (detail →
+  picker → entry; back stays sane).
+- **Career (default):** the scoreboard's long view. BEST as a big
+  `StatNumber` with the last-done date, the max-weight progression
+  sparkline (≥2 sessions), then the full chronological timeline (date ·
+  series, one row each with an identity dot) — vertical rhythm over stacked
+  cards.
+
+**Access points (the gym flow is sacred):** the picker CARD BODY always
+opens the series entry (the 2-4-tap log path) — never the detail. A small
+ⓘ on the picker card's thumbnail is a SEPARATE tap target → gym-now detail.
+The entry header (the exercise name) is likewise tappable → gym-now detail.
+Overview cards and session-detail rows open the career detail. The two
+targets on a picker card (body → entry, ⓘ → detail) must never collide; the
+ⓘ press does not bubble to the card body.
+
+**Cold-cache guard:** deep-linking into an exercise whose snapshot is cold
+must never render blank. While metadata resolves: the
+`ExerciseDetailSkeleton`. If a load attempt completes and the id still
+doesn't resolve (removed / not ours): an honest "couldn't find this
+exercise" state, never an empty screen.
+
 ## Depth rules (the offset block is container-only)
 
 The hard offset block is the signature of the look — and it is a **container

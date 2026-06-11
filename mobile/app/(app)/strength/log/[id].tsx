@@ -135,7 +135,16 @@ export default function SessionDetailScreen() {
                 const accent = exerciseIdentity(group.exercise_id).accent;
                 const beat = beatsByExercise.get(group.exercise_id);
                 return (
-                  <Card key={group.exercise_id} identity={accent} depth="loud" style={styles.exCard}>
+                  <Card
+                    key={group.exercise_id}
+                    identity={accent}
+                    depth="loud"
+                    style={styles.exCard}
+                    onPress={() =>
+                      router.push(`/(app)/strength/exercise/${group.exercise_id}`)
+                    }
+                    accessibilityLabel={`${ex?.name ?? group.exercise_id} detail`}
+                  >
                     <View style={styles.exHeader}>
                       <ExerciseImage imageKey={ex?.image_key ?? null} style={styles.exImage} />
                       <View style={styles.exHeaderText}>

@@ -39,8 +39,17 @@ function inputIsInsideKeyboardAwareScroll(
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 
+const mockPush = jest.fn();
+
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ back: mockBack, replace: mockReplace, push: jest.fn() }),
+  useRouter: () => ({ back: mockBack, replace: mockReplace, push: mockPush }),
+  useFocusEffect: (cb: () => void) => {
+    const React = require("react");
+    React.useEffect(() => {
+      cb();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+  },
 }));
 
 jest.mock("react-native-safe-area-context", () => ({
@@ -89,7 +98,7 @@ import StrengthSessionScreen from "../app/(app)/strength/session";
 import { mockStrengthOverview, mockCompleteSession } from "../lib/strengthFixtures";
 import { loadDraft, saveDraft, clearDraft } from "../lib/draftStorage";
 import { confirmSeries, createDraft } from "../lib/strengthSession";
-import { takeSessionResult } from "../lib/stores";
+import { stashLogExercise, takeSessionResult } from "../lib/stores";
 
 describe("StrengthSessionScreen", () => {
   beforeEach(async () => {
@@ -99,6 +108,7 @@ describe("StrengthSessionScreen", () => {
     mockFetchAlternatives.mockReset();
     mockBack.mockReset();
     mockReplace.mockReset();
+    mockPush.mockReset();
     await clearDraft();
     takeSessionResult(); // drain
     mockFetchStrengthOverview.mockResolvedValue(mockStrengthOverview());
@@ -362,6 +372,61 @@ describe("StrengthSessionScreen", () => {
     // Opens straight into the new exercise's entry, never-done defaults ready.
     await waitFor(() => {
       expect(getByText("TRICEP PULLEY")).toBeTruthy();
+    });
+  });
+
+  // The gym flow is sacred: the picker CARD BODY must keep opening the
+  // series entry in 2-4 taps. The info affordance (the thumbnail / its ⓘ)
+  // is a SEPARATE target that opens the read-only detail — it must never
+  // log. These two guard that the access points don't collide.
+  it("picker card body opens the series entry (the sacred gym path), not the detail", async () => {
+    const { getByText, getByLabelText } = await render(<StrengthSessionScreen />);
+    await waitFor(() => getByText("Leg press"));
+    // Tap the card body (its name) — this is the log path.
+    await fireEvent.press(getByText("Leg press"));
+    await waitFor(() => {
+      // The entry opened (its loud header + the prefilled series).
+      expect(getByLabelText("confirm series 1")).toBeTruthy();
+    });
+    // The body tap did NOT push the detail route.
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("picker card info affordance opens the gym-now detail without logging", async () => {
+    const { getByText, getByLabelText, queryByLabelText } = await render(
+      <StrengthSessionScreen />
+    );
+    await waitFor(() => getByText("Leg press"));
+    await fireEvent.press(getByLabelText("Leg press info"));
+    // Pushed the detail in gym-now mode...
+    expect(mockPush).toHaveBeenCalledWith(
+      "/(app)/strength/exercise/leg-press?from=session"
+    );
+    // ...and stayed on the picker (did NOT open the entry).
+    expect(queryByLabelText("confirm series 1")).toBeNull();
+  });
+
+  it("entry header opens the gym-now detail for that exercise", async () => {
+    const { getByText, getByLabelText } = await render(<StrengthSessionScreen />);
+    await waitFor(() => getByText("Leg press"));
+    await fireEvent.press(getByText("Leg press")); // open entry
+    await waitFor(() => getByLabelText("confirm series 1"));
+    // The entry's title is a tappable info affordance.
+    await fireEvent.press(getByLabelText("Leg press info"));
+    expect(mockPush).toHaveBeenCalledWith(
+      "/(app)/strength/exercise/leg-press?from=session"
+    );
+  });
+
+  // The "Log this" handoff: the gym-now detail stashes an exercise id and
+  // pops back; on regaining focus the session opens that exercise's entry.
+  it("opens the stashed exercise's entry on focus (the 'Log this' handoff)", async () => {
+    stashLogExercise("chest-press");
+    const { getByText, getByLabelText } = await render(<StrengthSessionScreen />);
+    await waitFor(() => {
+      // Jumped straight into chest-press entry, not the picker.
+      expect(getByText("CHEST PRESS")).toBeTruthy();
+      expect(getByLabelText("confirm series 1")).toBeTruthy();
     });
   });
 
