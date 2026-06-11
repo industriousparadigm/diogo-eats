@@ -135,7 +135,11 @@ export async function getAlternatives(
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    thinking: { type: "adaptive" },
+    // No thinking: ranking known catalog movements by pattern/muscle is a
+    // direct structured-extraction task, not multi-step reasoning. Adaptive
+    // thinking only added latency here (it pushed the call past the function
+    // timeout in prod verification) without improving the picks. Sonnet 4.6
+    // runs this fine thinking-off — omit the param entirely.
     output_config: {
       format: { type: "json_schema", schema: ALTERNATIVES_SCHEMA },
     },

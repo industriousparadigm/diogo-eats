@@ -6,7 +6,7 @@ import { todayYmd, tzDayBounds } from "@/lib/tz";
 import { requireUser } from "@/lib/user";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60; // a model call — match /api/parse's ceiling
 
 // POST /api/strength/alternatives — the "machine taken" brain. Body
 // { exercise_id } → { alternatives: [{ exercise_id, reason }], suggestions:
