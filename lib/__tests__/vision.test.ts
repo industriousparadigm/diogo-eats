@@ -103,3 +103,18 @@ describe("exactness-beats-inference invariants", () => {
     expect(prompt).toContain("WITHOUT exact product data");
   });
 });
+
+describe("text-entry authored-list invariant", () => {
+  // "bread with cheese and ham" got butter invented (11 Jun). Typed
+  // entries are authored lists: method-entailed fats only, never
+  // completion of an enumerated assembly.
+  it("TEXT_SYSTEM respects the authored list", () => {
+    expect(TEXT_SYSTEM).toContain("The user authored this list");
+    expect(TEXT_SYSTEM).toContain("missing means absent");
+    expect(TEXT_SYSTEM).not.toContain("hidden cheese/cream/butter typical for the named dish");
+  });
+
+  it("PARSE_SYSTEM (photos) keeps visual-evidence inference", () => {
+    expect(PARSE_SYSTEM).toContain("Include implicit ingredients");
+  });
+});
