@@ -40,7 +40,11 @@ const env = fs
 const SITE = "https://diogo-eats.vercel.app";
 const DIOGO_EMAIL = "dsgmcosta@gmail.com";
 const DIOGO_USER_ID = "47053402-614f-4a7d-bf36-54b9f3337bbe";
-const SYNTHETIC_NAME = `ZZ Verify Machine ${Date.now()}`;
+// A real row substitute, so that when we block seated-row the catalog
+// genuinely contains a strong same-pattern sub the model should rank —
+// this exercises the catalog-ranking path end-to-end, not just the
+// honest-empty branch the tiny seeded catalog otherwise forces.
+const SYNTHETIC_NAME = `ZZ Verify Chest-Supported Row ${Date.now()}`;
 
 const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -132,7 +136,7 @@ async function main() {
       body: JSON.stringify({
         name: SYNTHETIC_NAME,
         measurement_type: "weight_reps",
-        description: "Synthetic verify row — safe to delete.",
+        description: "Chest on the pad, pull the handles to your ribs, squeeze the shoulder blades. Synthetic verify row — safe to delete.",
       }),
     });
     check(created.status === 200, `POST create → ${created.status}`, created.body);
@@ -184,21 +188,38 @@ async function main() {
     const alts = alt.body?.alternatives ?? [];
     const sugg = alt.body?.suggestions ?? [];
     const catIds = new Set(cat1.map((e) => e.id));
-    check(alts.length >= 1, `ranked at least one catalog substitute`, alts.length);
+    // The catalog now holds a genuine chest-supported row (the synthetic
+    // exercise) — a strong same-pattern sub for the blocked seated row, so
+    // the model SHOULD rank it. (Without it, the tiny seeded catalog has no
+    // true row sub and the honest response is empty alternatives + new
+    // suggestions; that branch is exercised by the unit tests + prompt.)
+    check(alts.length >= 1, `ranked at least one catalog substitute`, alts);
     check(
-      alts.every((a) => catIds.has(a.exercise_id)),
-      "every alternative is a real catalog id",
+      alts.some((a) => a.exercise_id === createdId),
+      "ranked the chest-supported row (the genuine catalog sub)",
       alts.map((a) => a.exercise_id)
     );
     check(
-      alts.every((a) => a.exercise_id !== "seated-row"),
-      "blocked exercise excluded from its own alternatives"
+      alts.every((a) => catIds.has(a.exercise_id) && a.exercise_id !== "seated-row"),
+      "every catalog alternative is a real id and not the blocked exercise",
+      alts.map((a) => a.exercise_id)
     );
     check(
       alts.every((a) => typeof a.reason === "string" && a.reason.trim().length > 0),
       "every alternative has a non-empty reason"
     );
     check(sugg.length <= 2, "at most 2 new suggestions", sugg.length);
+    check(
+      sugg.every(
+        (s) =>
+          typeof s.name === "string" && s.name.trim().length > 0 &&
+          ["weight_reps", "bodyweight_reps", "carry"].includes(s.measurement_type) &&
+          typeof s.description === "string" && s.description.trim().length > 0 &&
+          typeof s.reason === "string" && s.reason.trim().length > 0
+      ),
+      "every suggestion is well-formed (name, valid type, description, reason)",
+      sugg
+    );
     console.log(`  alternatives: ${JSON.stringify(alts)}`);
     console.log(`  suggestions:  ${JSON.stringify(sugg.map((s) => ({ name: s.name, type: s.measurement_type })))}`);
 
