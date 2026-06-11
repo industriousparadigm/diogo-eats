@@ -27,9 +27,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
-import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { palette, radii, borders, fontSize, spacing, typography } from "@/lib/theme";
 import { Card, Chip, SectionHeader, Button, StatNumber, SkeletonBlock, Input, KeyboardAwareScrollView } from "@/components/ui";
-import { computeTotals } from "@/lib/editTotals";
+import { computeTotals, computeNutrition, type Nutrition } from "@/lib/editTotals";
 import { parseItems, type Item, type Meal } from "@/lib/types";
 import { fmt, fmtCal, fmtTime, fmtDayLabel } from "@/lib/format";
 import {
@@ -108,6 +108,7 @@ function Editor({ meal }: { meal: Meal }) {
     items.length > 0 &&
     (items[0] as { per_100g?: unknown }).per_100g === undefined;
   const live = useMemo(() => computeTotals(items), [items]);
+  const nutrition = useMemo(() => computeNutrition(items), [items]);
 
   function patchGrams(idx: number, value: string) {
     const grams = Math.max(0, Math.min(5000, parseFloat(value) || 0));
@@ -432,6 +433,15 @@ function Editor({ meal }: { meal: Meal }) {
                   </TouchableOpacity>
                 )}
               </View>
+
+              {/* Full-nutrition panel — every tracked metric, not just the
+                  headline strip. Recomputes live as grams/items change.
+                  Calm food register: one neutral Card, a label+value grid,
+                  no celebration. A metric shows "—" only when NO item
+                  carries it (honest absence ≠ a computed 0.0g); the alcohol
+                  row is hidden when the meal carries zero alcohol so the
+                  panel doesn't shout "0.0g alcohol" at every normal meal. */}
+              <NutritionPanel n={nutrition} />
             </>
           )}
 
@@ -448,6 +458,69 @@ function Editor({ meal }: { meal: Meal }) {
         onClose={() => setLightbox(false)}
       />
     </SafeAreaView>
+  );
+}
+
+// One metric in the nutrition grid: a small uppercase label over a
+// condensed numeral. value is already-formatted ("12.4g", "320", "—").
+// A "—" reads in the muted tier — it's honest absence, not a number to
+// dwell on. plant% wears the food accent (it's the one number that's "the
+// point" on a food surface), everything else stays neutral text.
+function MetricCell({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  const absent = value === "—";
+  return (
+    <View style={styles.metricCell}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.metricValue,
+          absent && styles.metricValueAbsent,
+          accent ? { color: accent } : null,
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+// The full-nutrition panel. Everything the meal tracks, in a calm two-up
+// grid on one neutral food Card. Headline four (calories/protein/sat
+// fat/fiber) + the silent-capture nutrients (total fat/carbs/sugar/salt)
+// + plant%. Each silent nutrient renders "—" when no item in the meal
+// carries it (absence) vs "0.0g" when it summed to zero. The alcohol row
+// only appears when the meal actually contains alcohol — most meals are 0
+// and a permanent "0.0g alcohol" row would be noise.
+function NutritionPanel({ n }: { n: Nutrition }) {
+  const g = (value: number, present: boolean) =>
+    present ? `${value.toFixed(1)}g` : "—";
+  return (
+    <Card tone="recessed" style={styles.nutritionCard}>
+      <SectionHeader>NUTRITION</SectionHeader>
+      <View style={styles.metricGrid}>
+        <MetricCell label="calories" value={`${n.calories}`} />
+        <MetricCell label="protein" value={`${n.protein_g.toFixed(1)}g`} />
+        <MetricCell label="total fat" value={g(n.fat_g, n.present.fat_g)} />
+        <MetricCell label="sat fat" value={`${n.sat_fat_g.toFixed(1)}g`} />
+        <MetricCell label="carbs" value={g(n.carbs_g, n.present.carbs_g)} />
+        <MetricCell label="sugar" value={g(n.sugar_g, n.present.sugar_g)} />
+        <MetricCell label="soluble fiber" value={`${n.soluble_fiber_g.toFixed(1)}g`} />
+        <MetricCell label="salt" value={g(n.salt_g, n.present.salt_g)} />
+        {n.present.alcohol_g && n.alcohol_g > 0 ? (
+          <MetricCell label="alcohol" value={`${n.alcohol_g.toFixed(1)}g`} />
+        ) : null}
+        <MetricCell label="plant" value={`${n.plant_pct}%`} accent={palette.food.accent} />
+      </View>
+    </Card>
   );
 }
 
@@ -681,5 +754,32 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     flex: 1,
+  },
+  nutritionCard: {
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  // Two-up grid of metric cells. Each cell is half-width minus the row
+  // gap so labels/values line up in two clean columns; interior rhythm is
+  // plain spacing (one chunky border per Card — no nested borders).
+  metricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: spacing.md,
+    columnGap: spacing.lg,
+  },
+  metricCell: {
+    width: "47%",
+    gap: 2,
+  },
+  metricLabel: {
+    ...typography.statLabel,
+  },
+  metricValue: {
+    ...typography.displayNumber,
+    color: palette.text,
+  },
+  metricValueAbsent: {
+    color: palette.textSubtle,
   },
 });

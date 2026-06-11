@@ -127,11 +127,13 @@ describe("MealEditScreen", () => {
 
   it("shows live totals that update when grams change", async () => {
     stashMeal(makeMeal());
-    const { getByText, getByLabelText } = await render(<MealEditScreen />);
-    expect(getByText("760")).toBeTruthy(); // 380 * 2
+    const { getAllByText, getByLabelText } = await render(<MealEditScreen />);
+    // 380 * 2 — calories now appear in both the headline strip AND the
+    // nutrition panel, so there are two matches.
+    expect(getAllByText("760").length).toBeGreaterThan(0);
     await fireEvent.changeText(getByLabelText("Oatmeal grams"), "100");
     await waitFor(() => {
-      expect(getByText("380")).toBeTruthy();
+      expect(getAllByText("380").length).toBeGreaterThan(0);
     });
   });
 
@@ -227,5 +229,133 @@ describe("MealEditScreen", () => {
     mockParams = { id: "unknown-meal" };
     const { getByText } = await render(<MealEditScreen />);
     expect(getByText("Meal not found")).toBeTruthy();
+  });
+});
+
+// A meal item carrying the full silent-capture nutrient set. Round
+// numbers per 100g so a 100g portion (f=1) reports the per_100g value
+// straight, keeping the assertions readable.
+function fullItem(overrides: Partial<Item> = {}): Item {
+  return {
+    name: "Cheese pizza",
+    grams: 100,
+    confidence: "high",
+    is_plant: false,
+    per_100g: {
+      sat_fat_g: 6,
+      soluble_fiber_g: 2,
+      calories: 270,
+      protein_g: 12,
+      fat_g: 10,
+      carbs_g: 33,
+      sugar_g: 4,
+      salt_g: 1.2,
+      alcohol_g: 0,
+    },
+    ...overrides,
+  };
+}
+
+describe("MealEditScreen — NUTRITION panel", () => {
+  beforeEach(() => {
+    mockParams = { id: "meal-1" };
+  });
+
+  it("renders every tracked metric for a fully-loaded meal", async () => {
+    stashMeal(makeMeal({ items_json: JSON.stringify([fullItem()]) }));
+    const { getByText } = await render(<MealEditScreen />);
+    // The panel header and each metric's label appear.
+    expect(getByText("NUTRITION")).toBeTruthy();
+    expect(getByText("calories")).toBeTruthy();
+    expect(getByText("protein")).toBeTruthy();
+    expect(getByText("total fat")).toBeTruthy();
+    expect(getByText("sat fat")).toBeTruthy();
+    expect(getByText("carbs")).toBeTruthy();
+    expect(getByText("sugar")).toBeTruthy();
+    expect(getByText("soluble fiber")).toBeTruthy();
+    expect(getByText("salt")).toBeTruthy();
+    // Values for the silent nutrients are computed, not "—".
+    expect(getByText("10.0g")).toBeTruthy(); // total fat
+    expect(getByText("33.0g")).toBeTruthy(); // carbs
+    expect(getByText("4.0g")).toBeTruthy(); // sugar
+    expect(getByText("1.2g")).toBeTruthy(); // salt
+  });
+
+  it("hides the alcohol row when the meal carries no alcohol", async () => {
+    // alcohol_g present on the item but summing to 0 — still hidden.
+    stashMeal(makeMeal({ items_json: JSON.stringify([fullItem()]) }));
+    const { queryByText } = await render(<MealEditScreen />);
+    expect(queryByText("alcohol")).toBeNull();
+  });
+
+  it("shows the alcohol row when the meal contains alcohol", async () => {
+    stashMeal(
+      makeMeal({
+        items_json: JSON.stringify([
+          fullItem({
+            name: "Red wine",
+            grams: 100,
+            per_100g: { ...fullItem().per_100g, alcohol_g: 11 },
+          }),
+        ]),
+      })
+    );
+    const { getByText } = await render(<MealEditScreen />);
+    expect(getByText("alcohol")).toBeTruthy();
+    expect(getByText("11.0g")).toBeTruthy();
+  });
+
+  it("renders '—' for a silent nutrient no item carries, not 0.0g", async () => {
+    // oatmeal() carries only the four core nutrients — fat/carbs/sugar/
+    // salt are absent. They must show '—', distinct from a computed zero.
+    stashMeal(makeMeal()); // items_json = [oatmeal()]
+    const { getAllByText, getByText } = await render(<MealEditScreen />);
+    // Four absent silent metrics each render the em-dash placeholder.
+    expect(getAllByText("—").length).toBe(4);
+    // The core metrics that ARE present still show real numbers — protein's
+    // "26.0g" is panel-unique (the headline strip shows the 0-decimal "26g").
+    expect(getByText("26.0g")).toBeTruthy(); // protein
+  });
+
+  it("distinguishes a computed zero from absence", async () => {
+    // sugar_g present and equal to 0 → "0.0g" (a real measurement), while
+    // an item lacking carbs entirely contributes absence.
+    stashMeal(
+      makeMeal({
+        items_json: JSON.stringify([
+          {
+            name: "Plain chicken",
+            grams: 100,
+            confidence: "high",
+            is_plant: false,
+            per_100g: {
+              sat_fat_g: 1,
+              soluble_fiber_g: 2, // nonzero so it doesn't collide with sugar's 0.0g
+              calories: 165,
+              protein_g: 31,
+              sugar_g: 0, // present, measured zero
+              // fat_g/carbs_g/salt_g absent
+            },
+          },
+        ]),
+      })
+    );
+    const { getByText, getAllByText } = await render(<MealEditScreen />);
+    expect(getByText("0.0g")).toBeTruthy(); // sugar — a real zero
+    // fat, carbs, salt absent → three em-dashes.
+    expect(getAllByText("—").length).toBe(3);
+  });
+
+  it("recomputes the panel live when grams change", async () => {
+    stashMeal(makeMeal({ items_json: JSON.stringify([fullItem()]) }));
+    const { getByText, getByLabelText, queryByText } = await render(
+      <MealEditScreen />
+    );
+    expect(getByText("10.0g")).toBeTruthy(); // total fat at 100g
+    await fireEvent.changeText(getByLabelText("Cheese pizza grams"), "200");
+    await waitFor(() => {
+      expect(getByText("20.0g")).toBeTruthy(); // total fat doubles at 200g
+    });
+    expect(queryByText("10.0g")).toBeNull();
   });
 });

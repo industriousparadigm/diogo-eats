@@ -176,6 +176,27 @@ reads as a status light the user must decode; a one-word chip just tells
 them. This is also why food never gets a stoplight — uncertainty is
 labeled, not color-coded.
 
+## Meal nutrition panel (full picture, calm register)
+
+The meal detail screen (`meal/[id]`) carries a **NUTRITION** panel below the
+items — every metric the meal tracks, not just the headline strip. It's one
+neutral recessed `Card` (food register: calm ink border, no celebration,
+condensed display numerals) holding a two-up grid of label-over-numeral
+cells: calories, protein, total fat, sat fat, carbs, sugar, soluble fiber,
+salt, then plant% (the one number that's "the point", in food lime). It
+recomputes live as grams/items change, off the same `computeNutrition`
+helper that feeds the sticky headline bar (one place the portion math
+lives — `lib/editTotals.ts`).
+
+Two honesty rules the panel must keep:
+- **Absence ≠ zero.** A silent-capture nutrient (fat/carbs/sugar/salt/
+  alcohol is optional per item — older meals lack it) shows **"—"** (muted
+  tier) only when NO item in the meal carries it, vs **"0.0g"** when it
+  summed to a real zero. The helper tracks a `present` flag per silent
+  nutrient so the panel can tell them apart.
+- **The alcohol row only appears when the meal contains alcohol** (> 0).
+  Most meals are 0; a permanent "0.0g alcohol" row is noise, not signal.
+
 ## Strength landing (a dashboard, not a catalog)
 
 The strength tab's landing is a SCOREBOARD GLANCE, not a browse surface.
