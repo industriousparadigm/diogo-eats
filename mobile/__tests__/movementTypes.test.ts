@@ -6,7 +6,7 @@
 import {
   movementType,
   MOVEMENT_TYPES,
-  ACTIVITY_GRID_TYPES,
+  GRID_TYPES,
   GYM_TYPE,
 } from "../lib/movementTypes";
 
@@ -28,6 +28,14 @@ describe("movementType registry", () => {
     expect(gym.type).toBe("gym");
     expect(gym.name).toBe("Gym");
     expect(gym.identity.accent).toBe(GYM_TYPE.identity.accent);
+  });
+
+  it("gym routes to the live session, every other type quick-logs", () => {
+    expect(movementType("gym").entryMode).toBe("live-session");
+    expect(movementType("padel").entryMode).toBe("quick-log");
+    expect(movementType("run").entryMode).toBe("quick-log");
+    // An unknown type defaults to the quick-log form (it's an activity).
+    expect(movementType("kayak").entryMode).toBe("quick-log");
   });
 
   it("flags only distance-y types as distance:true", () => {
@@ -67,11 +75,13 @@ describe("movementType registry", () => {
     expect(def.image).toBeTruthy();
   });
 
-  it("the quick-log grid offers every type except gym", () => {
-    const slugs = ACTIVITY_GRID_TYPES.map((t) => t.type);
-    expect(slugs).not.toContain("gym");
+  it("the front-door grid leads with gym, then every activity type", () => {
+    const slugs = GRID_TYPES.map((t) => t.type);
+    // ONE front door: gym is the first card.
+    expect(slugs[0]).toBe("gym");
     expect(slugs).toContain("padel");
     expect(slugs).toContain("other");
-    expect(ACTIVITY_GRID_TYPES.length).toBe(MOVEMENT_TYPES.length);
+    // Gym + every activity type, nothing dropped or duplicated.
+    expect(GRID_TYPES.length).toBe(MOVEMENT_TYPES.length + 1);
   });
 });

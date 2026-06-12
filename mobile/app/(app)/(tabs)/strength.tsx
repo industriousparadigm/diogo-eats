@@ -3,11 +3,14 @@
 // (padel, runs, walks…) join them in a single union timeline.
 //
 // Top to bottom:
-//   - DUAL HERO: "Start session" (gym — the scoreboard with the deadline
-//     anchor, slightly leading) + "+ Log movement" (everything else). Both
-//     prominent.
-//   - STAT STRIP (loud): sessions·mo, beats·mo, active days·mo (any gym
-//     session OR activity that day, phone-local), last moved.
+//   - ONE FRONT DOOR: a single full-width "+ Log movement" hero (amber). A
+//     gym sesh is just another movement, picked from the sheet's grid (gym
+//     leads it). EXCEPTION: when a session draft exists, a "Resume session"
+//     button sits ABOVE it — the gym-floor lifeline stays prominent.
+//   - STAT STRIP (loud), movement-language only: movements·mo (gym sessions
+//     + activities), active days·mo (any movement that day, phone-local),
+//     last moved (date). Beats LEFT the landing — it's gym-world vocabulary
+//     and lives on the gym surfaces, not this glance.
 //   - RECENT: the UNION timeline — sessions + activities interleaved
 //     newest-first, each an IMAGE-LED card in its type's identity.
 //
@@ -36,10 +39,10 @@ import {
 import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOverviewSkeleton";
 import { loadDraft } from "@/lib/draftStorage";
-import { strengthStats } from "@/lib/strengthStats";
 import { fmtLastSession } from "@/lib/strengthFormat";
 import {
   mergeTimeline,
+  movementsThisMonth,
   activeDaysThisMonth,
   lastMovedAt,
 } from "@/lib/movementTimeline";
@@ -147,11 +150,12 @@ export default function MovementScreen() {
 
   const nameById = new Map((overview?.exercises ?? []).map((e) => [e.id, e.name]));
   const sessions = overview?.sessions ?? [];
-  const stats = overview ? strengthStats(sessions, Date.now()) : null;
+  const now = Date.now();
   const timeline = overview
     ? mergeTimeline(sessions, activities).slice(0, RECENT_CAP)
     : [];
-  const activeDays = activeDaysThisMonth(sessions, activities, Date.now());
+  const movements = movementsThisMonth(sessions, activities, now);
+  const activeDays = activeDaysThisMonth(sessions, activities, now);
   const lastMoved = lastMovedAt(sessions, activities);
 
   return (
@@ -173,30 +177,30 @@ export default function MovementScreen() {
       >
         <Text style={styles.title}>Movement</Text>
 
-        {/* DUAL HERO. Gym leads (the scoreboard with the deadline anchor);
-            "+ Log movement" sits beside it for everything else. */}
-        <View style={styles.heroRow}>
+        {/* ONE FRONT DOOR. "+ Log movement" is the single hero — a gym sesh
+            is just another movement, picked from the sheet's grid. The
+            in-progress gym session is the one exception: "Resume session"
+            rides ABOVE it so the gym-floor lifeline stays unmissable. */}
+        {hasDraft && (
           <Button
-            label={hasDraft ? "Resume session" : "Start session"}
-            hint={hasDraft ? "in progress" : "gym"}
+            label="Resume session"
+            hint="in progress"
             onPress={startSession}
             variant="primary"
             accent={palette.strength.brand}
             size="lg"
-            accessibilityLabel={hasDraft ? "resume session" : "start session"}
-            style={styles.heroPrimary}
+            accessibilityLabel="resume session"
+            style={styles.heroResume}
           />
-          <Button
-            label="+ Log movement"
-            hint="padel · run · walk…"
-            onPress={() => setLogOpen(true)}
-            variant="secondary"
-            accent={palette.strength.brand}
-            size="lg"
-            accessibilityLabel="log movement"
-            style={styles.heroSecondary}
-          />
-        </View>
+        )}
+        <Button
+          label="+ Log movement"
+          onPress={() => setLogOpen(true)}
+          variant="primary"
+          accent={palette.strength.brand}
+          size="lg"
+          accessibilityLabel="log movement"
+        />
 
         {loading && !overview && !error && <StrengthOverviewSkeleton />}
 
@@ -209,22 +213,21 @@ export default function MovementScreen() {
           </View>
         )}
 
-        {overview && stats && (
+        {overview && (
           <>
-            {/* STAT STRIP — the movement glance. Four cells: sessions, beats,
-                active days (sessions OR activities), last moved. Flat Card
-                (supporting strip — the offset block stays the timeline's). */}
+            {/* STAT STRIP — the movement glance, movement-language only.
+                Three evenly-distributed cells: movements (gym sessions +
+                activities), active days (any movement that day), last moved
+                (a date). Beats LEFT — it's gym-world vocabulary and lives on
+                the gym surfaces, not this glance. All three are StatNumber
+                cells (same condensed treatment, numerals on one baseline —
+                the date renders as condensed numerals "12 Jun" at the same
+                size, so it never warps its neighbours). Flat Card (supporting
+                strip — the offset block stays the timeline's). */}
             <Card flat depth="loud" style={styles.statStrip} accessibilityLabel="month stats">
               <StatNumber
-                value={String(stats.sessionsThisMonth)}
-                label="sessions · mo"
-                color={palette.strength.brandBright}
-                flex
-              />
-              <View style={styles.statDivider} />
-              <StatNumber
-                value={String(stats.beatsThisMonth)}
-                label="beats · mo"
+                value={String(movements)}
+                label="movements · mo"
                 color={palette.strength.brandBright}
                 flex
               />
@@ -288,6 +291,7 @@ export default function MovementScreen() {
         visible={logOpen}
         onClose={() => setLogOpen(false)}
         onLogged={onLogged}
+        onStartSession={startSession}
       />
       <ActivityDetailSheet
         // Key by id so the editor re-inits its fields per opened card.
@@ -313,14 +317,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
 
-  // Dual hero
-  heroRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  heroPrimary: { flex: 1.15 },
-  heroSecondary: { flex: 1 },
+  // One front door (+ the resume lifeline above it when a draft exists)
+  heroResume: { marginBottom: spacing.sm },
 
   section: { marginTop: spacing.sm },
 

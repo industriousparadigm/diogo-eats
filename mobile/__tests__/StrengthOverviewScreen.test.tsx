@@ -1,9 +1,11 @@
 // Component tests for the MOVEMENT landing (formerly Strength). Gym sessions
 // are now one kind of movement; general activities join them in a union
-// timeline. Asserts: the dual hero (Start session + Log movement), the four-
-// cell stat strip (incl. active days), the union timeline interleaving a gym
-// session and an activity, the "All exercises" row, and that the per-exercise
-// catalog is still gone from the landing.
+// timeline. Asserts: ONE front door (a single "+ Log movement" hero, no
+// "Start session" button), the Resume button only when a draft exists,
+// picking gym in the sheet routes into the session flow, the three-cell
+// stat strip (movements / active days / last moved — NO beats), the union
+// timeline interleaving a gym session and an activity, the "All exercises"
+// row, and that the per-exercise catalog is still gone from the landing.
 
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
@@ -133,28 +135,47 @@ describe("MovementScreen (landing)", () => {
     });
   });
 
-  it("shows the dual hero: Start session + Log movement", async () => {
-    const { getByText, getByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => getByText("Start session"));
-    expect(getByLabelText("log movement")).toBeTruthy();
-    await fireEvent.press(getByText("Start session"));
-    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/session");
+  it("shows ONE front door: a single + Log movement hero, no Start session", async () => {
+    const { getByLabelText, queryByText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText("log movement"));
+    // The old dual hero's "Start session" button is gone — gym is now a card
+    // in the sheet, not a separate hero.
+    expect(queryByText("Start session")).toBeNull();
   });
 
   it("opens the quick-log sheet from + Log movement", async () => {
     const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
     await waitFor(() => getByLabelText("log movement"));
     await fireEvent.press(getByLabelText("log movement"));
-    // The sheet's type grid is up — padel tile is reachable.
+    // The sheet's type grid is up — gym leads it, padel tile is reachable.
+    expect(await findByLabelText("type Gym")).toBeTruthy();
     expect(await findByLabelText("type Padel")).toBeTruthy();
   });
 
-  it("offers Resume when a draft is in progress", async () => {
+  it("picking gym in the sheet routes into the session flow", async () => {
+    const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText("log movement"));
+    await fireEvent.press(getByLabelText("log movement"));
+    const gym = await findByLabelText("type Gym");
+    await fireEvent.press(gym);
+    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/session");
+  });
+
+  it("offers Resume ONLY when a draft is in progress", async () => {
     await saveDraft(createDraft(mockStrengthOverview(), Date.now()));
     const { getByText } = await render(<MovementScreen />);
     await waitFor(() => {
       expect(getByText("Resume session")).toBeTruthy();
     });
+    // Resume routes into the same session flow.
+    await fireEvent.press(getByText("Resume session"));
+    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/session");
+  });
+
+  it("does NOT show a Resume button when there is no draft", async () => {
+    const { getByLabelText, queryByText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText("log movement"));
+    expect(queryByText("Resume session")).toBeNull();
   });
 
   it("does NOT render the per-exercise catalog on the landing", async () => {
@@ -163,14 +184,17 @@ describe("MovementScreen (landing)", () => {
     expect(queryByText("THE NUMBERS TO BEAT")).toBeNull();
   });
 
-  it("renders the four-cell stat strip incl. active days", async () => {
-    const { getByText } = await render(<MovementScreen />);
+  it("renders the three-cell stat strip in movement language, with NO beats", async () => {
+    const { getByText, queryByText } = await render(<MovementScreen />);
     await waitFor(() => {
-      expect(getByText("sessions · mo")).toBeTruthy();
-      expect(getByText("beats · mo")).toBeTruthy();
+      expect(getByText("movements · mo")).toBeTruthy();
       expect(getByText("active days · mo")).toBeTruthy();
       expect(getByText("last moved")).toBeTruthy();
     });
+    // Beats is gym-world vocabulary — it left the landing strip.
+    expect(queryByText("beats · mo")).toBeNull();
+    // And the old gym-only "sessions · mo" cell is gone (it's "movements" now).
+    expect(queryByText("sessions · mo")).toBeNull();
   });
 
   it("interleaves a gym session and an activity in the union timeline", async () => {

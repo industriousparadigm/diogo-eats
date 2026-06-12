@@ -1,8 +1,11 @@
-// QuickLogSheet — the 5-second "+ log movement" flow. A pageSheet modal:
+// QuickLogSheet — the ONE front door for "+ log movement". A pageSheet modal:
 //
 //   1. TYPE GRID (the pop moment): image cards, two-up, each in its type's
 //      color identity — picking padel should feel like picking an exercise
-//      in the gym picker. Tapping a tile selects it (loud border lights up).
+//      in the gym picker. GYM IS THE FIRST CARD. Picking a "live-session"
+//      type (gym) shows NO form: it closes the sheet and routes into the
+//      live session flow. Every other (quick-log) type lights up and shows
+//      the form below.
 //   2. DURATION: a numeric Input (smart default 60) + quick chips 30/45/60/90.
 //   3. EFFORT: optional felt-light/moderate/hard chips.
 //   4. LABEL / NOTE: optional text. DISTANCE only for distance-y types.
@@ -10,7 +13,8 @@
 //
 // Validation mirrors the server (lib/movementLog) so a bad value never
 // round-trips. Submit → createActivity → hand the new row back to the
-// caller, which drops it into the timeline. KeyboardAware throughout.
+// caller, which drops it into the timeline. KeyboardAware throughout. The
+// entryMode branch lives in the registry, not an if-chain here.
 
 import { useState } from "react";
 import {
@@ -39,7 +43,7 @@ import {
   KeyboardAwareScrollView,
 } from "@/components/ui";
 import { MovementImage } from "@/components/MovementImage";
-import { ACTIVITY_GRID_TYPES, movementType } from "@/lib/movementTypes";
+import { GRID_TYPES, movementType } from "@/lib/movementTypes";
 import {
   EFFORTS,
   validateQuickLog,
@@ -57,11 +61,15 @@ export function QuickLogSheet({
   visible,
   onClose,
   onLogged,
+  onStartSession,
 }: {
   visible: boolean;
   onClose: () => void;
   // The new activity, for the caller to splice into the timeline.
   onLogged: (activity: Activity) => void;
+  // Picking a "live-session" type (gym) routes here instead of showing the
+  // quick-log form — the sheet closes and the caller starts a session.
+  onStartSession: () => void;
 }) {
   const [type, setType] = useState<string | null>(null);
   const [durationText, setDurationText] = useState(DEFAULT_DURATION);
@@ -121,6 +129,20 @@ export function QuickLogSheet({
     }
   }
 
+  // Picking a tile. A "live-session" type (gym) shows NO form: close the
+  // sheet and hand off to the live session flow. Every other (quick-log)
+  // type selects in place and reveals the form. The branch is the registry's
+  // entryMode, not a hard-coded "gym" check.
+  function pickType(def: { type: string; entryMode: string }) {
+    if (def.entryMode === "live-session") {
+      close();
+      onStartSession();
+      return;
+    }
+    setType(def.type);
+    setError(null);
+  }
+
   // Day-back stepper bounds: never forward past today, never back past a year.
   const canStepForward = fmtDaysBack(startedAt, Date.now()) !== "today";
   const dayLabel = fmtDaysBack(startedAt, Date.now());
@@ -157,18 +179,17 @@ export function QuickLogSheet({
             </View>
           }
         >
-          {/* TYPE GRID — the pop. Image cards, two-up, each its own identity. */}
+          {/* TYPE GRID — the pop, and the ONE front door. Image cards, two-up,
+              each its own identity. Gym leads; picking it routes into the
+              session flow (no form). */}
           <SectionHeader color={palette.strength.brand}>WHAT DID YOU DO?</SectionHeader>
           <View style={styles.grid}>
-            {ACTIVITY_GRID_TYPES.map((t) => {
+            {GRID_TYPES.map((t) => {
               const selected = t.type === type;
               return (
                 <Pressable
                   key={t.type}
-                  onPress={() => {
-                    setType(t.type);
-                    setError(null);
-                  }}
+                  onPress={() => pickType(t)}
                   accessibilityLabel={`type ${t.name}`}
                   style={styles.gridCell}
                 >

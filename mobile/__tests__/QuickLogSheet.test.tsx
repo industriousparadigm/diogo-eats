@@ -1,6 +1,7 @@
-// QuickLogSheet — the type grid, validation gate, and the create→onLogged
-// handoff. Asserts the pop (every type tile is reachable), the smart default,
-// the distance-field gating, and that a successful log hands the new row up.
+// QuickLogSheet — the ONE front door. Asserts the pop (every type tile,
+// including GYM first, is reachable), that picking gym routes into the
+// session flow with no form, the smart default, the distance-field gating,
+// and that a successful log hands the new row up.
 
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
@@ -49,27 +50,52 @@ describe("QuickLogSheet", () => {
     mockCreateActivity.mockReset();
   });
 
-  it("renders every activity type tile (the pop) but not gym", async () => {
-    const { getByLabelText, queryByLabelText } = await render(
-      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} />
+  it("renders every type tile (the pop) WITH gym as the first front door", async () => {
+    const { getByLabelText } = await render(
+      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} onStartSession={jest.fn()} />
     );
+    // Gym now leads the grid (one front door — a gym sesh is just a movement).
+    expect(getByLabelText("type Gym")).toBeTruthy();
     expect(getByLabelText("type Padel")).toBeTruthy();
     expect(getByLabelText("type Run")).toBeTruthy();
     expect(getByLabelText("type Walk")).toBeTruthy();
     expect(getByLabelText("type Other")).toBeTruthy();
-    expect(queryByLabelText("type Gym")).toBeNull();
+  });
+
+  it("picking gym shows NO form and routes into the session flow", async () => {
+    const onStartSession = jest.fn();
+    const onClose = jest.fn();
+    const { getByLabelText, queryByLabelText } = await render(
+      <QuickLogSheet visible onClose={onClose} onLogged={jest.fn()} onStartSession={onStartSession} />
+    );
+    await fireEvent.press(getByLabelText("type Gym"));
+    // No quick-log form — gym is a live session, not a duration entry.
+    expect(onStartSession).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+    expect(mockCreateActivity).not.toHaveBeenCalled();
+  });
+
+  it("picking a quick-log type (padel) shows the form, not a session route", async () => {
+    const onStartSession = jest.fn();
+    const { getByLabelText } = await render(
+      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} onStartSession={onStartSession} />
+    );
+    await fireEvent.press(getByLabelText("type Padel"));
+    // The duration form is up; no session route fired.
+    expect(getByLabelText("duration minutes")).toBeTruthy();
+    expect(onStartSession).not.toHaveBeenCalled();
   });
 
   it("defaults duration to 60", async () => {
     const { getByLabelText } = await render(
-      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} />
+      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} onStartSession={jest.fn()} />
     );
     expect(getByLabelText("duration minutes").props.value).toBe("60");
   });
 
   it("disables Log it until a type is picked", async () => {
     const { getByLabelText } = await render(
-      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} />
+      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} onStartSession={jest.fn()} />
     );
     // No type yet → the create call must not fire on press.
     await fireEvent.press(getByLabelText("log it"));
@@ -78,7 +104,7 @@ describe("QuickLogSheet", () => {
 
   it("shows a distance field only for distance-y types", async () => {
     const { getByLabelText, queryByLabelText } = await render(
-      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} />
+      <QuickLogSheet visible onClose={jest.fn()} onLogged={jest.fn()} onStartSession={jest.fn()} />
     );
     // Padel — no distance.
     await fireEvent.press(getByLabelText("type Padel"));
@@ -93,7 +119,7 @@ describe("QuickLogSheet", () => {
     const onLogged = jest.fn();
     const onClose = jest.fn();
     const { getByLabelText } = await render(
-      <QuickLogSheet visible onClose={onClose} onLogged={onLogged} />
+      <QuickLogSheet visible onClose={onClose} onLogged={onLogged} onStartSession={jest.fn()} />
     );
     await fireEvent.press(getByLabelText("type Padel"));
     await fireEvent.press(getByLabelText("effort light"));
@@ -115,7 +141,7 @@ describe("QuickLogSheet", () => {
     mockCreateActivity.mockRejectedValue(new ApiError("SERVER_ERROR", "that's in the future"));
     const onClose = jest.fn();
     const { getByLabelText, getByText } = await render(
-      <QuickLogSheet visible onClose={onClose} onLogged={jest.fn()} />
+      <QuickLogSheet visible onClose={onClose} onLogged={jest.fn()} onStartSession={jest.fn()} />
     );
     await fireEvent.press(getByLabelText("type Run"));
     await fireEvent.press(getByLabelText("log it"));

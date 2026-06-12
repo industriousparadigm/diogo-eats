@@ -34,6 +34,14 @@ export type MovementIdentity = {
   soft: string;
 };
 
+// How a type is logged when picked from the front-door grid. Most types take
+// the quick-log form (duration/effort/note → one POST). Gym is different: it
+// routes into the live session flow (the gym-floor scoreboard), so picking it
+// closes the sheet and starts a session instead of showing a form. New
+// special types are registry entries with their own entryMode, never an
+// if-chain in the sheet.
+export type MovementEntryMode = "live-session" | "quick-log";
+
 export type MovementTypeDef = {
   // The canonical slug (matches the server's whitelist; "gym" is synthetic).
   type: string;
@@ -44,6 +52,9 @@ export type MovementTypeDef = {
   // Distance-y types show a distance field in the quick-log + a distance
   // metric on the card. Non-distance types hide it entirely (no "0 km").
   distance: boolean;
+  // What picking this type in the grid does. "quick-log" → the form;
+  // "live-session" (gym) → close + route into the live session flow.
+  entryMode: MovementEntryMode;
 };
 
 // The bundled images. Static require() so Metro bundles them into the
@@ -62,26 +73,24 @@ const IMG = {
   other: require("../assets/movement/other.jpg"),
 } as const;
 
-// The registry. Order here is the quick-log GRID order (padel first — it's
-// the owner's real first activity; gym last because gym has its own hero
-// "Start session" entry and rarely gets logged through the activity sheet).
+// The non-gym activity registry. Order here is the quick-log GRID order after
+// gym (padel first — the owner's real first activity). Every one is a
+// quick-log type (duration form → one POST).
 export const MOVEMENT_TYPES: MovementTypeDef[] = [
-  { type: "padel", name: "Padel", identity: palette.movement.padel, image: IMG.padel, distance: false },
-  { type: "run", name: "Run", identity: palette.movement.run, image: IMG.run, distance: true },
-  { type: "walk", name: "Walk", identity: palette.movement.walk, image: IMG.walk, distance: true },
-  { type: "bike", name: "Bike", identity: palette.movement.bike, image: IMG.bike, distance: true },
-  { type: "swim", name: "Swim", identity: palette.movement.swim, image: IMG.swim, distance: true },
-  { type: "football", name: "Football", identity: palette.movement.football, image: IMG.football, distance: false },
-  { type: "hike", name: "Hike", identity: palette.movement.hike, image: IMG.hike, distance: true },
-  { type: "other", name: "Other", identity: palette.movement.other, image: IMG.other, distance: false },
+  { type: "padel", name: "Padel", identity: palette.movement.padel, image: IMG.padel, distance: false, entryMode: "quick-log" },
+  { type: "run", name: "Run", identity: palette.movement.run, image: IMG.run, distance: true, entryMode: "quick-log" },
+  { type: "walk", name: "Walk", identity: palette.movement.walk, image: IMG.walk, distance: true, entryMode: "quick-log" },
+  { type: "bike", name: "Bike", identity: palette.movement.bike, image: IMG.bike, distance: true, entryMode: "quick-log" },
+  { type: "swim", name: "Swim", identity: palette.movement.swim, image: IMG.swim, distance: true, entryMode: "quick-log" },
+  { type: "football", name: "Football", identity: palette.movement.football, image: IMG.football, distance: false, entryMode: "quick-log" },
+  { type: "hike", name: "Hike", identity: palette.movement.hike, image: IMG.hike, distance: true, entryMode: "quick-log" },
+  { type: "other", name: "Other", identity: palette.movement.other, image: IMG.other, distance: false, entryMode: "quick-log" },
 ];
-
-// The activity types the quick-log GRID offers — everything except gym
-// (gym is logged via the strength session flow, not the activity sheet).
-export const ACTIVITY_GRID_TYPES = MOVEMENT_TYPES.filter((t) => t.type !== "gym");
 
 // The synthetic GYM identity — a strength session painted into the union
 // timeline. Amber, the strength brand, so it reads as the scoreboard it is.
+// entryMode "live-session": picking it routes into the live session flow
+// (no quick-log form), because a gym sesh is its own scoreboard.
 export const GYM_TYPE: MovementTypeDef = {
   type: "gym",
   name: "Gym",
@@ -92,7 +101,14 @@ export const GYM_TYPE: MovementTypeDef = {
   },
   image: IMG.gym,
   distance: false,
+  entryMode: "live-session",
 };
+
+// The "+ log movement" GRID: ONE front door. Gym leads (the gym-floor
+// lifeline is the most-logged movement), then every activity type. Gym is a
+// card here, not a separate hero — picking it routes into the session flow
+// (entryMode "live-session"); everything else shows the quick-log form.
+export const GRID_TYPES: MovementTypeDef[] = [GYM_TYPE, ...MOVEMENT_TYPES];
 
 const BY_TYPE: Record<string, MovementTypeDef> = (() => {
   const m: Record<string, MovementTypeDef> = { gym: GYM_TYPE };

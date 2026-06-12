@@ -60,6 +60,27 @@ function sameLocalMonth(a: number, b: number): boolean {
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth();
 }
 
+// Movements THIS local month: the COUNT of movements (every gym session +
+// every activity) whose moment falls in `now`'s local month. Unlike active
+// days, this does NOT de-dupe per day — two padel sessions on one day are two
+// movements. Phone-local bucketing, same rule as active days. Powers the
+// landing strip's "movements · mo" cell (replacing the gym-only sessions count
+// + the gym-world "beats").
+export function movementsThisMonth(
+  sessions: SessionSummary[],
+  activities: Activity[],
+  now: number
+): number {
+  let n = 0;
+  for (const s of sessions) {
+    if (sameLocalMonth(s.completed_at, now)) n += 1;
+  }
+  for (const a of activities) {
+    if (sameLocalMonth(a.started_at, now)) n += 1;
+  }
+  return n;
+}
+
 // Active days THIS local month: count distinct local days (in `now`'s month)
 // that had any session or any activity. A day with a gym session AND a padel
 // counts once.

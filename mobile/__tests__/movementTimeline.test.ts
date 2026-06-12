@@ -4,6 +4,7 @@
 
 import {
   mergeTimeline,
+  movementsThisMonth,
   activeDaysThisMonth,
   lastMovedAt,
 } from "../lib/movementTimeline";
@@ -88,6 +89,43 @@ describe("mergeTimeline", () => {
     const merged = mergeTimeline([s], [a]);
     expect(merged[0]).toMatchObject({ kind: "session", at: s.completed_at });
     expect(merged[1]).toMatchObject({ kind: "activity", at: a.started_at });
+  });
+});
+
+describe("movementsThisMonth", () => {
+  const now = localMs(2026, 6, 15);
+
+  it("counts every session and activity in the local month", () => {
+    const sessions = [
+      session("s1", localMs(2026, 6, 10, 18)),
+      session("s2", localMs(2026, 6, 5, 7)),
+    ];
+    const activities = [activity("a", localMs(2026, 6, 12, 11))];
+    expect(movementsThisMonth(sessions, activities, now)).toBe(3);
+  });
+
+  it("does NOT de-dupe per day (two movements on one day count twice)", () => {
+    const sessions = [session("s", localMs(2026, 6, 10, 18))];
+    const activities = [activity("a", localMs(2026, 6, 10, 8))];
+    // Same day, but two distinct movements — unlike active days, this is 2.
+    expect(movementsThisMonth(sessions, activities, now)).toBe(2);
+    expect(activeDaysThisMonth(sessions, activities, now)).toBe(1);
+  });
+
+  it("excludes movements outside the current local month", () => {
+    const sessions = [session("s", localMs(2026, 5, 30, 18))]; // May
+    const activities = [activity("a", localMs(2026, 7, 1, 11))]; // July
+    expect(movementsThisMonth(sessions, activities, now)).toBe(0);
+  });
+
+  it("buckets a late-night last-of-month movement in its local month", () => {
+    const lastOfMay = localMs(2026, 5, 31, 23, 30);
+    expect(movementsThisMonth([], [activity("x", lastOfMay)], localMs(2026, 5, 15))).toBe(1);
+    expect(movementsThisMonth([], [activity("x", lastOfMay)], localMs(2026, 6, 1))).toBe(0);
+  });
+
+  it("is zero for an empty month", () => {
+    expect(movementsThisMonth([], [], now)).toBe(0);
   });
 });
 
