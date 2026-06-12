@@ -22,6 +22,11 @@ import type {
   StrengthOverview,
   StrengthSession,
 } from "./strengthTypes";
+import type {
+  Activity,
+  CreateActivityInput,
+  UpdateActivityInput,
+} from "./activityTypes";
 import {
   mockCompleteSession,
   mockSessionDetail,
@@ -651,6 +656,67 @@ export async function createStrengthExercise(
 
   const data = (await resp.json()) as { exercise: Exercise };
   return data.exercise;
+}
+
+// ---- activities (general MOVEMENT) ---------------------------------------
+//
+// The non-gym half of "how I moved": padel, runs, walks. All under
+// requireUser (Bearer). Validation lives server-side; lib/movementLog.ts
+// mirrors the rules so the form catches errors first. Clean 400 messages
+// flow through the shared SERVER_ERROR path.
+
+// GET /api/activities?days=N (default 30, clamp 1-365) → newest-first.
+export async function fetchActivities(days?: number): Promise<Activity[]> {
+  const qs = days != null ? `?days=${days}` : "";
+  const data = await request<{ activities: Activity[] }>(
+    `/api/activities${qs}`,
+    { method: "GET" },
+    30_000
+  );
+  return data.activities ?? [];
+}
+
+// POST /api/activities → { activity }. 400s with a clean message on a bad
+// duration / effort / distance / started_at (surfaced verbatim).
+export async function createActivity(input: CreateActivityInput): Promise<Activity> {
+  const data = await request<{ activity: Activity }>(
+    "/api/activities",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+    30_000
+  );
+  return data.activity;
+}
+
+// PATCH /api/activities/[id] (any subset; nullables clear with null) →
+// { activity }. The edit sheet uses this for the started_at time adjust and
+// every other field.
+export async function updateActivity(
+  id: string,
+  patch: UpdateActivityInput
+): Promise<Activity> {
+  const data = await request<{ activity: Activity }>(
+    `/api/activities/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+    30_000
+  );
+  return data.activity;
+}
+
+// DELETE /api/activities/[id] → { ok }.
+export async function deleteActivity(id: string): Promise<void> {
+  await request<{ ok: boolean }>(
+    `/api/activities/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    15_000
+  );
 }
 
 // GET /api/photo/{filename} returns a 302 redirect to a signed URL.

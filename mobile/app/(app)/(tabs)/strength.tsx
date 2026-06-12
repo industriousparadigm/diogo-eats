@@ -1,18 +1,19 @@
-// Strength landing — a DASHBOARD, not a catalog (redesigned). Most opens are
-// NOT session days; this screen is the scoreboard's home glance. Top to
-// bottom: the unmissable Start/Resume action, a loud stat strip (sessions +
-// beats this month, last-session date), the promoted RECENT SESSIONS list,
-// and a single "All exercises" row into the library.
+// Movement landing — "how I moved". The strength scoreboard's dashboard,
+// evolved: gym sessions are now ONE kind of movement; general activities
+// (padel, runs, walks…) join them in a single union timeline.
 //
-// What LEFT: the per-exercise "THE NUMBERS TO BEAT" list. At 1000 exercises a
-// full per-exercise scoreboard on the landing is noise; that job is done
-// better by the in-session picker (the numbers you're about to beat) and by
-// the library + career detail (browsing the long view). The landing stays a
-// glance.
+// Top to bottom:
+//   - DUAL HERO: "Start session" (gym — the scoreboard with the deadline
+//     anchor, slightly leading) + "+ Log movement" (everything else). Both
+//     prominent.
+//   - STAT STRIP (loud): sessions·mo, beats·mo, active days·mo (any gym
+//     session OR activity that day, phone-local), last moved.
+//   - RECENT: the UNION timeline — sessions + activities interleaved
+//     newest-first, each an IMAGE-LED card in its type's identity.
 //
-// Strength is EXPLICITLY a scoreboard — beats + month counts live here by
-// design (a different emotional contract from the calm food side, same design
-// system, loud register).
+// The per-exercise catalog still lives one tap behind "All exercises". The
+// route folder is internally "strength" (unchanged); the tab presents as
+// Movement.
 
 import { useCallback, useRef, useState } from "react";
 import {
@@ -26,49 +27,77 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, Chip, StatNumber, SectionHeader, Button } from "@/components/ui";
-import { ApiError, fetchStrengthOverview } from "@/lib/api";
+import { Card, StatNumber, SectionHeader, Button } from "@/components/ui";
+import {
+  ApiError,
+  fetchStrengthOverview,
+  fetchActivities,
+} from "@/lib/api";
 import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOverviewSkeleton";
 import { loadDraft } from "@/lib/draftStorage";
 import { strengthStats } from "@/lib/strengthStats";
-import { fmtLastSession, fmtSessionDate } from "@/lib/strengthFormat";
+import { fmtLastSession } from "@/lib/strengthFormat";
+import {
+  mergeTimeline,
+  activeDaysThisMonth,
+  lastMovedAt,
+} from "@/lib/movementTimeline";
+import { SessionCard, ActivityCard } from "@/components/MovementCard";
+import { QuickLogSheet } from "@/components/QuickLogSheet";
+import { ActivityDetailSheet } from "@/components/ActivityDetailSheet";
 import type { StrengthOverview } from "@/lib/strengthTypes";
+import type { Activity } from "@/lib/activityTypes";
 
-// Recent sessions cap — the landing is a glance, not the full archive (the
-// library + each exercise's career timeline hold the long view).
-const RECENT_CAP = 10;
+// The union timeline is a glance; the long view lives in the library + each
+// exercise's career timeline. Cap so a year of movement doesn't render at once.
+const RECENT_CAP = 20;
+// How many days of activities to pull for the landing.
+const ACTIVITY_DAYS = 90;
 
-export default function StrengthScreen() {
+export default function MovementScreen() {
   const router = useRouter();
   const [overview, setOverview] = useState<StrengthOverview | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [hasDraft, setHasDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  // True only while the FIRST load is in flight with no cached scoreboard
-  // to stand in — that's when the skeleton shows. A cache hit clears it.
   const [loading, setLoading] = useState(true);
   const seededRef = useRef(false);
 
+  const [logOpen, setLogOpen] = useState(false);
+  const [editing, setEditing] = useState<Activity | null>(null);
+
   const load = useCallback(async () => {
-    // First focus: seed from the cached scoreboard so a returning user sees
-    // their numbers instantly, then refresh silently. A cold cache keeps
-    // the skeleton up until the fetch lands.
+    // First focus: seed both halves from cache so a returning user sees the
+    // timeline instantly, then refresh silently.
     if (!seededRef.current) {
       seededRef.current = true;
-      const cached = await getSnapshot<StrengthOverview>("strength");
-      if (cached) {
-        setOverview(cached);
+      const cachedOverview = await getSnapshot<StrengthOverview>("strength");
+      const cachedActs = await getSnapshot<Activity[]>("activities");
+      if (cachedOverview) {
+        setOverview(cachedOverview);
         setLoading(false);
       }
+      if (cachedActs) setActivities(cachedActs);
     }
     try {
-      const data = await fetchStrengthOverview();
+      // Activities are a soft dependency: a failed activity fetch must not
+      // blank the gym scoreboard, so it falls back to [] (and any cached
+      // rows already shown stay put).
+      const [data, acts] = await Promise.all([
+        fetchStrengthOverview(),
+        fetchActivities(ACTIVITY_DAYS).catch(() => null),
+      ]);
       setOverview(data);
       setError(null);
       setSnapshot("strength", undefined, data);
+      if (acts) {
+        setActivities(acts);
+        setSnapshot("activities", undefined, acts);
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load strength data");
+      setError(err instanceof ApiError ? err.message : "Could not load movement data");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -85,18 +114,45 @@ export default function StrengthScreen() {
   function startSession() {
     router.push("/(app)/strength/session");
   }
-
   function openSession(sessionId: string) {
     router.push(`/(app)/strength/log/${sessionId}`);
   }
-
   function openLibrary() {
     router.push("/(app)/strength/exercises");
   }
 
+  // A new activity from the quick-log sheet: prepend so it shows instantly,
+  // and refresh the cache.
+  function onLogged(activity: Activity) {
+    setActivities((prev) => {
+      const next = [activity, ...prev];
+      setSnapshot("activities", undefined, next);
+      return next;
+    });
+  }
+  function onUpdated(updated: Activity) {
+    setActivities((prev) => {
+      const next = prev.map((a) => (a.id === updated.id ? updated : a));
+      setSnapshot("activities", undefined, next);
+      return next;
+    });
+  }
+  function onDeleted(id: string) {
+    setActivities((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      setSnapshot("activities", undefined, next);
+      return next;
+    });
+  }
+
   const nameById = new Map((overview?.exercises ?? []).map((e) => [e.id, e.name]));
-  const stats = overview ? strengthStats(overview.sessions, Date.now()) : null;
-  const recent = (overview?.sessions ?? []).slice(0, RECENT_CAP);
+  const sessions = overview?.sessions ?? [];
+  const stats = overview ? strengthStats(sessions, Date.now()) : null;
+  const timeline = overview
+    ? mergeTimeline(sessions, activities).slice(0, RECENT_CAP)
+    : [];
+  const activeDays = activeDaysThisMonth(sessions, activities, Date.now());
+  const lastMoved = lastMovedAt(sessions, activities);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -115,21 +171,33 @@ export default function StrengthScreen() {
           />
         }
       >
-        <Text style={styles.title}>Strength</Text>
+        <Text style={styles.title}>Movement</Text>
 
-        {/* Start / resume — the screen's one unmissable action, the hero. */}
-        <Button
-          label={hasDraft ? "Resume session" : "Start session"}
-          hint={hasDraft ? "a session is in progress" : undefined}
-          onPress={startSession}
-          variant="primary"
-          accent={palette.strength.brand}
-          size="lg"
-          accessibilityLabel={hasDraft ? "resume session" : "start session"}
-          style={styles.startBtn}
-        />
+        {/* DUAL HERO. Gym leads (the scoreboard with the deadline anchor);
+            "+ Log movement" sits beside it for everything else. */}
+        <View style={styles.heroRow}>
+          <Button
+            label={hasDraft ? "Resume session" : "Start session"}
+            hint={hasDraft ? "in progress" : "gym"}
+            onPress={startSession}
+            variant="primary"
+            accent={palette.strength.brand}
+            size="lg"
+            accessibilityLabel={hasDraft ? "resume session" : "start session"}
+            style={styles.heroPrimary}
+          />
+          <Button
+            label="+ Log movement"
+            hint="padel · run · walk…"
+            onPress={() => setLogOpen(true)}
+            variant="secondary"
+            accent={palette.strength.brand}
+            size="lg"
+            accessibilityLabel="log movement"
+            style={styles.heroSecondary}
+          />
+        </View>
 
-        {/* Cold start, no cached scoreboard yet: skeleton stands in. */}
         {loading && !overview && !error && <StrengthOverviewSkeleton />}
 
         {error && !overview && (
@@ -143,10 +211,9 @@ export default function StrengthScreen() {
 
         {overview && stats && (
           <>
-            {/* Stat strip — the scoreboard glance. Loud register, condensed
-                numerals. A flat Card (it's a supporting strip, not a content
-                card — the offset block stays the signal for the session
-                rows). */}
+            {/* STAT STRIP — the movement glance. Four cells: sessions, beats,
+                active days (sessions OR activities), last moved. Flat Card
+                (supporting strip — the offset block stays the timeline's). */}
             <Card flat depth="loud" style={styles.statStrip} accessibilityLabel="month stats">
               <StatNumber
                 value={String(stats.sessionsThisMonth)}
@@ -163,58 +230,48 @@ export default function StrengthScreen() {
               />
               <View style={styles.statDivider} />
               <StatNumber
-                value={fmtLastSession(stats.lastSessionAt)}
-                label="last session"
+                value={String(activeDays)}
+                label="active days · mo"
+                color={palette.strength.brandBright}
                 flex
               />
+              <View style={styles.statDivider} />
+              <StatNumber value={fmtLastSession(lastMoved)} label="last moved" flex />
             </Card>
 
-            {/* Recent sessions — promoted to the landing's body. Newest
-                first, capped; date + exercise names + beats badge → detail. */}
+            {/* RECENT — the UNION timeline: sessions + activities interleaved
+                newest-first, each an image-led card in its identity. */}
             <SectionHeader color={palette.strength.brand} style={styles.section}>
-              RECENT SESSIONS
+              RECENT
             </SectionHeader>
-            {recent.length === 0 ? (
-              <Text style={styles.emptyHistory}>
-                No sessions yet. The first one sets the numbers to beat.
+            {timeline.length === 0 ? (
+              <Text style={styles.empty}>
+                Nothing logged yet. Start a session or log a movement.
               </Text>
             ) : (
-              <View style={styles.historyList}>
-                {recent.map((s) => {
-                  const names = s.exercise_ids
-                    .map((id) => nameById.get(id) ?? id)
-                    .join(" · ");
-                  return (
-                    <Card
-                      key={s.id}
-                      tone="recessed"
-                      style={styles.historyRow}
-                      onPress={() => openSession(s.id)}
-                      accessibilityLabel={`session ${fmtSessionDate(s.completed_at)}`}
-                    >
-                      <View style={styles.historyMain}>
-                        <Text style={styles.historyDate}>
-                          {fmtSessionDate(s.completed_at)}
-                        </Text>
-                        <Text style={styles.historyDetail} numberOfLines={1}>
-                          {names || `${s.exercise_ids.length} exercises`}
-                        </Text>
-                      </View>
-                      <Chip
-                        label={`${s.beats_count} beat${s.beats_count === 1 ? "" : "s"}`}
-                        tone={s.beats_count === 0 ? "neutral" : "accent"}
-                        identity={palette.strength.brandBright}
-                        fill={s.beats_count === 0 ? palette.surfaceMuted : palette.strength.brandSoft}
-                        textColor={s.beats_count === 0 ? palette.textMuted : palette.strength.brandBright}
-                      />
-                    </Card>
-                  );
-                })}
+              <View style={styles.timeline}>
+                {timeline.map((item) =>
+                  item.kind === "session" ? (
+                    <SessionCard
+                      key={`s-${item.session.id}`}
+                      session={item.session}
+                      exerciseNames={item.session.exercise_ids.map(
+                        (id) => nameById.get(id) ?? id
+                      )}
+                      onPress={() => openSession(item.session.id)}
+                    />
+                  ) : (
+                    <ActivityCard
+                      key={`a-${item.activity.id}`}
+                      activity={item.activity}
+                      onPress={() => setEditing(item.activity)}
+                    />
+                  )
+                )}
               </View>
             )}
 
-            {/* The catalog lives one tap away — browsing belongs in the
-                library, not on the landing (and it scales to 1000). */}
+            {/* The exercise catalog, one tap away (browsing belongs there). */}
             <TouchableOpacity
               style={styles.libraryRow}
               onPress={openLibrary}
@@ -226,20 +283,28 @@ export default function StrengthScreen() {
           </>
         )}
       </ScrollView>
+
+      <QuickLogSheet
+        visible={logOpen}
+        onClose={() => setLogOpen(false)}
+        onLogged={onLogged}
+      />
+      <ActivityDetailSheet
+        // Key by id so the editor re-inits its fields per opened card.
+        key={editing?.id ?? "none"}
+        activity={editing}
+        visible={editing !== null}
+        onClose={() => setEditing(null)}
+        onUpdated={onUpdated}
+        onDeleted={onDeleted}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.bg,
-  },
-  content: {
-    padding: spacing.lg,
-    gap: spacing.md,
-    paddingBottom: 40,
-  },
+  safe: { flex: 1, backgroundColor: palette.bg },
+  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 40 },
   title: {
     fontSize: fontSize.display,
     fontWeight: "800",
@@ -247,19 +312,24 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     paddingTop: spacing.sm,
   },
-  startBtn: {
+
+  // Dual hero
+  heroRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
     marginTop: spacing.xs,
   },
-  section: {
-    marginTop: spacing.sm,
-  },
+  heroPrimary: { flex: 1.15 },
+  heroSecondary: { flex: 1 },
+
+  section: { marginTop: spacing.sm },
 
   // Stat strip
   statStrip: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   statDivider: {
     width: borders.hairline,
@@ -268,34 +338,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.hairline,
   },
 
-  // Recent sessions
-  historyList: {
-    gap: spacing.sm,
-  },
-  historyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  historyMain: {
-    flex: 1,
-    gap: 2,
-  },
-  historyDate: {
-    fontSize: fontSize.body,
-    fontWeight: "700",
-    color: palette.text,
-  },
-  historyDetail: {
-    fontSize: fontSize.caption,
-    color: palette.textSubtle,
-  },
-  emptyHistory: {
-    fontSize: fontSize.caption,
-    color: palette.textSubtle,
-  },
+  // Union timeline
+  timeline: { gap: spacing.md },
+  empty: { fontSize: fontSize.caption, color: palette.textSubtle },
 
   // "All exercises" row → library
   libraryRow: {
@@ -312,23 +357,11 @@ const styles = StyleSheet.create({
     color: palette.textMuted,
     letterSpacing: 0.2,
   },
-  libraryChevron: {
-    fontSize: fontSize.lead,
-    color: palette.textSubtle,
-    fontWeight: "700",
-  },
+  libraryChevron: { fontSize: fontSize.lead, color: palette.textSubtle, fontWeight: "700" },
 
   // Errors
-  errorWrap: {
-    alignItems: "center",
-    gap: spacing.md,
-    paddingTop: spacing.lg,
-  },
-  errorText: {
-    fontSize: fontSize.caption,
-    color: palette.danger,
-    textAlign: "center",
-  },
+  errorWrap: { alignItems: "center", gap: spacing.md, paddingTop: spacing.lg },
+  errorText: { fontSize: fontSize.caption, color: palette.danger, textAlign: "center" },
   retryBtn: {
     backgroundColor: "transparent",
     borderWidth: borders.bold,
@@ -337,9 +370,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  retryText: {
-    fontSize: fontSize.caption,
-    color: palette.text,
-    fontWeight: "700",
-  },
+  retryText: { fontSize: fontSize.caption, color: palette.text, fontWeight: "700" },
 });

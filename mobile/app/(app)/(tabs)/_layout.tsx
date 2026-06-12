@@ -45,10 +45,14 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="strength"
         options={{
-          title: "Strength",
+          // The route folder stays "strength" (internal); the tab presents
+          // as MOVEMENT now — gym is one kind of movement, activities join
+          // it. "pulse" reads as motion/activity better than a single
+          // dumbbell for a tab that's no longer gym-only.
+          title: "Movement",
           tabBarActiveTintColor: palette.strength.brand,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="barbell" size={size} color={color} />
+            <Ionicons name="pulse" size={size} color={color} />
           ),
         }}
       />

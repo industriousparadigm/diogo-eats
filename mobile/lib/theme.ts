@@ -79,6 +79,25 @@ export const palette = {
     brandSoft: "rgba(245,158,11,0.16)",
   },
 
+  // MOVEMENT register — the same loud register as strength, extended for
+  // general activities (padel, run, walk…). Gym keeps amber (it IS the
+  // strength scoreboard); each other type gets its own identity from the
+  // exercise-color family so a padel card and a chest-press card feel like
+  // siblings in one app. `accent` = the chunky border + offset block; `soft`
+  // = the opaque-safe tint wash. Unknown/future types fall back to `other`
+  // (a neutral movement identity) so the registry can grow without code.
+  // The numeral colors lean BRIGHT so a 90-MIN numeral pops on its card.
+  movement: {
+    padel: { accent: "#f472b6", bright: "#f9a8d4", soft: "rgba(244,114,182,0.16)" }, // pink
+    run: { accent: "#38bdf8", bright: "#7dd3fc", soft: "rgba(56,189,248,0.16)" }, // sky
+    walk: { accent: "#a3e635", bright: "#bef264", soft: "rgba(163,230,53,0.16)" }, // lime-leaf
+    bike: { accent: "#2dd4bf", bright: "#5eead4", soft: "rgba(45,212,191,0.16)" }, // teal
+    swim: { accent: "#60a5fa", bright: "#93c5fd", soft: "rgba(96,165,250,0.16)" }, // blue
+    football: { accent: "#34d399", bright: "#6ee7b7", soft: "rgba(52,211,153,0.16)" }, // emerald
+    hike: { accent: "#fb923c", bright: "#fdba74", soft: "rgba(251,146,60,0.16)" }, // orange
+    other: { accent: "#a78bfa", bright: "#c4b5fd", soft: "rgba(167,139,250,0.16)" }, // violet (the dignified default)
+  },
+
   // Semantic — used sparingly. NEVER red on a food surface (a bad-food bite
   // must never alarm). Amber warn is the strongest a food surface may go.
   warn: "#fcd34d", // sat-fat-over-target, backfill day hint

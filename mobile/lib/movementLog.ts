@@ -1,0 +1,186 @@
+// Movement quick-log — client-side validation (mirroring the server's rules
+// so a bad value is caught before the round-trip, with the same messages the
+// API would 400 with) + the small formatting/stepper helpers the log sheet
+// and activity cards share. Pure functions, testable.
+//
+// THE SERVER RULES (from the /api/activities contract):
+//   - duration_min: integer, 1..1440 (24h cap)
+//   - effort: one of light | moderate | hard (or omitted)
+//   - distance_km: > 0 when present
+//   - started_at: not in the future, not older than 1 year
+// We validate the same things so the form never submits a value the server
+// will reject. The server is still authoritative — this is a courtesy, not a
+// trust boundary.
+
+import type { ActivityEffort, CreateActivityInput } from "./activityTypes";
+
+export const EFFORTS: ActivityEffort[] = ["light", "moderate", "hard"];
+
+export const DURATION_MIN = 1;
+export const DURATION_MAX = 1440;
+export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+// The quick-log form's raw fields (strings, as they come off the inputs).
+export type QuickLogDraft = {
+  type: string;
+  durationText: string; // numeric input
+  effort: ActivityEffort | null;
+  label: string;
+  note: string;
+  distanceText: string; // decimal input; only for distance-y types
+  startedAt: number; // ms epoch, defaulted to now / a back-stepped day
+};
+
+export type ValidationResult =
+  | { ok: true; input: CreateActivityInput }
+  | { ok: false; error: string };
+
+// Validate + normalize a draft into a CreateActivityInput, or return the
+// first human error. `now` lets tests freeze time; the screen passes
+// Date.now().
+export function validateQuickLog(
+  draft: QuickLogDraft,
+  now: number,
+  distanceEnabled: boolean
+): ValidationResult {
+  const type = draft.type.trim();
+  if (!type) return { ok: false, error: "pick a movement type" };
+
+  // Duration: integer minutes 1..1440.
+  const duration = Number(draft.durationText.trim());
+  if (!Number.isFinite(duration) || !Number.isInteger(duration)) {
+    return { ok: false, error: "duration must be a whole number of minutes" };
+  }
+  if (duration < DURATION_MIN || duration > DURATION_MAX) {
+    return { ok: false, error: "duration must be between 1 and 1440 minutes" };
+  }
+
+  // Effort: whitelist or none.
+  if (draft.effort !== null && !EFFORTS.includes(draft.effort)) {
+    return { ok: false, error: "effort must be light, moderate, or hard" };
+  }
+
+  // started_at: not future, not older than a year.
+  if (draft.startedAt > now) {
+    return { ok: false, error: "that's in the future" };
+  }
+  if (draft.startedAt < now - ONE_YEAR_MS) {
+    return { ok: false, error: "that's more than a year ago" };
+  }
+
+  // distance_km: only meaningful for distance-y types; > 0 when given.
+  let distance_km: number | null = null;
+  if (distanceEnabled && draft.distanceText.trim()) {
+    const d = Number(draft.distanceText.trim());
+    if (!Number.isFinite(d) || d <= 0) {
+      return { ok: false, error: "distance must be greater than 0" };
+    }
+    distance_km = d;
+  }
+
+  const label = draft.label.trim();
+  const note = draft.note.trim();
+
+  return {
+    ok: true,
+    input: {
+      type,
+      duration_min: duration,
+      started_at: draft.startedAt,
+      effort: draft.effort,
+      distance_km,
+      label: label ? label : null,
+      note: note ? note : null,
+    },
+  };
+}
+
+// ---- display formatting (cards + detail) ---------------------------------
+
+// "90 MIN" — the duration as the card's big StatNumber value (caller styles
+// the numeral; this returns just the digits, the "MIN" rides as the label).
+export function fmtDurationValue(min: number): string {
+  return String(min);
+}
+
+// A felt-effort chip's text — "felt: light". null effort renders no chip.
+export function fmtEffort(effort: ActivityEffort | null): string | null {
+  if (!effort) return null;
+  return `felt: ${effort}`;
+}
+
+// "5.2 km" — trims trailing zeros (5 → "5 km", 5.20 → "5.2 km"). null hides.
+export function fmtDistance(km: number | null): string | null {
+  if (km == null) return null;
+  return `${parseFloat(km.toFixed(2))} km`;
+}
+
+// The card's sub-line: "padel · class" (type name + label), or just the
+// type name when there's no label. Caller passes the resolved display name.
+export function fmtActivitySubtitle(typeName: string, label: string | null): string {
+  const l = label?.trim();
+  return l ? `${typeName.toLowerCase()} · ${l}` : typeName.toLowerCase();
+}
+
+// ---- the date-back stepper (no heavy datetime dep) -----------------------
+//
+// The log sheet defaults to today and lets the user step BACK whole days
+// (backfill) — and the edit sheet lets the user nudge the HOUR. Both are
+// plain integer arithmetic on the ms epoch, computed in LOCAL time so a
+// "−1 day" lands on the same wall-clock time yesterday (DST-safe via the
+// Date constructor, which normalizes overflow).
+
+// Step a timestamp by whole local days (negative = earlier). Preserves the
+// local hour/minute.
+export function stepDays(ms: number, deltaDays: number): number {
+  const d = new Date(ms);
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() + deltaDays,
+    d.getHours(),
+    d.getMinutes()
+  ).getTime();
+}
+
+// Step a timestamp by whole hours (negative = earlier). Wraps the day
+// naturally via the Date constructor's overflow normalization.
+export function stepHours(ms: number, deltaHours: number): number {
+  const d = new Date(ms);
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+    d.getHours() + deltaHours,
+    d.getMinutes()
+  ).getTime();
+}
+
+// How many whole LOCAL days back from `now` a timestamp sits (0 = today, 1 =
+// yesterday). Used to render the backfill stepper's "today / −1 day" label.
+export function daysBack(ms: number, now: number): number {
+  const a = startOfLocalDay(ms);
+  const b = startOfLocalDay(now);
+  return Math.round((b - a) / (24 * 60 * 60 * 1000));
+}
+
+function startOfLocalDay(ms: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+// The stepper's human label: "today", "yesterday", or "N days ago".
+export function fmtDaysBack(ms: number, now: number): string {
+  const n = daysBack(ms, now);
+  if (n <= 0) return "today";
+  if (n === 1) return "yesterday";
+  return `${n} days ago`;
+}
+
+// "11:00" — the started_at clock, for the edit sheet's hour stepper readout.
+export function fmtClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

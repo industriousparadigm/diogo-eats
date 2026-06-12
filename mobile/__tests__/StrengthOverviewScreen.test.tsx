@@ -1,10 +1,9 @@
-// Component tests for the redesigned Strength LANDING (a dashboard, not a
-// catalog): start/resume hero, the month stat strip, the promoted RECENT
-// SESSIONS list, and the "All exercises" row into the library.
-//
-// The per-exercise "THE NUMBERS TO BEAT" catalog LEFT the landing — there's
-// an explicit assertion below that the landing does NOT render the exercise
-// list (it lives in the library + each exercise's career detail now).
+// Component tests for the MOVEMENT landing (formerly Strength). Gym sessions
+// are now one kind of movement; general activities join them in a union
+// timeline. Asserts: the dual hero (Start session + Log movement), the four-
+// cell stat strip (incl. active days), the union timeline interleaving a gym
+// session and an activity, the "All exercises" row, and that the per-exercise
+// catalog is still gone from the landing.
 
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
@@ -32,10 +31,10 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 );
 
 const mockFetchStrengthOverview = jest.fn();
+const mockFetchActivities = jest.fn();
 const mockGetSnapshot = jest.fn();
 const mockSetSnapshot = jest.fn();
 
-// Snapshot cache — controlled per-test (cold cache → skeleton, hit → data).
 jest.mock("../lib/snapshot", () => ({
   getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
   setSnapshot: (...args: unknown[]) => mockSetSnapshot(...args),
@@ -52,28 +51,51 @@ jest.mock("../lib/api", () => {
   }
   return {
     fetchStrengthOverview: (...args: unknown[]) => mockFetchStrengthOverview(...args),
+    fetchActivities: (...args: unknown[]) => mockFetchActivities(...args),
+    createActivity: jest.fn(),
+    updateActivity: jest.fn(),
+    deleteActivity: jest.fn(),
     ApiError,
   };
 });
 
-import StrengthScreen from "../app/(app)/(tabs)/strength";
+import MovementScreen from "../app/(app)/(tabs)/strength";
 import { mockStrengthOverview } from "../lib/strengthFixtures";
 import { saveDraft, clearDraft } from "../lib/draftStorage";
 import { createDraft } from "../lib/strengthSession";
+import type { Activity } from "../lib/activityTypes";
 
-// The fixture's lone session completed 10 Jun 2026 18:00 local. Freeze "now"
-// to mid-June 2026 so the stat strip's month bucketing is deterministic
-// (the session is in-month).
+// The fixture's lone session completed 10 Jun 2026 18:00 local.
 const NOW = new Date(2026, 5, 11, 9, 0).getTime();
 
-describe("StrengthScreen (landing)", () => {
+// A padel activity earlier on 11 Jun — newer than the 10 Jun session, so it
+// should sort ABOVE the session in the union timeline.
+function padelActivity(): Activity {
+  return {
+    id: "act-padel-1",
+    type: "padel",
+    label: "class",
+    started_at: new Date(2026, 5, 11, 8, 0).getTime(),
+    duration_min: 90,
+    effort: "light",
+    distance_km: null,
+    note: null,
+    source: "manual",
+    external_id: null,
+    created_at: NOW,
+  };
+}
+
+describe("MovementScreen (landing)", () => {
   beforeEach(async () => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
     mockFetchStrengthOverview.mockReset();
+    mockFetchActivities.mockReset();
     mockPush.mockReset();
     await clearDraft();
     mockFetchStrengthOverview.mockResolvedValue(mockStrengthOverview());
+    mockFetchActivities.mockResolvedValue([padelActivity()]);
     mockGetSnapshot.mockReset();
     mockGetSnapshot.mockResolvedValue(null); // cold cache by default
     mockSetSnapshot.mockReset();
@@ -83,107 +105,135 @@ describe("StrengthScreen (landing)", () => {
     jest.useRealTimers();
   });
 
-  it("shows a skeleton scoreboard (not a blank screen) while loading", async () => {
+  it("shows a skeleton (not a blank screen) while loading", async () => {
     mockFetchStrengthOverview.mockReturnValue(new Promise(() => {}));
-    const { findByLabelText, queryByText } = await render(<StrengthScreen />);
+    const { findByLabelText, queryByText } = await render(<MovementScreen />);
     expect(await findByLabelText("loading strength")).toBeTruthy();
-    // The Start action is always present; the dashboard body is not yet.
-    expect(queryByText("RECENT SESSIONS")).toBeNull();
+    expect(queryByText("RECENT")).toBeNull();
   });
 
   it("renders the cached dashboard immediately, then refreshes silently", async () => {
     const cached = mockStrengthOverview();
     cached.sessions = cached.sessions.map((s) => ({ ...s, note: "cached" }));
-    mockGetSnapshot.mockResolvedValue(cached);
+    mockGetSnapshot.mockResolvedValueOnce(cached); // overview snapshot
+    mockGetSnapshot.mockResolvedValueOnce(null); // activities snapshot
     let resolveFresh: (o: ReturnType<typeof mockStrengthOverview>) => void = () => {};
     mockFetchStrengthOverview.mockReturnValue(new Promise((res) => (resolveFresh = res)));
-    const { getByText, queryByLabelText } = await render(<StrengthScreen />);
-    await waitFor(() => expect(getByText("RECENT SESSIONS")).toBeTruthy());
+    const { getByText, queryByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
     expect(queryByLabelText("loading strength")).toBeNull();
     resolveFresh(mockStrengthOverview());
-    await waitFor(() => expect(getByText("RECENT SESSIONS")).toBeTruthy());
+    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
   });
 
-  it("writes the snapshot after a successful overview fetch", async () => {
-    await render(<StrengthScreen />);
+  it("writes the overview snapshot after a successful fetch", async () => {
+    await render(<MovementScreen />);
     await waitFor(() => {
       expect(mockSetSnapshot).toHaveBeenCalledWith("strength", undefined, expect.any(Object));
     });
   });
 
-  it("shows the Start session button and pushes the capture flow", async () => {
-    const { getByText } = await render(<StrengthScreen />);
+  it("shows the dual hero: Start session + Log movement", async () => {
+    const { getByText, getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => getByText("Start session"));
+    expect(getByLabelText("log movement")).toBeTruthy();
     await fireEvent.press(getByText("Start session"));
     expect(mockPush).toHaveBeenCalledWith("/(app)/strength/session");
   });
 
+  it("opens the quick-log sheet from + Log movement", async () => {
+    const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText("log movement"));
+    await fireEvent.press(getByLabelText("log movement"));
+    // The sheet's type grid is up — padel tile is reachable.
+    expect(await findByLabelText("type Padel")).toBeTruthy();
+  });
+
   it("offers Resume when a draft is in progress", async () => {
     await saveDraft(createDraft(mockStrengthOverview(), Date.now()));
-    const { getByText } = await render(<StrengthScreen />);
+    const { getByText } = await render(<MovementScreen />);
     await waitFor(() => {
       expect(getByText("Resume session")).toBeTruthy();
-      expect(getByText("a session is in progress")).toBeTruthy();
     });
   });
 
-  it("does NOT render the per-exercise catalog on the landing (it moved to the library)", async () => {
-    const { queryByText, getByText } = await render(<StrengthScreen />);
-    // The dashboard is up…
-    await waitFor(() => expect(getByText("RECENT SESSIONS")).toBeTruthy());
-    // …but the old per-exercise list and its header are gone.
+  it("does NOT render the per-exercise catalog on the landing", async () => {
+    const { queryByText, getByText } = await render(<MovementScreen />);
+    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
     expect(queryByText("THE NUMBERS TO BEAT")).toBeNull();
-    expect(queryByText("Leg press")).toBeNull();
-    expect(queryByText("Chest press")).toBeNull();
-    expect(queryByText("Farmer's carry")).toBeNull();
   });
 
-  it("renders the month stat strip from the session data", async () => {
-    const { getByText } = await render(<StrengthScreen />);
+  it("renders the four-cell stat strip incl. active days", async () => {
+    const { getByText } = await render(<MovementScreen />);
     await waitFor(() => {
-      // 1 session this (frozen) month, 0 beats, last session 10 Jun.
       expect(getByText("sessions · mo")).toBeTruthy();
       expect(getByText("beats · mo")).toBeTruthy();
-      expect(getByText("last session")).toBeTruthy();
-      expect(getByText("10 Jun")).toBeTruthy(); // last-session date cell
+      expect(getByText("active days · mo")).toBeTruthy();
+      expect(getByText("last moved")).toBeTruthy();
     });
   });
 
-  it("promotes RECENT SESSIONS with exercise names + a beats badge → detail", async () => {
-    const { getByText, getByLabelText } = await render(<StrengthScreen />);
+  it("interleaves a gym session and an activity in the union timeline", async () => {
+    const { getByText, getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => {
-      expect(getByText("RECENT SESSIONS")).toBeTruthy();
-      expect(getByText("Wed 10 Jun")).toBeTruthy();
-      expect(getByText("0 beats")).toBeTruthy();
-      // Exercise NAMES, not a bare count.
-      expect(getByText(/Leg press · Back extension/)).toBeTruthy();
+      expect(getByText("RECENT")).toBeTruthy();
+      // The gym session card.
+      expect(getByLabelText(/gym session/)).toBeTruthy();
+      // The padel activity card (its name + subtitle).
+      expect(getByText("Padel")).toBeTruthy();
+      expect(getByText("padel · class")).toBeTruthy();
     });
-    await fireEvent.press(getByLabelText("session Wed 10 Jun"));
+  });
+
+  it("opens the activity edit sheet when an activity card is tapped", async () => {
+    const { getByText, findByLabelText, getAllByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByText("Padel"));
+    // Tap the padel card (the activity card carries a "<Name> <date>" label).
+    const cards = getAllByLabelText(/Padel /);
+    await fireEvent.press(cards[0]);
+    // The edit sheet's day stepper is up.
+    expect(await findByLabelText("earlier day")).toBeTruthy();
+  });
+
+  it("opens session detail from a gym card", async () => {
+    const { getByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText(/gym session/));
+    await fireEvent.press(getByLabelText(/gym session/));
     expect(mockPush).toHaveBeenCalledWith("/(app)/strength/log/fixture-day1");
   });
 
   it("opens the library from the 'All exercises' row", async () => {
-    const { getByLabelText } = await render(<StrengthScreen />);
+    const { getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => getByLabelText("all exercises"));
     await fireEvent.press(getByLabelText("all exercises"));
     expect(mockPush).toHaveBeenCalledWith("/(app)/strength/exercises");
   });
 
-  it("shows an empty state when there are no sessions", async () => {
+  it("shows an empty state when there are no sessions or activities", async () => {
     const overview = mockStrengthOverview();
     overview.sessions = [];
     mockFetchStrengthOverview.mockResolvedValue(overview);
-    const { getByText } = await render(<StrengthScreen />);
+    mockFetchActivities.mockResolvedValue([]);
+    const { getByText } = await render(<MovementScreen />);
     await waitFor(() => {
-      expect(getByText(/No sessions yet/)).toBeTruthy();
+      expect(getByText(/Nothing logged yet/)).toBeTruthy();
+    });
+  });
+
+  it("still renders the gym scoreboard when activities fail to load", async () => {
+    mockFetchActivities.mockRejectedValue(new Error("activities down"));
+    const { getByText, getByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => {
+      expect(getByText("RECENT")).toBeTruthy();
+      expect(getByLabelText(/gym session/)).toBeTruthy();
     });
   });
 
   it("shows an error with retry when the overview fails", async () => {
     mockFetchStrengthOverview.mockRejectedValue(new Error("boom"));
-    const { getByText } = await render(<StrengthScreen />);
+    const { getByText } = await render(<MovementScreen />);
     await waitFor(() => {
-      expect(getByText("Could not load strength data")).toBeTruthy();
+      expect(getByText("Could not load movement data")).toBeTruthy();
       expect(getByText("Retry")).toBeTruthy();
     });
   });
