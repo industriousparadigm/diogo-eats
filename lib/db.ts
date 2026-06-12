@@ -152,6 +152,21 @@ export async function updateMealCreatedAt(id: string, createdAt: number) {
   if (error) throw new Error(`updateMealCreatedAt: ${error.message}`);
 }
 
+// Set (or clear, with null) a meal's photo_filename. The attach/replace/
+// remove endpoint owns the storage object lifecycle — this only moves the
+// row's pointer. Items/numbers are never touched: a photo is the visual
+// record, not the parse source.
+export async function updateMealPhotoFilename(
+  id: string,
+  photoFilename: string | null
+) {
+  const { error } = await getSupabase()
+    .from("meals")
+    .update({ photo_filename: photoFilename })
+    .eq("id", id);
+  if (error) throw new Error(`updateMealPhotoFilename: ${error.message}`);
+}
+
 // ---- food memory ----
 
 export type Provenance = "label_verified" | "user_corrected" | "ai_inferred";

@@ -6,6 +6,7 @@ import { createdAtForTz } from "@/lib/tz";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
 import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
+import { normalizePhoto } from "@/lib/photo";
 import crypto from "crypto";
 import sharp from "sharp";
 
@@ -15,17 +16,6 @@ export const maxDuration = 60;
 const MAX_PHOTOS = 4;
 const COMPOSITE_PANEL_WIDTH = 1500; // px each input is resized to
 const COMPOSITE_GAP = 8; // px between panels in the vertical strip
-
-// Single-photo normalize: EXIF rotation + max 2048 + JPEG 85. Used both as
-// a one-shot for solo uploads AND as the per-panel pre-step before
-// compositing multi-photo uploads.
-async function normalizePhoto(buf: Buffer, maxDim = 2048): Promise<Buffer> {
-  return sharp(buf)
-    .rotate()
-    .resize(maxDim, maxDim, { fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 85 })
-    .toBuffer();
-}
 
 // Vertically stack 2-4 photos into a single composite JPEG. Each input
 // gets resized to a common width so the strip stays clean; small dark gap

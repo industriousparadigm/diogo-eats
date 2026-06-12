@@ -277,6 +277,41 @@ export async function talkFixMeal(id: string, message: string): Promise<Item[]> 
   return data.items ?? [];
 }
 
+// POST /api/meals/[id]/photo — multipart, one "photo" file. Attaches (or
+// replaces) a meal's photo. This is the VISUAL RECORD only: the meal's
+// items/numbers are never re-parsed, just the image pointer moves. Returns
+// the updated meal (new photo_filename → resolvePhotoUrl re-fetches, no
+// stale cache).
+export async function attachMealPhoto(
+  id: string,
+  photo: { uri: string; name: string; type: string }
+): Promise<Meal> {
+  const form = new FormData();
+  form.append("photo", {
+    uri: photo.uri,
+    name: photo.name,
+    type: photo.type,
+  } as unknown as Blob);
+  const data = await request<{ meal: Meal }>(
+    `/api/meals/${encodeURIComponent(id)}/photo`,
+    { method: "POST", body: form },
+    60_000
+  );
+  return data.meal;
+}
+
+// DELETE /api/meals/[id]/photo — removes the photo object and nulls the
+// pointer. Symmetric to attach; items/numbers untouched. Returns the
+// updated meal (now photo_filename: null).
+export async function removeMealPhoto(id: string): Promise<Meal> {
+  const data = await request<{ meal: Meal }>(
+    `/api/meals/${encodeURIComponent(id)}/photo`,
+    { method: "DELETE" },
+    30_000
+  );
+  return data.meal;
+}
+
 // POST /api/lookup with { name } — nutrition lookup for the add-item flow.
 export async function lookupFood(
   name: string

@@ -16,10 +16,13 @@ jest.mock("../lib/supabase", () => ({
 import {
   ApiError,
   ExerciseConflictError,
+  attachMealPhoto,
   createStrengthExercise,
   fetchAlternatives,
+  removeMealPhoto,
 } from "../lib/api";
 import type { Exercise } from "../lib/strengthTypes";
+import type { Meal } from "../lib/types";
 
 const EXISTING: Exercise = {
   id: "tricep-pulley",
@@ -115,6 +118,89 @@ describe("fetchAlternatives", () => {
       message: "couldn't fetch alternatives",
       status: 502,
     });
+  });
+});
+
+// A meal stub with just the fields these tests read back.
+function mealStub(overrides: Partial<Meal> = {}): Meal {
+  return {
+    id: "meal-1",
+    created_at: Date.now(),
+    photo_filename: "abcdef0123456789.jpg",
+    items_json: "[]",
+    sat_fat_g: 0,
+    soluble_fiber_g: 0,
+    calories: 0,
+    protein_g: 0,
+    plant_pct: 0,
+    notes: null,
+    caption: null,
+    meal_vibe: null,
+    ...overrides,
+  };
+}
+
+describe("attachMealPhoto", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("POSTs a multipart body to the meal's photo endpoint and returns the updated meal", async () => {
+    let captured: { url?: string; init?: RequestInit } = {};
+    globalThis.fetch = jest.fn(async (url: string, init: RequestInit) => {
+      captured = { url, init };
+      return jsonResponse(200, { meal: mealStub({ photo_filename: "new16hexname0001.jpg" }) });
+    }) as unknown as typeof fetch;
+
+    const meal = await attachMealPhoto("meal-1", {
+      uri: "file:///tmp/photo.jpg",
+      name: "photo.jpg",
+      type: "image/jpeg",
+    });
+
+    expect(captured.url).toContain("/api/meals/meal-1/photo");
+    expect(captured.init?.method).toBe("POST");
+    expect(captured.init?.body).toBeInstanceOf(FormData);
+    expect(meal.photo_filename).toBe("new16hexname0001.jpg");
+  });
+
+  it("surfaces a 400 bad-image error from the route", async () => {
+    globalThis.fetch = jest.fn(async () =>
+      jsonResponse(400, { error: "couldn't read that image — try a different format" })
+    ) as unknown as typeof fetch;
+    await expect(
+      attachMealPhoto("meal-1", { uri: "x", name: "x", type: "image/jpeg" })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("surfaces a 403 when the meal isn't the caller's", async () => {
+    globalThis.fetch = jest.fn(async () =>
+      jsonResponse(403, { error: "forbidden" })
+    ) as unknown as typeof fetch;
+    await expect(
+      attachMealPhoto("meal-x", { uri: "x", name: "x", type: "image/jpeg" })
+    ).rejects.toMatchObject({ status: 403, message: "forbidden" });
+  });
+});
+
+describe("removeMealPhoto", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("DELETEs the photo endpoint and returns the meal with a nulled filename", async () => {
+    let captured: { url?: string; init?: RequestInit } = {};
+    globalThis.fetch = jest.fn(async (url: string, init: RequestInit) => {
+      captured = { url, init };
+      return jsonResponse(200, { meal: mealStub({ photo_filename: null }) });
+    }) as unknown as typeof fetch;
+
+    const meal = await removeMealPhoto("meal-1");
+    expect(captured.url).toContain("/api/meals/meal-1/photo");
+    expect(captured.init?.method).toBe("DELETE");
+    expect(meal.photo_filename).toBeNull();
   });
 });
 

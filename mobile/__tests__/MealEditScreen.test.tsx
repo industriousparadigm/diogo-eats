@@ -40,6 +40,27 @@ jest.mock("expo-image", () => ({
   Image: "Image",
 }));
 
+// MealPhotoSheet pulls these for the camera/library pick paths. The tests
+// drive the attach flow through the sheet's pick buttons, so the pickers
+// return a canned asset and the manipulator is a passthrough resize.
+const mockLaunchCamera = jest.fn();
+const mockLaunchLibrary = jest.fn();
+jest.mock("expo-image-picker", () => ({
+  requestCameraPermissionsAsync: jest.fn(async () => ({ status: "granted" })),
+  requestMediaLibraryPermissionsAsync: jest.fn(async () => ({ status: "granted" })),
+  launchCameraAsync: (...args: unknown[]) => mockLaunchCamera(...args),
+  launchImageLibraryAsync: (...args: unknown[]) => mockLaunchLibrary(...args),
+}));
+jest.mock("expo-image-manipulator", () => ({
+  manipulateAsync: jest.fn(async (uri: string) => ({ uri, width: 2048, height: 1536 })),
+  SaveFormat: { JPEG: "jpeg" },
+}));
+// The crop sheet's gestures aren't under test here — stub it so a library
+// pick can resolve without the gesture-handler tree.
+jest.mock("../components/PhotoCropSheet", () => ({
+  PhotoCropSheet: () => null,
+}));
+
 jest.mock("../lib/supabase", () => ({
   supabase: {
     auth: {
@@ -54,6 +75,8 @@ const mockPatchMealItems = jest.fn();
 const mockTalkFixMeal = jest.fn();
 const mockLookupFood = jest.fn();
 const mockDeleteMeal = jest.fn();
+const mockAttachMealPhoto = jest.fn();
+const mockRemoveMealPhoto = jest.fn();
 
 jest.mock("../lib/api", () => {
   class ApiError extends Error {
@@ -71,6 +94,8 @@ jest.mock("../lib/api", () => {
     talkFixMeal: (...args: unknown[]) => mockTalkFixMeal(...args),
     lookupFood: (...args: unknown[]) => mockLookupFood(...args),
     deleteMeal: (...args: unknown[]) => mockDeleteMeal(...args),
+    attachMealPhoto: (...args: unknown[]) => mockAttachMealPhoto(...args),
+    removeMealPhoto: (...args: unknown[]) => mockRemoveMealPhoto(...args),
     resolvePhotoUrl: jest.fn(async () => "https://example.com/photo.jpg"),
     ApiError,
   };
@@ -114,6 +139,10 @@ describe("MealEditScreen", () => {
     mockTalkFixMeal.mockReset();
     mockLookupFood.mockReset();
     mockDeleteMeal.mockReset();
+    mockAttachMealPhoto.mockReset();
+    mockRemoveMealPhoto.mockReset();
+    mockLaunchCamera.mockReset();
+    mockLaunchLibrary.mockReset();
     mockBack.mockReset();
   });
 
@@ -357,5 +386,82 @@ describe("MealEditScreen — NUTRITION panel", () => {
       expect(getByText("20.0g")).toBeTruthy(); // total fat doubles at 200g
     });
     expect(queryByText("10.0g")).toBeNull();
+  });
+});
+
+describe("MealEditScreen — attach / replace / remove photo", () => {
+  beforeEach(() => {
+    mockParams = { id: "meal-1" };
+    mockAttachMealPhoto.mockReset();
+    mockRemoveMealPhoto.mockReset();
+    mockLaunchCamera.mockReset();
+    mockLaunchLibrary.mockReset();
+  });
+
+  it("shows the add-photo affordance on a text-logged meal (no photo)", async () => {
+    stashMeal(makeMeal({ photo_filename: null }));
+    const { getByLabelText, queryByLabelText } = await render(<MealEditScreen />);
+    expect(getByLabelText("add a photo")).toBeTruthy();
+    // No image / replace affordance when there's nothing to replace.
+    expect(queryByLabelText("replace photo")).toBeNull();
+  });
+
+  it("attaches a library photo and transitions none → present", async () => {
+    stashMeal(makeMeal({ photo_filename: null }));
+    mockLaunchLibrary.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: "file:///tmp/picked.jpg" }],
+    });
+    mockAttachMealPhoto.mockResolvedValue(
+      makeMeal({ photo_filename: "fresh16hexname01.jpg" })
+    );
+    // PhotoCropSheet is stubbed to null, so a library pick can't auto-resolve
+    // the crop in this harness — exercise the attach by driving the sheet's
+    // onPicked directly via the camera path (native crop, no in-app sheet).
+    mockLaunchCamera.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: "file:///tmp/shot.jpg" }],
+    });
+
+    const { getByLabelText, queryByLabelText } = await render(<MealEditScreen />);
+    // Open the sheet from the add affordance, then take a photo (camera path
+    // hands the resolved photo straight to onPicked → attach).
+    await fireEvent.press(getByLabelText("add a photo"));
+    await fireEvent.press(getByLabelText("take a photo"));
+
+    await waitFor(() => {
+      expect(mockAttachMealPhoto).toHaveBeenCalledWith(
+        "meal-1",
+        expect.objectContaining({ type: "image/jpeg" })
+      );
+    });
+    // Present state: the replace affordance now exists; the add slot is gone.
+    await waitFor(() => {
+      expect(getByLabelText("replace photo")).toBeTruthy();
+    });
+    expect(queryByLabelText("add a photo")).toBeNull();
+  });
+
+  it("offers replace + remove when a photo already exists", async () => {
+    stashMeal(makeMeal({ photo_filename: "existing0123456a.jpg" }));
+    const { getByLabelText } = await render(<MealEditScreen />);
+    await waitFor(() => expect(getByLabelText("replace photo")).toBeTruthy());
+    // Opening the replace sheet reveals the remove affordance.
+    await fireEvent.press(getByLabelText("replace photo"));
+    expect(getByLabelText("remove photo")).toBeTruthy();
+  });
+
+  it("removes the photo and returns to the add state", async () => {
+    stashMeal(makeMeal({ photo_filename: "existing0123456a.jpg" }));
+    mockRemoveMealPhoto.mockResolvedValue(makeMeal({ photo_filename: null }));
+    const { getByLabelText, queryByLabelText } = await render(<MealEditScreen />);
+    await waitFor(() => expect(getByLabelText("replace photo")).toBeTruthy());
+    await fireEvent.press(getByLabelText("replace photo"));
+    await fireEvent.press(getByLabelText("remove photo"));
+    await waitFor(() => {
+      expect(mockRemoveMealPhoto).toHaveBeenCalledWith("meal-1");
+      expect(getByLabelText("add a photo")).toBeTruthy();
+    });
+    expect(queryByLabelText("replace photo")).toBeNull();
   });
 });

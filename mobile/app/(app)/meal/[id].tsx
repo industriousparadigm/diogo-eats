@@ -34,9 +34,11 @@ import { parseItems, type Item, type Meal } from "@/lib/types";
 import { fmt, fmtCal, fmtTime, fmtDayLabel } from "@/lib/format";
 import {
   ApiError,
+  attachMealPhoto,
   deleteMeal,
   lookupFood,
   patchMealItems,
+  removeMealPhoto,
   repeatMeal,
   resolvePhotoUrl,
   talkFixMeal,
@@ -45,6 +47,7 @@ import { takeMeal, stashNewMeal } from "@/lib/stores";
 import { EditItemRow } from "@/components/EditItemRow";
 import { RepeatButton } from "@/components/RepeatButton";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
+import { MealPhotoSheet, type PickedPhoto } from "@/components/MealPhotoSheet";
 
 export default function MealEditScreen() {
   const router = useRouter();
@@ -86,13 +89,27 @@ function Editor({ meal }: { meal: Meal }) {
   const [talkError, setTalkError] = useState<string | null>(null);
   const [talkHint, setTalkHint] = useState<string | null>(null);
 
+  // The photo pointer is local state, not read straight off the meal: it
+  // changes in place when the user attaches / replaces / removes a photo
+  // here (the meal's items/numbers are never touched by that — it's the
+  // visual record only). A new filename always means a fresh signed URL
+  // (resolvePhotoUrl caches by filename), so a replace can't show stale.
+  const [photoFilename, setPhotoFilename] = useState<string | null>(
+    meal.photo_filename
+  );
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
+  const [photoSheet, setPhotoSheet] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!meal.photo_filename) return;
+    if (!photoFilename) {
+      setPhotoUrl(null);
+      return;
+    }
     let cancelled = false;
-    resolvePhotoUrl(meal.photo_filename)
+    resolvePhotoUrl(photoFilename)
       .then((url) => {
         if (!cancelled) setPhotoUrl(url);
       })
@@ -102,7 +119,40 @@ function Editor({ meal }: { meal: Meal }) {
     return () => {
       cancelled = true;
     };
-  }, [meal.photo_filename]);
+  }, [photoFilename]);
+
+  async function onPickedPhoto(photo: PickedPhoto) {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const updated = await attachMealPhoto(meal.id, photo);
+      // Reflect the new pointer locally; the day list refetches on focus,
+      // so its thumbnail updates too (new filename → no stale cache).
+      meal.photo_filename = updated.photo_filename;
+      setPhotoUrl(null);
+      setPhotoFilename(updated.photo_filename);
+    } catch (err) {
+      setPhotoError(err instanceof ApiError ? err.message : "couldn't attach photo");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function onRemovePhoto() {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const updated = await removeMealPhoto(meal.id);
+      meal.photo_filename = updated.photo_filename;
+      setLightbox(false);
+      setPhotoUrl(null);
+      setPhotoFilename(updated.photo_filename);
+    } catch (err) {
+      setPhotoError(err instanceof ApiError ? err.message : "couldn't remove photo");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   const isLegacy =
     items.length > 0 &&
@@ -287,25 +337,56 @@ function Editor({ meal }: { meal: Meal }) {
           ) : undefined
         }
       >
-          {/* Photo — tap to open the full-screen lightbox. */}
+          {/* Photo slot. With a photo: tap to open the lightbox, plus a
+              quiet "replace" affordance hugging the thumb. Without one: a
+              calm dashed "add photo" placeholder (food register — no
+              celebration) so a text-logged meal can gain its visual record
+              later. Attaching never re-parses the meal. */}
           {photoUrl ? (
-            <Pressable
-              onPress={() => setLightbox(true)}
-              accessibilityLabel="open photo"
-            >
-              <Image
-                source={{ uri: photoUrl }}
-                style={styles.photo}
-                contentFit="cover"
-                transition={200}
-                cachePolicy="memory-disk"
-              />
-            </Pressable>
-          ) : meal.photo_filename ? (
+            <View>
+              <Pressable
+                onPress={() => setLightbox(true)}
+                accessibilityLabel="open photo"
+              >
+                <Image
+                  source={{ uri: photoUrl }}
+                  style={styles.photo}
+                  contentFit="cover"
+                  transition={200}
+                  cachePolicy="memory-disk"
+                />
+              </Pressable>
+              <TouchableOpacity
+                style={styles.replaceChip}
+                onPress={() => setPhotoSheet(true)}
+                disabled={photoBusy}
+                accessibilityLabel="replace photo"
+              >
+                <Text style={styles.replaceChipText}>
+                  {photoBusy ? "…" : "replace"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : photoFilename ? (
             // Signed URL still resolving — a skeleton block in the photo's
             // footprint, not a bare spinner on an empty frame.
             <SkeletonBlock height={220} radius={radii.md} tone="bright" style={styles.photo} />
-          ) : null}
+          ) : (
+            <TouchableOpacity
+              style={styles.addPhotoSlot}
+              onPress={() => setPhotoSheet(true)}
+              disabled={photoBusy}
+              activeOpacity={0.8}
+              accessibilityLabel="add a photo"
+            >
+              {photoBusy ? (
+                <ActivityIndicator color={palette.food.accent} />
+              ) : (
+                <Text style={styles.addPhotoText}>+ add a photo</Text>
+              )}
+            </TouchableOpacity>
+          )}
+          {photoError && <Text style={styles.photoError}>{photoError}</Text>}
 
           {/* Caption / vibe / notes + repeat */}
           {meal.caption && <Text style={styles.caption}>“{meal.caption}”</Text>}
@@ -457,6 +538,14 @@ function Editor({ meal }: { meal: Meal }) {
         visible={lightbox}
         onClose={() => setLightbox(false)}
       />
+
+      <MealPhotoSheet
+        visible={photoSheet}
+        hasPhoto={!!photoFilename}
+        onClose={() => setPhotoSheet(false)}
+        onPicked={onPickedPhoto}
+        onRemove={onRemovePhoto}
+      />
     </SafeAreaView>
   );
 }
@@ -603,6 +692,47 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surfaceMuted,
     borderWidth: borders.chunky,
     borderColor: palette.ink,
+  },
+  // A quiet "replace" pill hugging the photo's bottom-right corner — the
+  // same register as the capture sheet's crop chip, discoverable without
+  // crowding the image.
+  replaceChip: {
+    position: "absolute",
+    bottom: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+  },
+  replaceChipText: {
+    color: palette.white,
+    fontSize: fontSize.tiny,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  // No-photo placeholder for a text-logged meal: a calm dashed slot (food
+  // register, no celebration) inviting the visual record without implying
+  // it changes the meal.
+  addPhotoSlot: {
+    width: "100%",
+    height: 120,
+    borderRadius: radii.md,
+    borderWidth: borders.bold,
+    borderStyle: "dashed",
+    borderColor: palette.borderDashed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addPhotoText: {
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
+    fontWeight: "600",
+  },
+  photoError: {
+    fontSize: fontSize.label,
+    color: palette.danger,
+    paddingHorizontal: spacing.xs,
   },
   caption: {
     fontSize: fontSize.caption,
