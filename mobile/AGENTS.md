@@ -6,7 +6,9 @@ Violating this disrupts a human's workday, NOT just a build. Never `open -a Simu
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code.
 
-This project is PINNED to SDK 54 because the App Store's Expo Go only runs `exposdk:54.0.0`. Do not upgrade the SDK; do not run `npx expo install --fix`. After any dependency change, `npx expo install --check` must report up-to-date and `react` must be exactly 19.1.0 (react-native 0.81.5, react-test-renderer 19.1.0). Never run `eas update` — publishing is done by a human after review.
+This project is PINNED to SDK 54 because the App Store's Expo Go only runs `exposdk:54.0.0`. Do not upgrade the SDK; do not run `npx expo install --fix`. After any dependency change, `npx expo install --check` must report up-to-date and `react` must be exactly 19.1.0 (react-native 0.81.5, react-test-renderer 19.1.0).
+
+**PUBLISH WHEN A FEATURE IS READY — that's the default, not a human gate.** When you finish a feature (tests green, `tsc` clean, and you've launched it in the simulator and looked at it), ship it: `npx eas-cli update --branch main -m "<what changed>"` (account `diogo-native`/dsgmcosta@gmail.com; branch `main` is the channel Expo Go reads; runtime policy `sdkVersion` targets SDK 54). Then tell Diogo it's live — he force-quits + reopens Expo Go to pull it. Don't leave a finished feature sitting unpublished waiting for permission; a backend change isn't "shipped" to the phone until the EAS update is published. (Guardrails still apply: never publish on red tests / dep drift / an unverified screen.)
 
 # DESIGN.md IS MANDATORY FOR ANY UI WORK
 
