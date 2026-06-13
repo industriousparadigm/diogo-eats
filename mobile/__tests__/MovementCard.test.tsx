@@ -30,6 +30,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     duration_min: 90,
     effort: "light",
     distance_km: null,
+    strain: null,
     note: null,
     source: "manual",
     external_id: null,

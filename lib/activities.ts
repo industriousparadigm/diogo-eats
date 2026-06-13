@@ -37,6 +37,7 @@ export type Source = (typeof SOURCES)[number];
 
 const MAX_DURATION_MIN = 1440; // 24h, matching duration_min <= 1440
 const MAX_DISTANCE_KM = 1000; // a sane ceiling; the migration only checks > 0
+export const MAX_STRAIN = 21; // Whoop strain scale tops out at 21
 const MAX_LABEL_LENGTH = 200;
 const MAX_NOTE_LENGTH = 2000;
 const MAX_PAST_MS = 365 * 24 * 3600 * 1000; // a year of backfill headroom
@@ -53,6 +54,7 @@ export type Activity = {
   effort: Effort | null;
   distance_km: number | null;
   note: string | null;
+  strain: number | null; // Whoop strain (0-21); null on manual rows
   source: Source;
   external_id: string | null;
   created_at: number; // ms epoch
@@ -71,6 +73,7 @@ export type CreatePayload = {
   effort: Effort | null;
   distance_km: number | null;
   note: string | null;
+  strain: number | null;
 };
 
 export type CreateResult =
@@ -134,6 +137,16 @@ function validateDistance(v: unknown): number | null | { error: string } {
   return v;
 }
 
+// strain: Whoop's 0-21 measurement. undefined/null → null (manual rows have
+// no strain). When present it must be a finite number within [0, MAX_STRAIN].
+function validateStrain(v: unknown): number | null | { error: string } {
+  if (v === undefined || v === null) return null;
+  if (!isFiniteNumber(v) || v < 0 || v > MAX_STRAIN) {
+    return { error: `strain must be a number between 0 and ${MAX_STRAIN}` };
+  }
+  return v;
+}
+
 // started_at: optional on create (defaults to now at the route). When
 // present it must be a finite ms-epoch number within a sane window.
 function validateStartedAt(v: unknown, now: number): number | string {
@@ -181,6 +194,9 @@ export function validateCreate(
   const note = validateOptionalText(b.note, "note", MAX_NOTE_LENGTH);
   if (note && typeof note === "object") return { ok: false, error: note.error };
 
+  const strain = validateStrain(b.strain);
+  if (strain && typeof strain === "object") return { ok: false, error: strain.error };
+
   return {
     ok: true,
     payload: {
@@ -191,6 +207,7 @@ export function validateCreate(
       effort: effort as Effort | null,
       distance_km: distance as number | null,
       note: note as string | null,
+      strain: strain as number | null,
     },
   };
 }
@@ -208,6 +225,7 @@ export type PatchPayload = Partial<{
   effort: Effort | null;
   distance_km: number | null;
   note: string | null;
+  strain: number | null;
 }>;
 
 export type PatchResult =
@@ -266,6 +284,12 @@ export function validatePatch(
     const r = validateOptionalText(b.note, "note", MAX_NOTE_LENGTH);
     if (r && typeof r === "object") return { ok: false, error: r.error };
     patch.note = r as string | null;
+  }
+
+  if ("strain" in b) {
+    const r = validateStrain(b.strain);
+    if (r && typeof r === "object") return { ok: false, error: r.error };
+    patch.strain = r as number | null;
   }
 
   if (Object.keys(patch).length === 0) {

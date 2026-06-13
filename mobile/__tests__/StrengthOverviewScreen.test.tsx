@@ -1,11 +1,12 @@
-// Component tests for the MOVEMENT landing (formerly Strength). Gym sessions
-// are now one kind of movement; general activities join them in a union
-// timeline. Asserts: ONE front door (a single "+ Log movement" hero, no
-// "Start session" button), the Resume button only when a draft exists,
-// picking gym in the sheet routes into the session flow, the three-cell
-// stat strip (movements / active days / last moved — NO beats), the union
-// timeline interleaving a gym session and an activity, the "All exercises"
-// row, and that the per-exercise catalog is still gone from the landing.
+// Component tests for the MOVEMENT landing (formerly Strength). The landing
+// is an OVERVIEW, not a feed: a RHYTHM grid ("am I moving?") and BY ACTIVITY
+// rollups (one card per type — count + strain + recency, expand for the
+// sessions). Asserts: ONE front door (a single "+ Log movement" hero, no
+// "Start session"), Resume only with a draft, picking gym routes into the
+// session flow, the rhythm glance, the per-type rollups (NOT a flat timeline
+// of identical cards), expand → the type's sessions, tapping a session row
+// opens its detail/edit, the "All exercises" row, and that the per-exercise
+// catalog is still gone from the landing.
 
 import React from "react";
 import { render, fireEvent, waitFor } from "@testing-library/react-native";
@@ -70,9 +71,9 @@ import type { Activity } from "../lib/activityTypes";
 // The fixture's lone session completed 10 Jun 2026 18:00 local.
 const NOW = new Date(2026, 5, 11, 9, 0).getTime();
 
-// A padel activity earlier on 11 Jun — newer than the 10 Jun session, so it
-// should sort ABOVE the session in the union timeline.
-function padelActivity(): Activity {
+// A padel activity on 11 Jun — both it and the 10 Jun gym session sit inside
+// the 28-day window, so the landing shows a Padel rollup AND a Gym rollup.
+function padelActivity(strain: number | null = 12.4): Activity {
   return {
     id: "act-padel-1",
     type: "padel",
@@ -81,8 +82,9 @@ function padelActivity(): Activity {
     duration_min: 90,
     effort: "light",
     distance_km: null,
+    strain,
     note: null,
-    source: "manual",
+    source: strain == null ? "manual" : "whoop",
     external_id: null,
     created_at: NOW,
   };
@@ -111,7 +113,7 @@ describe("MovementScreen (landing)", () => {
     mockFetchStrengthOverview.mockReturnValue(new Promise(() => {}));
     const { findByLabelText, queryByText } = await render(<MovementScreen />);
     expect(await findByLabelText("loading strength")).toBeTruthy();
-    expect(queryByText("RECENT")).toBeNull();
+    expect(queryByText("BY ACTIVITY")).toBeNull();
   });
 
   it("renders the cached dashboard immediately, then refreshes silently", async () => {
@@ -122,10 +124,10 @@ describe("MovementScreen (landing)", () => {
     let resolveFresh: (o: ReturnType<typeof mockStrengthOverview>) => void = () => {};
     mockFetchStrengthOverview.mockReturnValue(new Promise((res) => (resolveFresh = res)));
     const { getByText, queryByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
+    await waitFor(() => expect(getByText("BY ACTIVITY")).toBeTruthy());
     expect(queryByLabelText("loading strength")).toBeNull();
     resolveFresh(mockStrengthOverview());
-    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
+    await waitFor(() => expect(getByText("BY ACTIVITY")).toBeTruthy());
   });
 
   it("writes the overview snapshot after a successful fetch", async () => {
@@ -180,49 +182,64 @@ describe("MovementScreen (landing)", () => {
 
   it("does NOT render the per-exercise catalog on the landing", async () => {
     const { queryByText, getByText } = await render(<MovementScreen />);
-    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
+    await waitFor(() => expect(getByText("BY ACTIVITY")).toBeTruthy());
     expect(queryByText("THE NUMBERS TO BEAT")).toBeNull();
   });
 
-  it("renders the three-cell stat strip in movement language, with NO beats", async () => {
-    const { getByText, queryByText } = await render(<MovementScreen />);
-    await waitFor(() => {
-      expect(getByText("movements · mo")).toBeTruthy();
-      expect(getByText("active days · mo")).toBeTruthy();
-      expect(getByText("last moved")).toBeTruthy();
-    });
-    // Beats is gym-world vocabulary — it left the landing strip.
-    expect(queryByText("beats · mo")).toBeNull();
-    // And the old gym-only "sessions · mo" cell is gone (it's "movements" now).
-    expect(queryByText("sessions · mo")).toBeNull();
+  it("shows the rhythm glance, not the old movements/active-days stat strip", async () => {
+    const { getByLabelText, queryByText } = await render(<MovementScreen />);
+    // The rhythm card carries an 'am I moving' summary label (28-day window).
+    await waitFor(() => expect(getByLabelText(/moved \d+ of 28 days/)).toBeTruthy());
+    // The old bare stat-strip cells are gone.
+    expect(queryByText("movements · mo")).toBeNull();
+    expect(queryByText("active days · mo")).toBeNull();
+    expect(queryByText("last moved")).toBeNull();
   });
 
-  it("interleaves a gym session and an activity in the union timeline", async () => {
+  it("offers the 4-week / 90-day window toggle", async () => {
+    const { getByText } = await render(<MovementScreen />);
+    await waitFor(() => {
+      expect(getByText("4 wks")).toBeTruthy();
+      expect(getByText("90 d")).toBeTruthy();
+    });
+  });
+
+  it("collapses each type into ONE rollup card (gym + padel), not a flat timeline", async () => {
     const { getByText, getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => {
-      expect(getByText("RECENT")).toBeTruthy();
-      // The gym session card.
-      expect(getByLabelText(/gym session/)).toBeTruthy();
-      // The padel activity card (its name + subtitle).
-      expect(getByText("Padel")).toBeTruthy();
-      expect(getByText("padel · class")).toBeTruthy();
+      expect(getByText("BY ACTIVITY")).toBeTruthy();
+      // One Padel rollup + one Gym rollup, each tappable to expand.
+      expect(getByLabelText(/^Padel, 1 in window/)).toBeTruthy();
+      expect(getByLabelText(/^Gym, 1 in window/)).toBeTruthy();
     });
   });
 
-  it("opens the activity edit sheet when an activity card is tapped", async () => {
-    const { getByText, findByLabelText, getAllByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => getByText("Padel"));
-    // Tap the padel card (the activity card carries a "<Name> <date>" label).
-    const cards = getAllByLabelText(/Padel /);
-    await fireEvent.press(cards[0]);
+  it("leads the padel rollup with Whoop strain", async () => {
+    const { getByText } = await render(<MovementScreen />);
+    await waitFor(() => {
+      // avg strain headline (single padel @ 12.4) + its label.
+      expect(getByText("12.4")).toBeTruthy();
+      expect(getByText("avg strain")).toBeTruthy();
+    });
+  });
+
+  it("expands a rollup and opens the activity edit sheet from a session row", async () => {
+    const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText(/^Padel, 1 in window/));
+    // Expand the Padel rollup, then tap its single session row.
+    await fireEvent.press(getByLabelText(/^Padel, 1 in window/));
+    const row = await findByLabelText(/^open /);
+    await fireEvent.press(row);
     // The edit sheet's day stepper is up.
     expect(await findByLabelText("earlier day")).toBeTruthy();
   });
 
-  it("opens session detail from a gym card", async () => {
-    const { getByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => getByLabelText(/gym session/));
-    await fireEvent.press(getByLabelText(/gym session/));
+  it("expands the gym rollup and opens session detail from a session row", async () => {
+    const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText(/^Gym, 1 in window/));
+    await fireEvent.press(getByLabelText(/^Gym, 1 in window/));
+    const row = await findByLabelText(/^open /);
+    await fireEvent.press(row);
     expect(mockPush).toHaveBeenCalledWith("/(app)/strength/log/fixture-day1");
   });
 
@@ -248,8 +265,8 @@ describe("MovementScreen (landing)", () => {
     mockFetchActivities.mockRejectedValue(new Error("activities down"));
     const { getByText, getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => {
-      expect(getByText("RECENT")).toBeTruthy();
-      expect(getByLabelText(/gym session/)).toBeTruthy();
+      expect(getByText("BY ACTIVITY")).toBeTruthy();
+      expect(getByLabelText(/^Gym, 1 in window/)).toBeTruthy();
     });
   });
 

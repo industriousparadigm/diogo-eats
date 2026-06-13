@@ -31,6 +31,7 @@ function activity(id: string, started_at: number, type = "padel"): Activity {
     duration_min: 60,
     effort: null,
     distance_km: null,
+    strain: null,
     note: null,
     source: "manual",
     external_id: null,

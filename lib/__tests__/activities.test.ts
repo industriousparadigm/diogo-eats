@@ -8,6 +8,7 @@ import {
   DEFAULT_DAYS,
   MIN_DAYS,
   MAX_DAYS,
+  MAX_STRAIN,
 } from "../activities";
 
 // Fixed clock: 12 Jun 2026 12:00 UTC. Every relative-time rule is tested
@@ -138,6 +139,46 @@ describe("validateCreate — distance positivity", () => {
   });
 });
 
+describe("validateCreate — strain bounds (0-21)", () => {
+  it("exposes MAX_STRAIN = 21", () => {
+    expect(MAX_STRAIN).toBe(21);
+  });
+
+  it("accepts the inclusive bounds and an interior value", () => {
+    for (const s of [0, 12.4, 21]) {
+      const r = validateCreate({ ...VALID, strain: s }, NOW);
+      expect(r.ok, String(s)).toBe(true);
+      if (r.ok) expect(r.payload.strain).toBe(s);
+    }
+  });
+
+  it("treats null/omitted strain as null", () => {
+    const omitted = validateCreate({ ...VALID }, NOW);
+    expect(omitted.ok).toBe(true);
+    if (omitted.ok) expect(omitted.payload.strain).toBeNull();
+
+    const nulled = validateCreate({ ...VALID, strain: null }, NOW);
+    expect(nulled.ok).toBe(true);
+    if (nulled.ok) expect(nulled.payload.strain).toBeNull();
+
+    const undef = validateCreate({ ...VALID, strain: undefined }, NOW);
+    expect(undef.ok).toBe(true);
+    if (undef.ok) expect(undef.payload.strain).toBeNull();
+  });
+
+  it("rejects below 0 and above 21", () => {
+    for (const s of [-1, -0.1, 22, 21.1, 100]) {
+      expect(validateCreate({ ...VALID, strain: s }, NOW).ok, String(s)).toBe(false);
+    }
+  });
+
+  it("rejects non-finite and non-number strain", () => {
+    for (const s of ["x", "12", NaN, Infinity, -Infinity, true, {}, []]) {
+      expect(validateCreate({ ...VALID, strain: s }, NOW).ok, String(s)).toBe(false);
+    }
+  });
+});
+
 describe("validateCreate — label / note normalisation", () => {
   it("trims and stores label/note; blanks become null", () => {
     const r = validateCreate({ ...VALID, label: "  class  ", note: "  good  " }, NOW);
@@ -214,16 +255,26 @@ describe("validatePatch — partial updates", () => {
     expect(validatePatch({ effort: "max" }, NOW).ok).toBe(false);
     expect(validatePatch({ distance_km: -1 }, NOW).ok).toBe(false);
     expect(validatePatch({ started_at: NOW + 10 * MINUTE }, NOW).ok).toBe(false);
+    expect(validatePatch({ strain: -1 }, NOW).ok).toBe(false);
+    expect(validatePatch({ strain: 22 }, NOW).ok).toBe(false);
+    expect(validatePatch({ strain: "x" }, NOW).ok).toBe(false);
+  });
+
+  it("accepts a present strain within bounds", () => {
+    const r = validatePatch({ strain: 12.4 }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.payload.strain).toBe(12.4);
   });
 
   it("lets nullable fields be cleared to null via the patch", () => {
-    const r = validatePatch({ effort: null, distance_km: null, label: null, note: null }, NOW);
+    const r = validatePatch({ effort: null, distance_km: null, label: null, note: null, strain: null }, NOW);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.payload.effort).toBeNull();
       expect(r.payload.distance_km).toBeNull();
       expect(r.payload.label).toBeNull();
       expect(r.payload.note).toBeNull();
+      expect(r.payload.strain).toBeNull();
     }
   });
 

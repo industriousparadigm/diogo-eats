@@ -21,6 +21,10 @@ export type Activity = {
   duration_min: number; // 1..1440
   effort: ActivityEffort | null;
   distance_km: number | null;
+  // Whoop strain (0-21), null for manual rows that have no measured workout
+  // behind them. It's a MEASUREMENT, not the felt `effort` — the Movement
+  // rollup leads with it when present. Set by the importer / future feed.
+  strain: number | null;
   note: string | null;
   source: string; // "manual" | an importer name
   external_id: string | null;

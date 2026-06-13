@@ -1,18 +1,16 @@
-// Movement landing — "how I moved". The strength scoreboard's dashboard,
-// evolved: gym sessions are now ONE kind of movement; general activities
-// (padel, runs, walks…) join them in a single union timeline.
+// Movement landing — "how I moved". An OVERVIEW, not a feed. The flat union
+// timeline (a dozen identical "Padel · 112m" cards) buried the two questions
+// that matter, so the landing now answers them directly, top to bottom:
 //
-// Top to bottom:
-//   - ONE FRONT DOOR: a single full-width "+ Log movement" hero (amber). A
-//     gym sesh is just another movement, picked from the sheet's grid (gym
-//     leads it). EXCEPTION: when a session draft exists, a "Resume session"
-//     button sits ABOVE it — the gym-floor lifeline stays prominent.
-//   - STAT STRIP (loud), movement-language only: movements·mo (gym sessions
-//     + activities), active days·mo (any movement that day, phone-local),
-//     last moved (date). Beats LEFT the landing — it's gym-world vocabulary
-//     and lives on the gym surfaces, not this glance.
-//   - RECENT: the UNION timeline — sessions + activities interleaved
-//     newest-first, each an IMAGE-LED card in its type's identity.
+//   - ONE FRONT DOOR: a single "+ Log movement" hero (amber). A gym sesh is
+//     just another movement, picked from the sheet's grid. Resume rides above
+//     it only when a session draft exists.
+//   - RHYTHM ("am I moving?"): a 28-day calendar grid — filled cell per day
+//     moved. Streak/gap at a glance.
+//   - BY ACTIVITY ("which, how often?"): ONE rollup card per type — count +
+//     Whoop STRAIN (the metric that varies, not the samey duration) +
+//     recency. Tap to expand into that type's sessions. A 4-week / 90-day
+//     toggle widens the tally without ever becoming an endless scroll.
 //
 // The per-exercise catalog still lives one tap behind "All exercises". The
 // route folder is internally "strength" (unchanged); the tab presents as
@@ -25,12 +23,13 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
-import { Card, StatNumber, SectionHeader, Button } from "@/components/ui";
+import { SectionHeader, Button } from "@/components/ui";
 import {
   ApiError,
   fetchStrengthOverview,
@@ -39,24 +38,30 @@ import {
 import { getSnapshot, setSnapshot } from "@/lib/snapshot";
 import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOverviewSkeleton";
 import { loadDraft } from "@/lib/draftStorage";
-import { fmtLastSession } from "@/lib/strengthFormat";
+import { mergeTimeline } from "@/lib/movementTimeline";
 import {
-  mergeTimeline,
-  movementsThisMonth,
-  activeDaysThisMonth,
-  lastMovedAt,
-} from "@/lib/movementTimeline";
-import { SessionCard, ActivityCard } from "@/components/MovementCard";
+  buildRhythm,
+  activeDayCount,
+  buildRollups,
+  windowStart,
+} from "@/lib/movementRollup";
+import { MovementRhythm } from "@/components/MovementRhythm";
+import { MovementRollupCard } from "@/components/MovementRollupCard";
 import { QuickLogSheet } from "@/components/QuickLogSheet";
 import { ActivityDetailSheet } from "@/components/ActivityDetailSheet";
 import type { StrengthOverview } from "@/lib/strengthTypes";
 import type { Activity } from "@/lib/activityTypes";
+import type { TimelineItem } from "@/lib/movementTimeline";
 
-// The union timeline is a glance; the long view lives in the library + each
-// exercise's career timeline. Cap so a year of movement doesn't render at once.
-const RECENT_CAP = 20;
-// How many days of activities to pull for the landing.
+// How many days of activities to pull for the landing (covers the 90-day view).
 const ACTIVITY_DAYS = 90;
+// The rhythm grid is always the recent 4 weeks — "am I moving lately".
+const RHYTHM_DAYS = 28;
+// The BY ACTIVITY tally window options (days). Default = 4 weeks.
+const WINDOWS = [
+  { days: 28, label: "4 wks" },
+  { days: 90, label: "90 d" },
+];
 
 export default function MovementScreen() {
   const router = useRouter();
@@ -70,10 +75,12 @@ export default function MovementScreen() {
 
   const [logOpen, setLogOpen] = useState(false);
   const [editing, setEditing] = useState<Activity | null>(null);
+  const [windowDays, setWindowDays] = useState(WINDOWS[0].days);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     // First focus: seed both halves from cache so a returning user sees the
-    // timeline instantly, then refresh silently.
+    // overview instantly, then refresh silently.
     if (!seededRef.current) {
       seededRef.current = true;
       const cachedOverview = await getSnapshot<StrengthOverview>("strength");
@@ -86,7 +93,7 @@ export default function MovementScreen() {
     }
     try {
       // Activities are a soft dependency: a failed activity fetch must not
-      // blank the gym scoreboard, so it falls back to [] (and any cached
+      // blank the gym scoreboard, so it falls back to null (and any cached
       // rows already shown stay put).
       const [data, acts] = await Promise.all([
         fetchStrengthOverview(),
@@ -148,15 +155,31 @@ export default function MovementScreen() {
     });
   }
 
+  function toggleType(type: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+  function onPressItem(item: TimelineItem) {
+    if (item.kind === "session") openSession(item.session.id);
+    else setEditing(item.activity);
+  }
+
   const nameById = new Map((overview?.exercises ?? []).map((e) => [e.id, e.name]));
   const sessions = overview?.sessions ?? [];
   const now = Date.now();
-  const timeline = overview
-    ? mergeTimeline(sessions, activities).slice(0, RECENT_CAP)
-    : [];
-  const movements = movementsThisMonth(sessions, activities, now);
-  const activeDays = activeDaysThisMonth(sessions, activities, now);
-  const lastMoved = lastMovedAt(sessions, activities);
+
+  const rhythm = buildRhythm(sessions, activities, now, RHYTHM_DAYS);
+  const activeDays = activeDayCount(rhythm);
+  // Movements in the rhythm window (28d), for its caption.
+  const rhythmFrom = windowStart(now, RHYTHM_DAYS);
+  const rhythmMovements = overview
+    ? mergeTimeline(sessions, activities).filter((i) => i.at >= rhythmFrom).length
+    : 0;
+  const rollups = overview ? buildRollups(sessions, activities, now, windowDays) : [];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -215,62 +238,58 @@ export default function MovementScreen() {
 
         {overview && (
           <>
-            {/* STAT STRIP — the movement glance, movement-language only.
-                Three evenly-distributed cells: movements (gym sessions +
-                activities), active days (any movement that day), last moved
-                (a date). Beats LEFT — it's gym-world vocabulary and lives on
-                the gym surfaces, not this glance. All three are StatNumber
-                cells (same condensed treatment, numerals on one baseline —
-                the date renders as condensed numerals "12 Jun" at the same
-                size, so it never warps its neighbours). Flat Card (supporting
-                strip — the offset block stays the timeline's). */}
-            <Card flat depth="loud" style={styles.statStrip} accessibilityLabel="month stats">
-              <StatNumber
-                value={String(movements)}
-                label="movements · mo"
-                color={palette.strength.brandBright}
-                flex
-              />
-              <View style={styles.statDivider} />
-              <StatNumber
-                value={String(activeDays)}
-                label="active days · mo"
-                color={palette.strength.brandBright}
-                flex
-              />
-              <View style={styles.statDivider} />
-              <StatNumber value={fmtLastSession(lastMoved)} label="last moved" flex />
-            </Card>
+            {/* RHYTHM — "am I moving?" answered visually before any list. */}
+            <MovementRhythm
+              rhythm={rhythm}
+              activeDays={activeDays}
+              movements={rhythmMovements}
+            />
 
-            {/* RECENT — the UNION timeline: sessions + activities interleaved
-                newest-first, each an image-led card in its identity. */}
-            <SectionHeader color={palette.strength.brand} style={styles.section}>
-              RECENT
+            {/* BY ACTIVITY — one rollup per type (which + how often + strain).
+                The window toggle widens the tally without an endless feed. */}
+            <SectionHeader
+              color={palette.strength.brand}
+              style={styles.section}
+              trailing={
+                <View style={styles.toggle}>
+                  {WINDOWS.map((w) => {
+                    const on = w.days === windowDays;
+                    return (
+                      <Pressable
+                        key={w.days}
+                        onPress={() => setWindowDays(w.days)}
+                        style={[styles.toggleChip, on && styles.toggleChipOn]}
+                        accessibilityLabel={`show last ${w.label}`}
+                      >
+                        <Text style={[styles.toggleText, on && styles.toggleTextOn]}>
+                          {w.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              }
+            >
+              BY ACTIVITY
             </SectionHeader>
-            {timeline.length === 0 ? (
+
+            {rollups.length === 0 ? (
               <Text style={styles.empty}>
                 Nothing logged yet. Start a session or log a movement.
               </Text>
             ) : (
-              <View style={styles.timeline}>
-                {timeline.map((item) =>
-                  item.kind === "session" ? (
-                    <SessionCard
-                      key={`s-${item.session.id}`}
-                      session={item.session}
-                      exerciseNames={item.session.exercise_ids.map(
-                        (id) => nameById.get(id) ?? id
-                      )}
-                      onPress={() => openSession(item.session.id)}
-                    />
-                  ) : (
-                    <ActivityCard
-                      key={`a-${item.activity.id}`}
-                      activity={item.activity}
-                      onPress={() => setEditing(item.activity)}
-                    />
-                  )
-                )}
+              <View style={styles.rollups}>
+                {rollups.map((r) => (
+                  <MovementRollupCard
+                    key={r.type}
+                    rollup={r}
+                    expanded={expanded.has(r.type)}
+                    now={now}
+                    onToggle={() => toggleType(r.type)}
+                    onPressItem={onPressItem}
+                    exerciseNamesFor={(ids) => ids.map((id) => nameById.get(id) ?? id)}
+                  />
+                ))}
               </View>
             )}
 
@@ -322,22 +341,32 @@ const styles = StyleSheet.create({
 
   section: { marginTop: spacing.sm },
 
-  // Stat strip
-  statStrip: {
+  // BY ACTIVITY window toggle (4 wks / 90 d)
+  toggle: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.lg,
+    gap: spacing.xs,
+  },
+  toggleChip: {
     paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    borderWidth: borders.hairline,
+    borderColor: palette.hairline,
   },
-  statDivider: {
-    width: borders.hairline,
-    alignSelf: "stretch",
-    marginVertical: spacing.xs,
-    backgroundColor: palette.hairline,
+  toggleChipOn: {
+    backgroundColor: palette.strength.brandSoft,
+    borderColor: palette.strength.brand,
   },
+  toggleText: {
+    fontSize: fontSize.label,
+    fontWeight: "700",
+    color: palette.textSubtle,
+    letterSpacing: 0.2,
+  },
+  toggleTextOn: { color: palette.strength.brandBright },
 
-  // Union timeline
-  timeline: { gap: spacing.md },
+  // BY ACTIVITY rollups
+  rollups: { gap: spacing.md },
   empty: { fontSize: fontSize.caption, color: palette.textSubtle },
 
   // "All exercises" row → library
