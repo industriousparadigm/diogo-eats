@@ -18,6 +18,7 @@ import { SessionCard, ActivityCard } from "@/components/MovementCard";
 import { ActivityDetailSheet } from "@/components/ActivityDetailSheet";
 import { movementType } from "@/lib/movementTypes";
 import { windowStart } from "@/lib/movementRollup";
+import { countsAsMovement } from "@/lib/movementConsistency";
 import type { Activity } from "@/lib/activityTypes";
 import type { StrengthOverview, SessionSummary } from "@/lib/strengthTypes";
 
@@ -105,7 +106,7 @@ export default function MovementTypeScreen() {
     : [];
   const typeActivities: Activity[] = !isGym
     ? activities
-        .filter((a) => a.type === type && a.started_at >= from)
+        .filter((a) => a.type === type && a.started_at >= from && countsAsMovement(a))
         .sort((a, b) => b.started_at - a.started_at)
     : [];
 
@@ -163,6 +164,19 @@ export default function MovementTypeScreen() {
                 <ActivityCard key={a.id} activity={a} onPress={() => setEditing(a)} />
               ))}
         </View>
+
+        {/* The exercise catalog is a gym-only thing — it lives here, in the
+            Gym screen, not on the Movement landing. */}
+        {isGym && (
+          <TouchableOpacity
+            style={styles.libraryRow}
+            onPress={() => router.push("/(app)/strength/exercises")}
+            accessibilityLabel="all exercises"
+          >
+            <Text style={styles.libraryLabel}>All exercises</Text>
+            <Text style={styles.libraryChevron}>›</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       <ActivityDetailSheet
@@ -202,4 +216,19 @@ const styles = StyleSheet.create({
   center: { alignItems: "center", paddingTop: spacing.xl },
   errorText: { fontSize: fontSize.caption, color: palette.danger, textAlign: "center" },
   empty: { fontSize: fontSize.caption, color: palette.textSubtle, paddingTop: spacing.lg },
+  libraryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  libraryLabel: {
+    fontSize: fontSize.body,
+    fontWeight: "700",
+    color: palette.textMuted,
+    letterSpacing: 0.2,
+  },
+  libraryChevron: { fontSize: fontSize.lead, color: palette.textSubtle, fontWeight: "700" },
 });

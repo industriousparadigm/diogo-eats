@@ -27,10 +27,10 @@ import { StrengthOverviewSkeleton } from "@/components/skeletons/StrengthOvervie
 import { loadDraft } from "@/lib/draftStorage";
 import { mergeTimeline } from "@/lib/movementTimeline";
 import { buildRollups } from "@/lib/movementRollup";
-import { buildConsistency } from "@/lib/movementConsistency";
+import { buildConsistency, countsAsMovement } from "@/lib/movementConsistency";
 import { PeriodSelector, DEFAULT_PERIOD_DAYS } from "@/components/PeriodSelector";
 import { MovementConsistency } from "@/components/MovementConsistency";
-import { MovementRollupCard } from "@/components/MovementRollupCard";
+import { MovementByActivity } from "@/components/MovementByActivity";
 import { SessionCard, ActivityCard } from "@/components/MovementCard";
 import { QuickLogSheet } from "@/components/QuickLogSheet";
 import { ActivityDetailSheet } from "@/components/ActivityDetailSheet";
@@ -42,7 +42,7 @@ import type { Activity } from "@/lib/activityTypes";
 // to the selected period client-side.
 const RECENT_FLOOR_DAYS = 60;
 // How many movements RECENT shows before "see all" via the type screens.
-const RECENT_CAP = 5;
+const RECENT_CAP = 3;
 
 export default function MovementScreen() {
   const router = useRouter();
@@ -112,9 +112,6 @@ export default function MovementScreen() {
   function openSession(sessionId: string) {
     router.push(`/(app)/strength/log/${sessionId}`);
   }
-  function openLibrary() {
-    router.push("/(app)/strength/exercises");
-  }
   function openType(type: string) {
     router.push(`/(app)/strength/type/${type}?days=${periodDays}`);
   }
@@ -145,9 +142,12 @@ export default function MovementScreen() {
   const sessions = overview?.sessions ?? [];
   const now = Date.now();
 
-  const consistency = buildConsistency(sessions, activities, now, periodDays);
-  const rollups = overview ? buildRollups(sessions, activities, now, periodDays) : [];
-  const recent = overview ? mergeTimeline(sessions, activities).slice(0, RECENT_CAP) : [];
+  // Sub-60 walks aren't movements we track — filter them out of every Movement
+  // surface (consistency, recent, by-activity), matching the chart's own rule.
+  const movementActs = activities.filter(countsAsMovement);
+  const consistency = buildConsistency(sessions, movementActs, now, periodDays);
+  const rollups = overview ? buildRollups(sessions, movementActs, now, periodDays) : [];
+  const recent = overview ? mergeTimeline(sessions, movementActs).slice(0, RECENT_CAP) : [];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -250,26 +250,8 @@ export default function MovementScreen() {
                 Nothing logged yet. Start a session or log a movement.
               </Text>
             ) : (
-              <View style={styles.list}>
-                {rollups.map((r) => (
-                  <MovementRollupCard
-                    key={r.type}
-                    rollup={r}
-                    now={now}
-                    onPress={() => openType(r.type)}
-                  />
-                ))}
-              </View>
+              <MovementByActivity rollups={rollups} onPressType={openType} />
             )}
-
-            <TouchableOpacity
-              style={styles.libraryRow}
-              onPress={openLibrary}
-              accessibilityLabel="all exercises"
-            >
-              <Text style={styles.libraryLabel}>All exercises</Text>
-              <Text style={styles.libraryChevron}>›</Text>
-            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -306,21 +288,6 @@ const styles = StyleSheet.create({
   section: { marginTop: spacing.sm },
   list: { gap: spacing.md },
   empty: { fontSize: fontSize.caption, color: palette.textSubtle },
-  libraryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  libraryLabel: {
-    fontSize: fontSize.body,
-    fontWeight: "700",
-    color: palette.textMuted,
-    letterSpacing: 0.2,
-  },
-  libraryChevron: { fontSize: fontSize.lead, color: palette.textSubtle, fontWeight: "700" },
   errorWrap: { alignItems: "center", gap: spacing.md, paddingTop: spacing.lg },
   errorText: { fontSize: fontSize.caption, color: palette.danger, textAlign: "center" },
   retryBtn: {

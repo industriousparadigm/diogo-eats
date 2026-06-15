@@ -214,12 +214,12 @@ describe("MovementScreen (landing)", () => {
     });
   });
 
-  it("leads the padel rollup with Whoop strain", async () => {
-    const { getByText } = await render(<MovementScreen />);
+  it("shows the padel frequency row with its strain metric", async () => {
+    const { getByText, getAllByText } = await render(<MovementScreen />);
     await waitFor(() => {
-      // avg strain headline (single padel @ 12.4) + its label.
-      expect(getByText("12.4")).toBeTruthy();
-      expect(getByText("avg strain")).toBeTruthy();
+      // The by-activity panel: count is the hero, strain the secondary metric.
+      expect(getByText("avg strain 12.4")).toBeTruthy(); // padel, unique
+      expect(getAllByText(/×$/).length).toBeGreaterThanOrEqual(1); // count chips
     });
   });
 
@@ -247,11 +247,11 @@ describe("MovementScreen (landing)", () => {
     expect(mockPush).toHaveBeenCalledWith("/(app)/strength/log/fixture-day1");
   });
 
-  it("opens the library from the 'All exercises' row", async () => {
-    const { getByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => getByLabelText("all exercises"));
-    await fireEvent.press(getByLabelText("all exercises"));
-    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/exercises");
+  it("no longer shows the gym-only 'All exercises' row on the landing", async () => {
+    const { getByText, queryByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => expect(getByText("BY ACTIVITY")).toBeTruthy());
+    // It moved to the Gym type screen — a gym-unique thing, off the movement landing.
+    expect(queryByLabelText("all exercises")).toBeNull();
   });
 
   it("shows an empty state when there are no sessions or activities", async () => {

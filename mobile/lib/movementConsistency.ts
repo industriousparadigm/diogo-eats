@@ -38,12 +38,18 @@ function shortDate(ms: number): string {
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
-// A workout is anything EXCEPT a walk shorter than 60 min.
+// A logged activity "counts" as movement everywhere in the Movement tab — the
+// one exclusion is a walk under 60 min (incidental, not a workout Diogo tracks).
+// This is the single rule the landing (consistency + recent + by-activity) and
+// the per-type screens all filter by, so a short walk never surfaces.
+export function countsAsMovement(a: Activity): boolean {
+  return !(a.type === "walk" && a.duration_min < 60);
+}
+
+// The TimelineItem form: every gym session counts; an activity counts unless
+// it's a sub-60 walk.
 export function isWorkout(item: TimelineItem): boolean {
-  if (item.kind === "activity") {
-    return !(item.activity.type === "walk" && item.activity.duration_min < 60);
-  }
-  return true; // every gym session counts
+  return item.kind === "session" ? true : countsAsMovement(item.activity);
 }
 
 // The type slug a timeline item belongs to ("gym" for a strength session).
