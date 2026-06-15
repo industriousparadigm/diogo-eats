@@ -58,6 +58,7 @@ jest.mock("../lib/api", () => {
     createActivity: jest.fn(),
     updateActivity: jest.fn(),
     deleteActivity: jest.fn(),
+    pullFromWhoop: jest.fn(async () => ({ syncStatus: "ok", workouts_upserted: 0, added: 0, enriched: 0 })),
     ApiError,
   };
 });

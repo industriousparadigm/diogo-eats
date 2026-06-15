@@ -1,4 +1,4 @@
-// Consistency derivation — what counts as a workout (sub-60 walks excluded),
+// Consistency derivation — what counts as a workout (sub-40 walks excluded),
 // the 0..1 intensity score (strain -> effort -> neutral), and the day/week
 // bucketing (rest gaps, intensity = max, oldest->newest, today last).
 
@@ -56,12 +56,12 @@ const actItem = (a: Activity): TimelineItem => ({ kind: "activity", at: a.starte
 const sesItem = (s: SessionSummary): TimelineItem => ({ kind: "session", at: s.completed_at, session: s });
 
 describe("isWorkout", () => {
-  it("excludes a walk under 60 min", () => {
+  it("excludes a walk under 40 min", () => {
     expect(isWorkout(actItem(activity(1, "walk", { duration_min: 30 })))).toBe(false);
-    expect(isWorkout(actItem(activity(1, "walk", { duration_min: 59 })))).toBe(false);
+    expect(isWorkout(actItem(activity(1, "walk", { duration_min: 39 })))).toBe(false);
   });
-  it("counts a walk of 60 min or more", () => {
-    expect(isWorkout(actItem(activity(1, "walk", { duration_min: 60 })))).toBe(true);
+  it("counts a walk of 40 min or more", () => {
+    expect(isWorkout(actItem(activity(1, "walk", { duration_min: 40 })))).toBe(true);
     expect(isWorkout(actItem(activity(1, "walk", { duration_min: 75 })))).toBe(true);
   });
   it("counts runs, padel, and gym sessions regardless of duration", () => {
@@ -117,7 +117,7 @@ describe("buildConsistency", () => {
     expect(c.buckets[12].worked).toBe(true); // 2 days ago
   });
 
-  it("excludes sub-60 walks from the count and the chart", () => {
+  it("excludes sub-40 walks from the count and the chart", () => {
     const acts = [
       activity(localMs(2026, 6, 15, 8), "walk", { duration_min: 30 }), // short walk today
     ];
@@ -126,8 +126,8 @@ describe("buildConsistency", () => {
     expect(c.buckets[14].worked).toBe(false);
   });
 
-  it("a 60-min walk counts", () => {
-    const acts = [activity(localMs(2026, 6, 15, 8), "walk", { duration_min: 60 })];
+  it("a 40-min walk counts", () => {
+    const acts = [activity(localMs(2026, 6, 15, 8), "walk", { duration_min: 40 })];
     expect(buildConsistency([], acts, now, 15).workoutDays).toBe(1);
   });
 

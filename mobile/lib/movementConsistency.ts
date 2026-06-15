@@ -7,8 +7,9 @@
 // happened and its intensity, plus a single "worked out N of last X days".
 //
 // What counts as a "workout" (his rule, one binary — no "active vs moved"):
-// any gym session or activity EXCEPT a walk under 60 min. Short walks still
-// live in Recent + the Walk screen; they just don't count here.
+// any gym session or activity EXCEPT a walk under 40 min. A short walk isn't
+// tracked movement — it's filtered from every Movement surface (not just the
+// count); still in the DB, just never surfaced.
 //
 // Intensity is a 0..1 score so the bars vary even when Whoop strain is absent
 // (it often is): strain → min(strain/18, 1); else felt effort; else 0.5.
@@ -39,15 +40,17 @@ function shortDate(ms: number): string {
 }
 
 // A logged activity "counts" as movement everywhere in the Movement tab — the
-// one exclusion is a walk under 60 min (incidental, not a workout Diogo tracks).
-// This is the single rule the landing (consistency + recent + by-activity) and
-// the per-type screens all filter by, so a short walk never surfaces.
+// one exclusion is a walk under WALK_MIN_MINUTES (incidental, not a workout
+// Diogo tracks). This is the single rule the landing (consistency + recent +
+// by-activity) and the per-type screens all filter by, so a short walk never
+// surfaces.
+export const WALK_MIN_MINUTES = 40;
 export function countsAsMovement(a: Activity): boolean {
-  return !(a.type === "walk" && a.duration_min < 60);
+  return !(a.type === "walk" && a.duration_min < WALK_MIN_MINUTES);
 }
 
 // The TimelineItem form: every gym session counts; an activity counts unless
-// it's a sub-60 walk.
+// it's a sub-threshold walk.
 export function isWorkout(item: TimelineItem): boolean {
   return item.kind === "session" ? true : countsAsMovement(item.activity);
 }

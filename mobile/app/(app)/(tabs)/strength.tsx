@@ -31,6 +31,7 @@ import { buildConsistency, countsAsMovement } from "@/lib/movementConsistency";
 import { PeriodSelector, DEFAULT_PERIOD_DAYS } from "@/components/PeriodSelector";
 import { MovementConsistency } from "@/components/MovementConsistency";
 import { MovementByActivity } from "@/components/MovementByActivity";
+import { WhoopPullButton } from "@/components/WhoopPullButton";
 import { SessionCard, ActivityCard } from "@/components/MovementCard";
 import { QuickLogSheet } from "@/components/QuickLogSheet";
 import { ActivityDetailSheet } from "@/components/ActivityDetailSheet";
@@ -142,7 +143,7 @@ export default function MovementScreen() {
   const sessions = overview?.sessions ?? [];
   const now = Date.now();
 
-  // Sub-60 walks aren't movements we track — filter them out of every Movement
+  // Short walks aren't movements we track — filter them out of every Movement
   // surface (consistency, recent, by-activity), matching the chart's own rule.
   const movementActs = activities.filter(countsAsMovement);
   const consistency = buildConsistency(sessions, movementActs, now, periodDays);
@@ -252,6 +253,9 @@ export default function MovementScreen() {
             ) : (
               <MovementByActivity rollups={rollups} onPressType={openType} />
             )}
+
+            {/* Self-serve Whoop sync: pull new workouts + enrich manual ones. */}
+            <WhoopPullButton onPulled={load} />
           </>
         )}
       </ScrollView>

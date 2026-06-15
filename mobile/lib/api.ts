@@ -505,6 +505,25 @@ export async function syncWhoop(): Promise<void> {
   await request<unknown>("/api/whoop/sync", { method: "POST" }, 30_000);
 }
 
+// POST /api/whoop/import — sync Whoop, then fold workouts into the Movement
+// log: add new source='whoop' activities + enrich same-day manual rows with
+// strain. Idempotent (re-tap → added/enriched both 0). syncStatus "expired"
+// means the import ran over already-synced data but the token needs a
+// reconnect for fresh days.
+export async function pullFromWhoop(): Promise<{
+  syncStatus: string;
+  workouts_upserted: number;
+  added: number;
+  enriched: number;
+}> {
+  return request<{
+    syncStatus: string;
+    workouts_upserted: number;
+    added: number;
+    enriched: number;
+  }>("/api/whoop/import", { method: "POST" }, 60_000);
+}
+
 // GET /api/strength/overview — the strength feature's home payload.
 export async function fetchStrengthOverview(): Promise<StrengthOverview> {
   if (STRENGTH_MOCK) return mockStrengthOverview();
