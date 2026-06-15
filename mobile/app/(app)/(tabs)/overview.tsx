@@ -34,19 +34,13 @@ import { pickDay } from "@/lib/stores";
 import { Heatmap } from "@/components/Heatmap";
 import { TrendChart } from "@/components/TrendChart";
 import { SignalsRow } from "@/components/SignalsRow";
+import { PeriodSelector } from "@/components/PeriodSelector";
 
-// Period options — 7d / 15d / 1mo / 3mo / 1y, DEFAULT 15d. ONE selector
-// governs the whole page: it sets the fetch size (days) and every surface
-// derives from that same window. /api/stats?days=N serves arbitrary N from
-// 7 to 365 (clamped server-side), so these map straight through.
-const PERIODS = [
-  { days: 7, label: "7d" },
-  { days: 15, label: "15d" },
-  { days: 30, label: "1mo" },
-  { days: 90, label: "3mo" },
-  { days: 365, label: "1y" },
-] as const;
-
+// ONE period selector governs the whole page: it sets the fetch size (days)
+// and every surface derives from that same window. /api/stats?days=N serves
+// arbitrary N from 7 to 365 (clamped server-side). The selector itself (the
+// 7d/15d/1mo/3mo/1y options) is the shared PeriodSelector — same control as
+// Movement.
 const DEFAULT_DAYS = 15;
 
 export default function OverviewScreen() {
@@ -141,25 +135,8 @@ export default function OverviewScreen() {
           <Text style={styles.title}>Looking back</Text>
         </View>
 
-        {/* The one period selector — full row of its own so the five
-            options have room (the old two-toggle sat beside the title). */}
-        <View style={styles.periodToggle}>
-          {PERIODS.map((p) => {
-            const active = p.days === periodDays;
-            return (
-              <TouchableOpacity
-                key={p.days}
-                onPress={() => changePeriod(p.days)}
-                style={[styles.periodBtn, active && styles.periodBtnActive]}
-                accessibilityLabel={`show ${p.label}`}
-              >
-                <Text style={[styles.periodText, active && styles.periodTextActive]}>
-                  {p.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* The one period selector — the shared control (food accent here). */}
+        <PeriodSelector value={periodDays} onChange={changePeriod} />
 
         {!loading && (
           <Text style={styles.loggedCount}>

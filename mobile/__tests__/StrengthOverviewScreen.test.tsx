@@ -189,31 +189,28 @@ describe("MovementScreen (landing)", () => {
     expect(queryByText("THE NUMBERS TO BEAT")).toBeNull();
   });
 
-  it("shows the rhythm glance, not the old movements/active-days stat strip", async () => {
+  it("shows the consistency chart (worked-out count), not the old square rhythm", async () => {
+    const { getByText, queryByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => expect(getByText("WORKED OUT")).toBeTruthy());
+    expect(getByText(/of last 15 days/)).toBeTruthy();
+    // The old square-grid rhythm summary label is gone.
+    expect(queryByLabelText(/moved \d+ of 28 days/)).toBeNull();
+  });
+
+  it("offers the app's standard period selector (not the old 4wk/90d toggle)", async () => {
     const { getByLabelText, queryByText } = await render(<MovementScreen />);
-    // The rhythm card carries an 'am I moving' summary label (28-day window).
-    await waitFor(() => expect(getByLabelText(/moved \d+ of 28 days/)).toBeTruthy());
-    // The old bare stat-strip cells are gone.
-    expect(queryByText("movements · mo")).toBeNull();
-    expect(queryByText("active days · mo")).toBeNull();
-    expect(queryByText("last moved")).toBeNull();
+    await waitFor(() => expect(getByLabelText("show 15d")).toBeTruthy());
+    expect(getByLabelText("show 1y")).toBeTruthy();
+    expect(queryByText("4 wks")).toBeNull();
+    expect(queryByText("90 d")).toBeNull();
   });
 
-  it("offers the 4-week / 90-day window toggle", async () => {
-    const { getByText } = await render(<MovementScreen />);
-    await waitFor(() => {
-      expect(getByText("4 wks")).toBeTruthy();
-      expect(getByText("90 d")).toBeTruthy();
-    });
-  });
-
-  it("collapses each type into ONE rollup card (gym + padel), not a flat timeline", async () => {
+  it("shows one rollup card per type, tappable to its own screen", async () => {
     const { getByText, getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => {
       expect(getByText("BY ACTIVITY")).toBeTruthy();
-      // One Padel rollup + one Gym rollup, each tappable to expand.
-      expect(getByLabelText(/^Padel, 1 in window/)).toBeTruthy();
-      expect(getByLabelText(/^Gym, 1 in window/)).toBeTruthy();
+      expect(getByLabelText("view Padel")).toBeTruthy();
+      expect(getByLabelText("view Gym")).toBeTruthy();
     });
   });
 
@@ -226,23 +223,27 @@ describe("MovementScreen (landing)", () => {
     });
   });
 
-  it("expands a rollup and opens the activity edit sheet from a session row", async () => {
-    const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => getByLabelText(/^Padel, 1 in window/));
-    // Expand the Padel rollup, then tap its single session row.
-    await fireEvent.press(getByLabelText(/^Padel, 1 in window/));
-    const row = await findByLabelText(/^open /);
-    await fireEvent.press(row);
-    // The edit sheet's day stepper is up.
+  it("opens the type's own screen when its rollup card is tapped", async () => {
+    const { getByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText("view Padel"));
+    await fireEvent.press(getByLabelText("view Padel"));
+    expect(mockPush).toHaveBeenCalledWith("/(app)/strength/type/padel?days=15");
+  });
+
+  it("RECENT shows the latest movements; tapping the activity opens edit", async () => {
+    const { getByText, getByLabelText, findByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => expect(getByText("RECENT")).toBeTruthy());
+    // The recent padel card (ActivityCard label "<Name> <date>"); (?!image)
+    // excludes the MovementImage "Padel image" label, distinct from the
+    // rollup's "view Padel".
+    await fireEvent.press(getByLabelText(/^Padel (?!image)/));
     expect(await findByLabelText("earlier day")).toBeTruthy();
   });
 
-  it("expands the gym rollup and opens session detail from a session row", async () => {
-    const { getByLabelText, findByLabelText } = await render(<MovementScreen />);
-    await waitFor(() => getByLabelText(/^Gym, 1 in window/));
-    await fireEvent.press(getByLabelText(/^Gym, 1 in window/));
-    const row = await findByLabelText(/^open /);
-    await fireEvent.press(row);
+  it("RECENT gym card opens session detail", async () => {
+    const { getByLabelText } = await render(<MovementScreen />);
+    await waitFor(() => getByLabelText(/gym session/));
+    await fireEvent.press(getByLabelText(/gym session/));
     expect(mockPush).toHaveBeenCalledWith("/(app)/strength/log/fixture-day1");
   });
 
@@ -269,7 +270,7 @@ describe("MovementScreen (landing)", () => {
     const { getByText, getByLabelText } = await render(<MovementScreen />);
     await waitFor(() => {
       expect(getByText("BY ACTIVITY")).toBeTruthy();
-      expect(getByLabelText(/^Gym, 1 in window/)).toBeTruthy();
+      expect(getByLabelText("view Gym")).toBeTruthy();
     });
   });
 
