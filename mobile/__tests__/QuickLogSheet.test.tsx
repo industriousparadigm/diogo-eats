@@ -39,6 +39,9 @@ function created(type: string): Activity {
     effort: null,
     distance_km: null,
     strain: null,
+    surface: null,
+    elevation_m: null,
+    photo_filename: null,
     note: null,
     source: "manual",
     external_id: null,
@@ -113,6 +116,38 @@ describe("QuickLogSheet", () => {
     // Run — distance appears.
     await fireEvent.press(getByLabelText("type Run"));
     expect(getByLabelText("distance km")).toBeTruthy();
+  });
+
+  it("shows surface + elevation for a run and logs them", async () => {
+    mockCreateActivity.mockResolvedValue(created("run"));
+    const onLogged = jest.fn();
+    const { getByLabelText, queryByLabelText } = await render(
+      <QuickLogSheet visible onClose={jest.fn()} onLogged={onLogged} onStartSession={jest.fn()} />
+    );
+    // Padel has no surface/elevation; run does.
+    await fireEvent.press(getByLabelText("type Padel"));
+    expect(queryByLabelText("surface trail")).toBeNull();
+    expect(queryByLabelText("elevation meters")).toBeNull();
+    await fireEvent.press(getByLabelText("type Run"));
+    expect(getByLabelText("surface trail")).toBeTruthy();
+    // Pick surface + enter distance/elevation, then log.
+    await fireEvent.press(getByLabelText("surface trail"));
+    await fireEvent.changeText(getByLabelText("distance km"), "8.2");
+    await fireEvent.changeText(getByLabelText("elevation meters"), "312");
+    await fireEvent.press(getByLabelText("log it"));
+    await waitFor(() => {
+      expect(mockCreateActivity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "run",
+          surface: "trail",
+          distance_km: 8.2,
+          elevation_m: 312,
+        })
+      );
+      // Wait on the terminal effect so the close/reset state updates settle
+      // inside act() — otherwise they bleed into the next test.
+      expect(onLogged).toHaveBeenCalledWith(expect.objectContaining({ type: "run" }));
+    });
   });
 
   it("logs a padel and hands the new activity up", async () => {

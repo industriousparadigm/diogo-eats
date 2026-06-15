@@ -7,7 +7,7 @@
 // back. Delete → confirm → DELETE → hand the deleted id back. The caller
 // reconciles the timeline. The sheet wears the activity type's identity.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,8 +16,9 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { palette, radii, borders, fontSize, spacing } from "@/lib/theme";
+import { palette, radii, borders, fontSize, spacing, condensedFamily } from "@/lib/theme";
 import {
   Chip,
   SectionHeader,
@@ -26,6 +27,7 @@ import {
   KeyboardAwareScrollView,
 } from "@/components/ui";
 import { MovementImage } from "@/components/MovementImage";
+import { ScanScreenshotButton } from "@/components/ScanScreenshotButton";
 import { movementType } from "@/lib/movementTypes";
 import {
   EFFORTS,
@@ -34,10 +36,13 @@ import {
   stepHours,
   fmtDaysBack,
   fmtClock,
+  fmtPace,
+  surfaceOptions,
   type QuickLogDraft,
+  type Surface,
 } from "@/lib/movementLog";
-import { ApiError, updateActivity, deleteActivity } from "@/lib/api";
-import type { Activity, ActivityEffort } from "@/lib/activityTypes";
+import { ApiError, updateActivity, deleteActivity, resolvePhotoUrl } from "@/lib/api";
+import type { Activity, ActivityEffort, ParsedActivity } from "@/lib/activityTypes";
 
 export function ActivityDetailSheet({
   activity,
@@ -94,10 +99,51 @@ function Editor({
   const [distanceText, setDistanceText] = useState(
     activity.distance_km != null ? String(activity.distance_km) : ""
   );
+  const [surface, setSurface] = useState<Surface | null>(
+    (activity.surface as Surface | null) ?? null
+  );
+  const [elevationText, setElevationText] = useState(
+    activity.elevation_m != null ? String(activity.elevation_m) : ""
+  );
+  const [photoFilename, setPhotoFilename] = useState<string | null>(activity.photo_filename);
+  const [scanSummary, setScanSummary] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(activity.started_at);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Resolve the stored screenshot (if any) to a signed URL for the hero.
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!photoFilename) {
+      setPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    resolvePhotoUrl(photoFilename)
+      .then((url) => !cancelled && setPhotoUrl(url))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [photoFilename]);
+
+  const surfaces = surfaceOptions(activity.type);
+  const pace = fmtPace(Number(distanceText) || null, Number(durationText) || null);
+
+  // A re-scan from inside the editor: prefill the editable fields + attach the
+  // new screenshot. Type is fixed here (you're editing one activity), so we
+  // don't change it.
+  function applyParsed(parsed: ParsedActivity, filename: string) {
+    if (parsed.duration_min != null) setDurationText(String(parsed.duration_min));
+    if (parsed.distance_km != null) setDistanceText(String(parsed.distance_km));
+    if (parsed.surface != null) setSurface(parsed.surface as Surface);
+    if (parsed.elevation_m != null) setElevationText(String(parsed.elevation_m));
+    if (parsed.started_at != null) setStartedAt(parsed.started_at);
+    setPhotoFilename(filename);
+    setScanSummary(parsed.summary || null);
+    setError(null);
+  }
 
   async function save() {
     setError(null);
@@ -108,6 +154,9 @@ function Editor({
       label,
       note,
       distanceText,
+      surface,
+      elevationText,
+      photoFilename,
       startedAt,
     };
     const result = validateQuickLog(draft, Date.now(), def.distance);
@@ -123,6 +172,9 @@ function Editor({
         started_at: result.input.started_at,
         effort: result.input.effort ?? null,
         distance_km: result.input.distance_km ?? null,
+        surface: result.input.surface ?? null,
+        elevation_m: result.input.elevation_m ?? null,
+        photo_filename: result.input.photo_filename ?? null,
         label: result.input.label ?? null,
         note: result.input.note ?? null,
       });
@@ -194,8 +246,17 @@ function Editor({
           </View>
         }
       >
-        {/* The type's photo — keeps the card's identity in the sheet. */}
-        <MovementImage type={activity.type} style={styles.hero} />
+        {/* Hero: the attached screenshot if there is one, else the type's
+            photo — keeps the card's identity in the sheet. */}
+        {photoUrl ? (
+          <Image source={{ uri: photoUrl }} style={styles.hero} contentFit="cover" transition={150} />
+        ) : (
+          <MovementImage type={activity.type} style={styles.hero} />
+        )}
+
+        {/* Re-scan / attach a screenshot to this activity. */}
+        <ScanScreenshotButton onParsed={applyParsed} accent={id.accent} label="📷 Scan a screenshot" />
+        {scanSummary ? <Text style={styles.scanSummary}>read: {scanSummary}</Text> : null}
 
         <SectionHeader color={id.accent} style={styles.section}>
           HOW LONG?
@@ -237,6 +298,38 @@ function Editor({
               accent={id.accent}
               accessibilityLabel="distance km"
               placeholder="e.g. 5.2"
+            />
+            {pace ? <Text style={[styles.pace, { color: id.bright }]}>{pace}</Text> : null}
+          </>
+        ) : null}
+
+        {surfaces.length > 0 ? (
+          <>
+            <SectionHeader style={styles.section}>SURFACE</SectionHeader>
+            <View style={styles.chipRow}>
+              {surfaces.map((s) => {
+                const on = surface === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    onPress={() => setSurface(on ? null : s)}
+                    accessibilityLabel={`surface ${s}`}
+                  >
+                    <Chip label={s} tone={on ? "accent" : "outline"} identity={id.bright} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <SectionHeader style={styles.section}>ELEVATION GAIN</SectionHeader>
+            <Input
+              variant="numeric"
+              value={elevationText}
+              onChangeText={setElevationText}
+              suffix="m"
+              accent={id.accent}
+              accessibilityLabel="elevation meters"
+              placeholder="e.g. 320"
+              maxLength={5}
             />
           </>
         ) : null}
@@ -337,6 +430,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   noteField: { marginTop: spacing.sm },
+  scanSummary: {
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
+    fontStyle: "italic",
+    marginTop: spacing.xs,
+  },
+  pace: {
+    fontFamily: condensedFamily,
+    fontSize: fontSize.bodyLg,
+    fontWeight: "800",
+    marginTop: spacing.xs,
+    letterSpacing: condensedFamily ? 0.2 : -0.3,
+  },
   whenRow: {
     flexDirection: "row",
     gap: spacing.md,

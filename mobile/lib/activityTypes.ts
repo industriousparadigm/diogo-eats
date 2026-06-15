@@ -25,6 +25,12 @@ export type Activity = {
   // behind them. It's a MEASUREMENT, not the felt `effort` — the Movement
   // rollup leads with it when present. Set by the importer / future feed.
   strain: number | null;
+  // Richer detail (15 Jun): the ground a distance activity was done on, the
+  // elevation gained, and the source screenshot a Strava-style AI parse read
+  // its stats from. All optional. Pace is DERIVED (distance ÷ time), not stored.
+  surface: string | null;
+  elevation_m: number | null;
+  photo_filename: string | null;
   note: string | null;
   source: string; // "manual" | an importer name
   external_id: string | null;
@@ -40,7 +46,26 @@ export type CreateActivityInput = {
   duration_min: number;
   effort?: ActivityEffort | null;
   distance_km?: number | null;
+  surface?: string | null;
+  elevation_m?: number | null;
+  photo_filename?: string | null;
   note?: string | null;
+};
+
+// What POST /api/activities/parse returns under `parsed` — the stats the AI
+// read off a Strava-style screenshot. Every field nullable except confidence
+// /summary; the form prefills from these and the user confirms. `started_at`
+// is already a ms epoch (the server converted the ISO it read), or null.
+export type ParsedActivity = {
+  type: string;
+  distance_km: number | null;
+  duration_min: number | null;
+  surface: string | null;
+  elevation_m: number | null;
+  started_at: number | null;
+  avg_pace_per_km: string | null;
+  confidence: "low" | "medium" | "high";
+  summary: string;
 };
 
 // PATCH /api/activities/[id] body — any subset; nullables clear by sending
@@ -52,5 +77,8 @@ export type UpdateActivityInput = Partial<{
   duration_min: number;
   effort: ActivityEffort | null;
   distance_km: number | null;
+  surface: string | null;
+  elevation_m: number | null;
+  photo_filename: string | null;
   note: string | null;
 }>;

@@ -17,6 +17,7 @@ import { Card, Chip, StatNumber } from "@/components/ui";
 import { MovementImage } from "@/components/MovementImage";
 import { movementType, GYM_TYPE } from "@/lib/movementTypes";
 import { fmtSessionDate } from "@/lib/strengthFormat";
+import { fmtDistance, fmtPace } from "@/lib/movementLog";
 import { fmtRecency, type MovementRollup } from "@/lib/movementRollup";
 import type { TimelineItem } from "@/lib/movementTimeline";
 
@@ -135,7 +136,11 @@ function CompactRow({
     metric = `${item.session.beats_count} beat${item.session.beats_count === 1 ? "" : "s"}`;
   } else {
     const a = item.activity;
-    detail = a.label ?? (a.distance_km != null ? `${a.distance_km} km` : "—");
+    // For distance activities, show distance + derived pace; else the label.
+    const bits = [a.label, fmtDistance(a.distance_km), fmtPace(a.distance_km, a.duration_min)].filter(
+      Boolean
+    );
+    detail = bits.length ? bits.join(" · ") : "—";
     metric = a.strain != null ? `${a.strain} strain` : `${a.duration_min} min`;
   }
   return (

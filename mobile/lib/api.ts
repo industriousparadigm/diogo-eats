@@ -26,6 +26,7 @@ import type {
   Activity,
   CreateActivityInput,
   UpdateActivityInput,
+  ParsedActivity,
 } from "./activityTypes";
 import {
   mockCompleteSession,
@@ -716,6 +717,28 @@ export async function deleteActivity(id: string): Promise<void> {
     `/api/activities/${encodeURIComponent(id)}`,
     { method: "DELETE" },
     15_000
+  );
+}
+
+// POST /api/activities/parse — a Strava-style workout screenshot in, the
+// stats the AI read out (+ the stored screenshot's filename to attach on
+// create/patch). The form prefills from `parsed`; the user confirms. Nothing
+// is logged until they submit.
+export async function parseActivityPhoto(photo: {
+  uri: string;
+  name: string;
+  type: string;
+}): Promise<{ parsed: ParsedActivity; photo_filename: string }> {
+  const form = new FormData();
+  form.append("photo", {
+    uri: photo.uri,
+    name: photo.name,
+    type: photo.type,
+  } as unknown as Blob);
+  return request<{ parsed: ParsedActivity; photo_filename: string }>(
+    "/api/activities/parse",
+    { method: "POST", body: form },
+    60_000
   );
 }
 

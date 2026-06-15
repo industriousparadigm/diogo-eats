@@ -6,6 +6,10 @@ import {
   validateQuickLog,
   fmtEffort,
   fmtDistance,
+  fmtPace,
+  fmtElevation,
+  surfaceOptions,
+  ELEVATION_MAX_M,
   fmtActivitySubtitle,
   fmtDurationValue,
   stepDays,
@@ -47,6 +51,9 @@ describe("validateQuickLog", () => {
         started_at: NOW,
         effort: "light",
         distance_km: null,
+        surface: null,
+        elevation_m: null,
+        photo_filename: null,
         label: "class",
         note: null,
       });
@@ -124,6 +131,81 @@ describe("validateQuickLog", () => {
     const r = validateQuickLog(draft({ label: "   ", note: "" }), NOW, false);
     expect(r.ok && r.input.label).toBe(null);
     expect(r.ok && r.input.note).toBe(null);
+  });
+});
+
+describe("validateQuickLog — surface / elevation / photo", () => {
+  it("accepts a known surface and passes it through", () => {
+    const r = validateQuickLog(draft({ type: "run", surface: "trail" }), NOW, true);
+    expect(r).toMatchObject({ ok: true, input: { surface: "trail" } });
+  });
+
+  it("rejects an unknown surface", () => {
+    // @ts-expect-error — deliberately bad value
+    const r = validateQuickLog(draft({ type: "run", surface: "lava" }), NOW, true);
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  it("defaults surface/elevation/photo to null when absent", () => {
+    const r = validateQuickLog(draft({ type: "run" }), NOW, true);
+    expect(r).toMatchObject({
+      ok: true,
+      input: { surface: null, elevation_m: null, photo_filename: null },
+    });
+  });
+
+  it("parses integer elevation meters", () => {
+    expect(validateQuickLog(draft({ type: "run", elevationText: "312" }), NOW, true)).toMatchObject({
+      ok: true,
+      input: { elevation_m: 312 },
+    });
+  });
+
+  it("rejects non-integer / negative / over-max elevation", () => {
+    expect(validateQuickLog(draft({ type: "run", elevationText: "3.5" }), NOW, true)).toMatchObject({ ok: false });
+    expect(validateQuickLog(draft({ type: "run", elevationText: "-1" }), NOW, true)).toMatchObject({ ok: false });
+    expect(
+      validateQuickLog(draft({ type: "run", elevationText: String(ELEVATION_MAX_M + 1) }), NOW, true)
+    ).toMatchObject({ ok: false });
+  });
+
+  it("passes a parsed screenshot filename through", () => {
+    const r = validateQuickLog(draft({ type: "run", photoFilename: "a1b2c3d4.jpg" }), NOW, true);
+    expect(r).toMatchObject({ ok: true, input: { photo_filename: "a1b2c3d4.jpg" } });
+  });
+});
+
+describe("surfaceOptions", () => {
+  it("offers a sensible set per type, none for non-surface types", () => {
+    expect(surfaceOptions("run")).toEqual(["road", "trail", "track", "treadmill"]);
+    expect(surfaceOptions("bike")).toContain("gravel");
+    expect(surfaceOptions("padel")).toEqual([]);
+    expect(surfaceOptions("swim")).toEqual([]);
+    expect(surfaceOptions("kayak")).toEqual([]); // unknown type → none
+  });
+});
+
+describe("fmtPace", () => {
+  it("derives M:SS /km from distance + time", () => {
+    expect(fmtPace(10, 50)).toBe("5:00 /km"); // 50min / 10km
+    expect(fmtPace(8.2, 47)).toBe("5:44 /km");
+  });
+  it("rolls 60s up to the next minute", () => {
+    // 5.999.. min/km → 6:00, never 5:60
+    expect(fmtPace(1, 5.999)).toBe("6:00 /km");
+  });
+  it("hides (null) when distance or time is missing or zero", () => {
+    expect(fmtPace(null, 50)).toBeNull();
+    expect(fmtPace(10, null)).toBeNull();
+    expect(fmtPace(0, 50)).toBeNull();
+    expect(fmtPace(10, 0)).toBeNull();
+  });
+});
+
+describe("fmtElevation", () => {
+  it("formats whole meters, null hides", () => {
+    expect(fmtElevation(312)).toBe("312 m");
+    expect(fmtElevation(null)).toBeNull();
   });
 });
 

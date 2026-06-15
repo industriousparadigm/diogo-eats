@@ -49,10 +49,14 @@ import {
   validateQuickLog,
   stepDays,
   fmtDaysBack,
+  fmtPace,
+  surfaceOptions,
   type QuickLogDraft,
+  type Surface,
 } from "@/lib/movementLog";
 import { ApiError, createActivity } from "@/lib/api";
-import type { Activity, ActivityEffort } from "@/lib/activityTypes";
+import { ScanScreenshotButton } from "@/components/ScanScreenshotButton";
+import type { Activity, ActivityEffort, ParsedActivity } from "@/lib/activityTypes";
 
 const DURATION_CHIPS = [30, 45, 60, 90];
 const DEFAULT_DURATION = "60";
@@ -77,6 +81,10 @@ export function QuickLogSheet({
   const [label, setLabel] = useState("");
   const [note, setNote] = useState("");
   const [distanceText, setDistanceText] = useState("");
+  const [surface, setSurface] = useState<Surface | null>(null);
+  const [elevationText, setElevationText] = useState("");
+  const [photoFilename, setPhotoFilename] = useState<string | null>(null);
+  const [scanSummary, setScanSummary] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
 
   const [busy, setBusy] = useState(false);
@@ -84,6 +92,8 @@ export function QuickLogSheet({
 
   const def = type ? movementType(type) : null;
   const distanceEnabled = def?.distance ?? false;
+  const surfaces = type ? surfaceOptions(type) : [];
+  const pace = fmtPace(Number(distanceText) || null, Number(durationText) || null);
 
   function reset() {
     setType(null);
@@ -92,9 +102,28 @@ export function QuickLogSheet({
     setLabel("");
     setNote("");
     setDistanceText("");
+    setSurface(null);
+    setElevationText("");
+    setPhotoFilename(null);
+    setScanSummary(null);
     setStartedAt(Date.now());
     setError(null);
     setBusy(false);
+  }
+
+  // The AI read a screenshot — prefill every field it could, attach the
+  // stored image, and surface its one-line summary for confirmation. The user
+  // reviews + edits before logging; nothing's saved yet.
+  function applyParsed(parsed: ParsedActivity, filename: string) {
+    if (parsed.type) setType(parsed.type);
+    if (parsed.duration_min != null) setDurationText(String(parsed.duration_min));
+    if (parsed.distance_km != null) setDistanceText(String(parsed.distance_km));
+    if (parsed.surface != null) setSurface(parsed.surface as Surface);
+    if (parsed.elevation_m != null) setElevationText(String(parsed.elevation_m));
+    if (parsed.started_at != null) setStartedAt(parsed.started_at);
+    setPhotoFilename(filename);
+    setScanSummary(parsed.summary || null);
+    setError(null);
   }
 
   function close() {
@@ -111,6 +140,9 @@ export function QuickLogSheet({
       label,
       note,
       distanceText,
+      surface,
+      elevationText,
+      photoFilename,
       startedAt,
     };
     const result = validateQuickLog(draft, Date.now(), distanceEnabled);
@@ -179,10 +211,20 @@ export function QuickLogSheet({
             </View>
           }
         >
+          {/* SCAN — the eats-like shortcut: a Strava/Fitness screenshot in,
+              the stats read out and the form prefilled for review. */}
+          <ScanScreenshotButton
+            onParsed={applyParsed}
+            accent={def?.identity.accent ?? palette.strength.brand}
+          />
+          {scanSummary ? <Text style={styles.scanSummary}>read: {scanSummary}</Text> : null}
+
           {/* TYPE GRID — the pop, and the ONE front door. Image cards, two-up,
               each its own identity. Gym leads; picking it routes into the
               session flow (no form). */}
-          <SectionHeader color={palette.strength.brand}>WHAT DID YOU DO?</SectionHeader>
+          <SectionHeader color={palette.strength.brand} style={styles.section}>
+            WHAT DID YOU DO?
+          </SectionHeader>
           <View style={styles.grid}>
             {GRID_TYPES.map((t) => {
               const selected = t.type === type;
@@ -269,7 +311,7 @@ export function QuickLogSheet({
             })}
           </View>
 
-          {/* DISTANCE — only for distance-y types */}
+          {/* DISTANCE — only for distance-y types. Pace is derived live. */}
           {distanceEnabled ? (
             <>
               <SectionHeader style={styles.section}>DISTANCE (optional)</SectionHeader>
@@ -281,6 +323,47 @@ export function QuickLogSheet({
                 accent={def?.identity.accent ?? palette.strength.brand}
                 accessibilityLabel="distance km"
                 placeholder="e.g. 5.2"
+              />
+              {pace ? (
+                <Text style={[styles.pace, { color: def?.identity.bright ?? palette.strength.brandBright }]}>
+                  {pace}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+
+          {/* SURFACE + ELEVATION — for run/walk/hike/bike (surface types). */}
+          {surfaces.length > 0 ? (
+            <>
+              <SectionHeader style={styles.section}>SURFACE (optional)</SectionHeader>
+              <View style={styles.chipRow}>
+                {surfaces.map((s) => {
+                  const on = surface === s;
+                  return (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => setSurface(on ? null : s)}
+                      accessibilityLabel={`surface ${s}`}
+                    >
+                      <Chip
+                        label={s}
+                        tone={on ? "accent" : "outline"}
+                        identity={def?.identity.bright ?? palette.strength.brandBright}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <SectionHeader style={styles.section}>ELEVATION GAIN (optional)</SectionHeader>
+              <Input
+                variant="numeric"
+                value={elevationText}
+                onChangeText={setElevationText}
+                suffix="m"
+                accent={def?.identity.accent ?? palette.strength.brand}
+                accessibilityLabel="elevation meters"
+                placeholder="e.g. 320"
+                maxLength={5}
               />
             </>
           ) : null}
@@ -391,6 +474,21 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   note: { marginTop: spacing.sm },
+  // The AI's one-line read of the screenshot, shown under the scan button.
+  scanSummary: {
+    fontSize: fontSize.caption,
+    color: palette.textMuted,
+    fontStyle: "italic",
+    marginTop: spacing.xs,
+  },
+  // Derived pace under the distance field — condensed, in the type's accent.
+  pace: {
+    fontFamily: condensedFamily,
+    fontSize: fontSize.bodyLg,
+    fontWeight: "800",
+    marginTop: spacing.xs,
+    letterSpacing: condensedFamily ? 0.2 : -0.3,
+  },
 
   // Day stepper
   dayStepper: {

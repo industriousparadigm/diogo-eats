@@ -33,6 +33,20 @@ export type Effort = (typeof EFFORTS)[number];
 export const SOURCES = ["manual", "garmin", "whoop"] as const;
 export type Source = (typeof SOURCES)[number];
 
+// Surface the activity happened on (road/trail/…), mirroring the migration's
+// CHECK. Nullable: most activities don't record it, and the AI parse only
+// sets it when the screenshot makes it unambiguous.
+export const SURFACES = [
+  "road",
+  "trail",
+  "track",
+  "treadmill",
+  "gravel",
+  "indoor",
+  "mixed",
+] as const;
+export type Surface = (typeof SURFACES)[number];
+
 // ---- bounds (mirror the migration's CHECKs) ----
 
 const MAX_DURATION_MIN = 1440; // 24h, matching duration_min <= 1440
@@ -40,6 +54,8 @@ const MAX_DISTANCE_KM = 1000; // a sane ceiling; the migration only checks > 0
 export const MAX_STRAIN = 21; // Whoop strain scale tops out at 21
 const MAX_LABEL_LENGTH = 200;
 const MAX_NOTE_LENGTH = 2000;
+export const MAX_ELEVATION_M = 30000; // mirrors the migration's elevation_m <= 30000
+const MAX_PHOTO_FILENAME_LENGTH = 200;
 const MAX_PAST_MS = 365 * 24 * 3600 * 1000; // a year of backfill headroom
 const FUTURE_SLACK_MS = 5 * 60 * 1000; // device clocks drift
 
@@ -55,6 +71,9 @@ export type Activity = {
   distance_km: number | null;
   note: string | null;
   strain: number | null; // Whoop strain (0-21); null on manual rows
+  surface: string | null; // road/trail/… ; null when not recorded
+  elevation_m: number | null; // elevation gain in metres; null when not recorded
+  photo_filename: string | null; // source screenshot an AI parse was read from
   source: Source;
   external_id: string | null;
   created_at: number; // ms epoch
@@ -74,6 +93,9 @@ export type CreatePayload = {
   distance_km: number | null;
   note: string | null;
   strain: number | null;
+  surface: string | null;
+  elevation_m: number | null;
+  photo_filename: string | null;
 };
 
 export type CreateResult =
@@ -147,6 +169,46 @@ function validateStrain(v: unknown): number | null | { error: string } {
   return v;
 }
 
+// surface: one of SURFACES. undefined/null → null (most activities don't
+// record it). When present it must be in the whitelist.
+function validateSurface(v: unknown): Surface | null | { error: string } {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string" || !(SURFACES as readonly string[]).includes(v)) {
+    return { error: `surface must be one of: ${SURFACES.join(", ")}` };
+  }
+  return v as Surface;
+}
+
+// elevation_m: elevation gain in metres. undefined/null → null. When present
+// it must be a finite integer within [0, MAX_ELEVATION_M].
+function validateElevation(v: unknown): number | null | { error: string } {
+  if (v === undefined || v === null) return null;
+  if (!isFiniteNumber(v) || !Number.isInteger(v)) {
+    return { error: "elevation_m must be an integer" };
+  }
+  if (v < 0 || v > MAX_ELEVATION_M) {
+    return { error: `elevation_m must be between 0 and ${MAX_ELEVATION_M}` };
+  }
+  return v;
+}
+
+// photo_filename: the source screenshot an AI parse was read from.
+// undefined/null → null. When present it must be a trimmed string ≤200 chars
+// matching a conservative object-name charset (the bucket mints hex.jpg names).
+function validatePhotoFilename(v: unknown): string | null | { error: string } {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string") return { error: "photo_filename must be a string" };
+  const trimmed = v.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > MAX_PHOTO_FILENAME_LENGTH) {
+    return { error: "photo_filename too long" };
+  }
+  if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+    return { error: "photo_filename has invalid characters" };
+  }
+  return trimmed;
+}
+
 // started_at: optional on create (defaults to now at the route). When
 // present it must be a finite ms-epoch number within a sane window.
 function validateStartedAt(v: unknown, now: number): number | string {
@@ -197,6 +259,17 @@ export function validateCreate(
   const strain = validateStrain(b.strain);
   if (strain && typeof strain === "object") return { ok: false, error: strain.error };
 
+  const surface = validateSurface(b.surface);
+  if (surface && typeof surface === "object") return { ok: false, error: surface.error };
+
+  const elevation = validateElevation(b.elevation_m);
+  if (elevation && typeof elevation === "object") return { ok: false, error: elevation.error };
+
+  const photoFilename = validatePhotoFilename(b.photo_filename);
+  if (photoFilename && typeof photoFilename === "object") {
+    return { ok: false, error: photoFilename.error };
+  }
+
   return {
     ok: true,
     payload: {
@@ -208,6 +281,9 @@ export function validateCreate(
       distance_km: distance as number | null,
       note: note as string | null,
       strain: strain as number | null,
+      surface: surface as string | null,
+      elevation_m: elevation as number | null,
+      photo_filename: photoFilename as string | null,
     },
   };
 }
@@ -226,6 +302,9 @@ export type PatchPayload = Partial<{
   distance_km: number | null;
   note: string | null;
   strain: number | null;
+  surface: string | null;
+  elevation_m: number | null;
+  photo_filename: string | null;
 }>;
 
 export type PatchResult =
@@ -290,6 +369,24 @@ export function validatePatch(
     const r = validateStrain(b.strain);
     if (r && typeof r === "object") return { ok: false, error: r.error };
     patch.strain = r as number | null;
+  }
+
+  if ("surface" in b) {
+    const r = validateSurface(b.surface);
+    if (r && typeof r === "object") return { ok: false, error: r.error };
+    patch.surface = r as string | null;
+  }
+
+  if ("elevation_m" in b) {
+    const r = validateElevation(b.elevation_m);
+    if (r && typeof r === "object") return { ok: false, error: r.error };
+    patch.elevation_m = r as number | null;
+  }
+
+  if ("photo_filename" in b) {
+    const r = validatePhotoFilename(b.photo_filename);
+    if (r && typeof r === "object") return { ok: false, error: r.error };
+    patch.photo_filename = r as string | null;
   }
 
   if (Object.keys(patch).length === 0) {

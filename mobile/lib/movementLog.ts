@@ -20,6 +20,35 @@ export const DURATION_MIN = 1;
 export const DURATION_MAX = 1440;
 export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
+// Surface — the ground a distance activity was done on. The whitelist mirrors
+// the server CHECK; the UI only offers the subset that makes sense per type
+// (a track run yes, a track swim no).
+export const SURFACES = [
+  "road",
+  "trail",
+  "track",
+  "treadmill",
+  "gravel",
+  "indoor",
+  "mixed",
+] as const;
+export type Surface = (typeof SURFACES)[number];
+
+const SURFACE_BY_TYPE: Record<string, Surface[]> = {
+  run: ["road", "trail", "track", "treadmill"],
+  walk: ["road", "trail", "treadmill"],
+  hike: ["trail", "road"],
+  bike: ["road", "trail", "gravel", "indoor"],
+};
+
+// The surface chips a given type offers (empty = no surface field for that
+// type, e.g. padel/swim/football). Unknown types get none.
+export function surfaceOptions(type: string): Surface[] {
+  return SURFACE_BY_TYPE[type] ?? [];
+}
+
+export const ELEVATION_MAX_M = 30000; // sane ceiling (mirrors the server CHECK)
+
 // The quick-log form's raw fields (strings, as they come off the inputs).
 export type QuickLogDraft = {
   type: string;
@@ -29,6 +58,11 @@ export type QuickLogDraft = {
   note: string;
   distanceText: string; // decimal input; only for distance-y types
   startedAt: number; // ms epoch, defaulted to now / a back-stepped day
+  // Richer optional detail (15 Jun). Optional on the draft so existing
+  // callers/tests keep working; the validator defaults them.
+  surface?: Surface | null; // road/trail/… (distance types)
+  elevationText?: string; // integer meters of gain
+  photoFilename?: string | null; // a parsed Strava screenshot attached to this log
 };
 
 export type ValidationResult =
@@ -78,6 +112,29 @@ export function validateQuickLog(
     distance_km = d;
   }
 
+  // surface: optional; when present must be a known surface.
+  let surface: Surface | null = null;
+  if (draft.surface != null) {
+    if (!SURFACES.includes(draft.surface)) {
+      return { ok: false, error: "unknown surface" };
+    }
+    surface = draft.surface;
+  }
+
+  // elevation: optional; integer meters of gain, 0..ELEVATION_MAX_M.
+  let elevation_m: number | null = null;
+  const elevText = (draft.elevationText ?? "").trim();
+  if (elevText) {
+    const e = Number(elevText);
+    if (!Number.isFinite(e) || !Number.isInteger(e) || e < 0) {
+      return { ok: false, error: "elevation must be a whole number of meters" };
+    }
+    if (e > ELEVATION_MAX_M) {
+      return { ok: false, error: `elevation must be ${ELEVATION_MAX_M}m or less` };
+    }
+    elevation_m = e;
+  }
+
   const label = draft.label.trim();
   const note = draft.note.trim();
 
@@ -89,6 +146,9 @@ export function validateQuickLog(
       started_at: draft.startedAt,
       effort: draft.effort,
       distance_km,
+      surface,
+      elevation_m,
+      photo_filename: draft.photoFilename ?? null,
       label: label ? label : null,
       note: note ? note : null,
     },
@@ -113,6 +173,29 @@ export function fmtEffort(effort: ActivityEffort | null): string | null {
 export function fmtDistance(km: number | null): string | null {
   if (km == null) return null;
   return `${parseFloat(km.toFixed(2))} km`;
+}
+
+// "5:30 /km" — average pace DERIVED from distance + time (we never store it;
+// distance ÷ time is the truth). null when either input is missing/zero, so a
+// run with no distance just hides pace rather than showing "∞". Rounds to the
+// second, rolling 60s up to the next minute.
+export function fmtPace(distanceKm: number | null, durationMin: number | null): string | null {
+  if (distanceKm == null || durationMin == null) return null;
+  if (distanceKm <= 0 || durationMin <= 0) return null;
+  const minPerKm = durationMin / distanceKm;
+  let m = Math.floor(minPerKm);
+  let s = Math.round((minPerKm - m) * 60);
+  if (s === 60) {
+    m += 1;
+    s = 0;
+  }
+  return `${m}:${String(s).padStart(2, "0")} /km`;
+}
+
+// "320 m" elevation gain, or null. Whole meters.
+export function fmtElevation(m: number | null): string | null {
+  if (m == null) return null;
+  return `${Math.round(m)} m`;
 }
 
 // The card's sub-line: "padel · class" (type name + label), or just the

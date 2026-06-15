@@ -5,10 +5,12 @@ import {
   clampDays,
   ACTIVITY_TYPES,
   EFFORTS,
+  SURFACES,
   DEFAULT_DAYS,
   MIN_DAYS,
   MAX_DAYS,
   MAX_STRAIN,
+  MAX_ELEVATION_M,
 } from "../activities";
 
 // Fixed clock: 12 Jun 2026 12:00 UTC. Every relative-time rule is tested
@@ -49,6 +51,9 @@ describe("validateCreate — body shape", () => {
       expect(r.payload.effort).toBeNull();
       expect(r.payload.distance_km).toBeNull();
       expect(r.payload.note).toBeNull();
+      expect(r.payload.surface).toBeNull();
+      expect(r.payload.elevation_m).toBeNull();
+      expect(r.payload.photo_filename).toBeNull();
     }
   });
 });
@@ -179,6 +184,75 @@ describe("validateCreate — strain bounds (0-21)", () => {
   });
 });
 
+describe("validateCreate — surface whitelist", () => {
+  it("accepts every whitelisted surface plus null/omitted", () => {
+    for (const surface of SURFACES) {
+      const r = validateCreate({ ...VALID, surface }, NOW);
+      expect(r.ok, surface).toBe(true);
+      if (r.ok) expect(r.payload.surface).toBe(surface);
+    }
+    expect(validateCreate({ ...VALID, surface: null }, NOW).ok).toBe(true);
+    expect(validateCreate({ ...VALID, surface: undefined }, NOW).ok).toBe(true);
+  });
+
+  it("rejects surfaces outside the whitelist and non-strings", () => {
+    for (const surface of ["pavement", "ROAD", "Trail", "", "grass", 1, {}, true]) {
+      expect(validateCreate({ ...VALID, surface }, NOW).ok, String(surface)).toBe(false);
+    }
+  });
+});
+
+describe("validateCreate — elevation bounds", () => {
+  it("exposes MAX_ELEVATION_M = 30000", () => {
+    expect(MAX_ELEVATION_M).toBe(30000);
+  });
+
+  it("accepts 0 and MAX, an interior value, and null/omitted", () => {
+    for (const e of [0, 312, MAX_ELEVATION_M]) {
+      const r = validateCreate({ ...VALID, elevation_m: e }, NOW);
+      expect(r.ok, String(e)).toBe(true);
+      if (r.ok) expect(r.payload.elevation_m).toBe(e);
+    }
+    expect(validateCreate({ ...VALID, elevation_m: null }, NOW).ok).toBe(true);
+    expect(validateCreate({ ...VALID, elevation_m: undefined }, NOW).ok).toBe(true);
+  });
+
+  it("rejects negative, over-max, non-integer, and non-number elevation", () => {
+    for (const e of [-1, -100, 30001, 50000, 312.5, "100", NaN, Infinity, true, {}]) {
+      expect(validateCreate({ ...VALID, elevation_m: e }, NOW).ok, String(e)).toBe(false);
+    }
+  });
+});
+
+describe("validateCreate — photo_filename sanity", () => {
+  it("accepts a valid object name and null/omitted/blank", () => {
+    const r = validateCreate({ ...VALID, photo_filename: "a1b2c3d4.jpg" }, NOW);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.payload.photo_filename).toBe("a1b2c3d4.jpg");
+
+    expect(validateCreate({ ...VALID, photo_filename: null }, NOW).ok).toBe(true);
+    expect(validateCreate({ ...VALID, photo_filename: undefined }, NOW).ok).toBe(true);
+
+    const blank = validateCreate({ ...VALID, photo_filename: "   " }, NOW);
+    expect(blank.ok).toBe(true);
+    if (blank.ok) expect(blank.payload.photo_filename).toBeNull();
+  });
+
+  it("rejects bad characters, over-long, and non-string filenames", () => {
+    for (const f of [
+      "../etc/passwd",
+      "name with spaces.jpg",
+      "a/b.jpg",
+      "x".repeat(201),
+      1,
+      {},
+      true,
+    ]) {
+      expect(validateCreate({ ...VALID, photo_filename: f }, NOW).ok, String(f)).toBe(false);
+    }
+  });
+});
+
 describe("validateCreate — label / note normalisation", () => {
   it("trims and stores label/note; blanks become null", () => {
     const r = validateCreate({ ...VALID, label: "  class  ", note: "  good  " }, NOW);
@@ -258,6 +332,24 @@ describe("validatePatch — partial updates", () => {
     expect(validatePatch({ strain: -1 }, NOW).ok).toBe(false);
     expect(validatePatch({ strain: 22 }, NOW).ok).toBe(false);
     expect(validatePatch({ strain: "x" }, NOW).ok).toBe(false);
+    expect(validatePatch({ surface: "pavement" }, NOW).ok).toBe(false);
+    expect(validatePatch({ elevation_m: -1 }, NOW).ok).toBe(false);
+    expect(validatePatch({ elevation_m: 30001 }, NOW).ok).toBe(false);
+    expect(validatePatch({ elevation_m: 100.5 }, NOW).ok).toBe(false);
+    expect(validatePatch({ photo_filename: "../x" }, NOW).ok).toBe(false);
+  });
+
+  it("accepts present surface / elevation / photo_filename within bounds", () => {
+    const r = validatePatch(
+      { surface: "trail", elevation_m: 312, photo_filename: "deadbeef.jpg" },
+      NOW
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.surface).toBe("trail");
+      expect(r.payload.elevation_m).toBe(312);
+      expect(r.payload.photo_filename).toBe("deadbeef.jpg");
+    }
   });
 
   it("accepts a present strain within bounds", () => {
@@ -267,7 +359,10 @@ describe("validatePatch — partial updates", () => {
   });
 
   it("lets nullable fields be cleared to null via the patch", () => {
-    const r = validatePatch({ effort: null, distance_km: null, label: null, note: null, strain: null }, NOW);
+    const r = validatePatch(
+      { effort: null, distance_km: null, label: null, note: null, strain: null, surface: null, elevation_m: null, photo_filename: null },
+      NOW
+    );
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.payload.effort).toBeNull();
@@ -275,6 +370,9 @@ describe("validatePatch — partial updates", () => {
       expect(r.payload.label).toBeNull();
       expect(r.payload.note).toBeNull();
       expect(r.payload.strain).toBeNull();
+      expect(r.payload.surface).toBeNull();
+      expect(r.payload.elevation_m).toBeNull();
+      expect(r.payload.photo_filename).toBeNull();
     }
   });
 
