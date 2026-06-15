@@ -118,7 +118,7 @@ export function ActivityCard({
             />
           ) : null}
           {effort ? (
-            <Chip label={effort} tone="neutral" />
+            <Chip label={effort} tone="outline" identity={id.bright} />
           ) : null}
         </View>
       </View>

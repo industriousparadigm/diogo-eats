@@ -6,6 +6,8 @@ import {
   isWorkout,
   intensityScore,
   buildConsistency,
+  itemType,
+  topTypes,
   CONSISTENCY_DAY_MAX,
 } from "../lib/movementConsistency";
 import type { TimelineItem } from "../lib/movementTimeline";
@@ -158,5 +160,49 @@ describe("buildConsistency", () => {
   it("the day/week cutover is CONSISTENCY_DAY_MAX", () => {
     expect(buildConsistency([], [], now, CONSISTENCY_DAY_MAX).mode).toBe("day");
     expect(buildConsistency([], [], now, CONSISTENCY_DAY_MAX + 1).mode).toBe("week");
+  });
+});
+
+describe("itemType + topTypes", () => {
+  it("maps a session to 'gym' and an activity to its type", () => {
+    expect(itemType(sesItem(session(localMs(2026, 6, 15))))).toBe("gym");
+    expect(itemType(actItem(activity(localMs(2026, 6, 15), "padel")))).toBe("padel");
+  });
+
+  it("ranks by frequency, ties broken by recency", () => {
+    const items = [
+      actItem(activity(localMs(2026, 6, 14), "padel")),
+      actItem(activity(localMs(2026, 6, 13), "padel")),
+      actItem(activity(localMs(2026, 6, 12), "run")),
+      sesItem(session(localMs(2026, 6, 11))), // gym
+      actItem(activity(localMs(2026, 6, 10), "walk", { duration_min: 90 })),
+    ];
+    expect(topTypes(items, 3)).toEqual(["padel", "run", "gym"]); // 2 > recency run>gym>walk
+    expect(topTypes(items, 2)).toEqual(["padel", "run"]);
+  });
+});
+
+describe("buildConsistency — type/count for colouring + tooltip", () => {
+  const now = localMs(2026, 6, 15);
+
+  it("bucket.type is the DOMINANT (max-intensity) workout that day", () => {
+    // gym (0.5) + a hard-strain padel (0.78) on the same day → padel dominates.
+    const c = buildConsistency(
+      [session(localMs(2026, 6, 15, 18))],
+      [activity(localMs(2026, 6, 15, 10), "padel", { strain: 14 })],
+      now,
+      15
+    );
+    const today = c.buckets[c.buckets.length - 1];
+    expect(today.type).toBe("padel");
+    expect(today.count).toBe(2);
+  });
+
+  it("rest buckets carry null type + 0 count; topTypes is returned", () => {
+    const c = buildConsistency([], [activity(localMs(2026, 6, 14), "run")], now, 15);
+    expect(c.topTypes).toContain("run");
+    const rest = c.buckets.find((b) => !b.worked)!;
+    expect(rest.type).toBeNull();
+    expect(rest.count).toBe(0);
   });
 });

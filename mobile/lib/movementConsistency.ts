@@ -46,6 +46,32 @@ export function isWorkout(item: TimelineItem): boolean {
   return true; // every gym session counts
 }
 
+// The type slug a timeline item belongs to ("gym" for a strength session).
+export function itemType(item: TimelineItem): string {
+  return item.kind === "session" ? "gym" : item.activity.type;
+}
+
+// The N most-frequent workout types over the items, most-used first. Ties
+// break toward the more recently done type (deterministic). Powers the bar
+// colouring + the legend: the top N get their own colour, the rest are "other".
+export function topTypes(items: TimelineItem[], n = 3): string[] {
+  const stat = new Map<string, { count: number; lastAt: number }>();
+  for (const it of items) {
+    const t = itemType(it);
+    const s = stat.get(t);
+    if (s) {
+      s.count += 1;
+      s.lastAt = Math.max(s.lastAt, it.at);
+    } else {
+      stat.set(t, { count: 1, lastAt: it.at });
+    }
+  }
+  return [...stat.entries()]
+    .sort((a, b) => b[1].count - a[1].count || b[1].lastAt - a[1].lastAt)
+    .slice(0, n)
+    .map(([t]) => t);
+}
+
 // 0..1 intensity. Strain (0-21 Whoop scale) maps via /18 so a hard session
 // (~13-18) lands near the top; below that, felt effort; else a neutral
 // "counted" 0.5 (strain is OFTEN absent — the fallback is first-class).
@@ -63,12 +89,16 @@ export type ConsistencyBucket = {
   label: string; // short date of the bucket's (start) day, for ticks
   worked: boolean; // a qualifying workout fell in this bucket
   intensity: number; // max intensity in the bucket (0 when no workout)
+  type: string | null; // the dominant (max-intensity) workout's type, null = rest
+  count: number; // how many qualifying workouts fell in the bucket
+  atMs: number; // start-of-day ms of the bucket, for tooltip date formatting
 };
 
 export type Consistency = {
   buckets: ConsistencyBucket[]; // oldest -> newest, last bucket includes today
   workoutDays: number; // distinct local days with a workout, over the window
   mode: "day" | "week";
+  topTypes: string[]; // most-used types (desc), for bar colour + legend
 };
 
 // Derive the consistency view over the last `periodDays`. Day buckets for
@@ -86,20 +116,41 @@ export function buildConsistency(
   );
 
   const workoutDays = new Set(items.map((it) => localDayKey(it.at))).size;
+  const tops = topTypes(items, 3);
   const todayStart = startOfLocalDay(now);
   const mode: "day" | "week" = periodDays <= CONSISTENCY_DAY_MAX ? "day" : "week";
   const buckets: ConsistencyBucket[] = [];
 
+  // The bucket's colour follows its DOMINANT (max-intensity) workout — same
+  // item the height comes from, so height + colour read off one movement.
+  type Peak = { intensity: number; type: string };
+  const peakOf = (bucketItems: TimelineItem[]): Peak | null => {
+    let peak: Peak | null = null;
+    for (const it of bucketItems) {
+      const s = intensityScore(it);
+      if (!peak || s > peak.intensity) peak = { intensity: s, type: itemType(it) };
+    }
+    return peak;
+  };
+
   if (mode === "day") {
-    const byDay = new Map<string, number>(); // dayKey -> max intensity
+    const byDay = new Map<string, TimelineItem[]>();
     for (const it of items) {
       const k = localDayKey(it.at);
-      byDay.set(k, Math.max(byDay.get(k) ?? 0, intensityScore(it)));
+      (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(it);
     }
     for (let i = periodDays - 1; i >= 0; i--) {
       const dayMs = todayStart - i * DAY_MS;
-      const k = localDayKey(dayMs);
-      buckets.push({ label: shortDate(dayMs), worked: byDay.has(k), intensity: byDay.get(k) ?? 0 });
+      const dayItems = byDay.get(localDayKey(dayMs)) ?? [];
+      const peak = peakOf(dayItems);
+      buckets.push({
+        label: shortDate(dayMs),
+        worked: peak != null,
+        intensity: peak?.intensity ?? 0,
+        type: peak?.type ?? null,
+        count: dayItems.length,
+        atMs: dayMs,
+      });
     }
   } else {
     // 7-day buckets, the last ending today (oldest -> newest).
@@ -107,18 +158,21 @@ export function buildConsistency(
     for (let w = weeks - 1; w >= 0; w--) {
       const endDay = todayStart - w * 7 * DAY_MS;
       const startDay = endDay - 6 * DAY_MS;
-      let worked = false;
-      let intensity = 0;
-      for (const it of items) {
+      const inWeek = items.filter((it) => {
         const d = startOfLocalDay(it.at);
-        if (d >= startDay && d <= endDay) {
-          worked = true;
-          intensity = Math.max(intensity, intensityScore(it));
-        }
-      }
-      buckets.push({ label: shortDate(startDay), worked, intensity });
+        return d >= startDay && d <= endDay;
+      });
+      const peak = peakOf(inWeek);
+      buckets.push({
+        label: shortDate(startDay),
+        worked: peak != null,
+        intensity: peak?.intensity ?? 0,
+        type: peak?.type ?? null,
+        count: inWeek.length,
+        atMs: startDay,
+      });
     }
   }
 
-  return { buckets, workoutDays, mode };
+  return { buckets, workoutDays, mode, topTypes: tops };
 }
