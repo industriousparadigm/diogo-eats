@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   parseRecentParams,
   recentSinceMs,
+  mealIdentityKey,
+  dedupeRecentMeals,
   RECENT_DEFAULT_DAYS,
   RECENT_DEFAULT_LIMIT,
   RECENT_MAX_DAYS,
@@ -12,6 +14,14 @@ import { tzDayStart } from "../tz";
 function params(qs: string): URLSearchParams {
   return new URL(`https://x/api/meals/recent${qs}`).searchParams;
 }
+
+const m = (over: Record<string, unknown> = {}) => ({
+  id: "x",
+  caption: null,
+  meal_vibe: null,
+  items_json: "[]",
+  ...over,
+});
 
 describe("parseRecentParams", () => {
   it("defaults when params are absent", () => {
@@ -60,5 +70,44 @@ describe("recentSinceMs", () => {
 
   it("the window lower bound precedes now", () => {
     expect(recentSinceMs(14, undefined, now)).toBeLessThan(now);
+  });
+});
+
+describe("mealIdentityKey", () => {
+  it("matches a meal and a (legacy) repeat of it to the same key", () => {
+    const orig = mealIdentityKey(m({ caption: "organic india psyllium" }));
+    const rep = mealIdentityKey(m({ caption: "repeat of organic india psyllium" }));
+    const repRep = mealIdentityKey(m({ caption: "repeat of repeat of organic india psyllium" }));
+    expect(rep).toBe(orig);
+    expect(repRep).toBe(orig);
+  });
+  it("is case/whitespace-insensitive on the caption", () => {
+    expect(mealIdentityKey(m({ caption: "  Organic   India " }))).toBe(
+      mealIdentityKey(m({ caption: "organic india" }))
+    );
+  });
+  it("falls back caption → vibe → items → id", () => {
+    expect(mealIdentityKey(m({ meal_vibe: "oat milk coffee" }))).toBe("vibe:oat milk coffee");
+    expect(
+      mealIdentityKey(m({ items_json: JSON.stringify([{ name: "Oats" }, { name: "Milk" }]) }))
+    ).toBe("items:milk|oats");
+    expect(mealIdentityKey(m({ id: "abc" }))).toBe("id:abc");
+  });
+});
+
+describe("dedupeRecentMeals", () => {
+  it("keeps the newest occurrence of each food and caps to limit", () => {
+    // newest-first input: a fresh repeat, then the original, then a distinct food
+    const meals = [
+      m({ id: "new", caption: "repeat of psyllium" }),
+      m({ id: "old", caption: "psyllium" }),
+      m({ id: "coffee", caption: "coffee" }),
+    ];
+    const out = dedupeRecentMeals(meals, 10);
+    expect(out.map((x) => x.id)).toEqual(["new", "coffee"]); // psyllium collapses to the newest
+  });
+  it("respects the limit", () => {
+    const meals = [m({ id: "a", caption: "a" }), m({ id: "b", caption: "b" }), m({ id: "c", caption: "c" })];
+    expect(dedupeRecentMeals(meals, 2).map((x) => x.id)).toEqual(["a", "b"]);
   });
 });

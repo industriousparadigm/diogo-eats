@@ -33,13 +33,24 @@ export function isValidRepeatScale(scale: unknown): scale is number {
 }
 
 // Honest + searchable caption for a repeated meal. Prefers the source
-// caption, falls back to its vibe, and degrades to a bare "repeat" rather
-// than fabricating a description. Mirrors the server so the optimistic
-// pending card reads the same as the persisted row.
+// caption, falls back to its vibe. Mirrors the server (lib/repeat.ts).
+//
+// Peel any leading "repeat of " prefix(es) — legacy repeats compounded them.
+export function stripRepeatPrefix(s: string | null | undefined): string {
+  let out = (s ?? "").trim();
+  while (/^repeat of\s+/i.test(out)) out = out.replace(/^repeat of\s+/i, "").trim();
+  return out;
+}
+
+// A repeated meal keeps its source's identity — NO "repeat of" prefix (it
+// compounded on re-repeat and split the recents list into duplicates). Source
+// caption, else vibe, prefix peeled; null when empty (the copied vibe shows).
 export function repeatCaption(
   sourceCaption: string | null | undefined,
   sourceVibe: string | null | undefined
-): string {
-  const basis = (sourceCaption ?? sourceVibe ?? "").trim();
-  return basis ? `repeat of ${basis}` : "repeat";
+): string | null {
+  const cap = stripRepeatPrefix(sourceCaption);
+  if (cap) return cap;
+  const vibe = stripRepeatPrefix(sourceVibe);
+  return vibe || null;
 }

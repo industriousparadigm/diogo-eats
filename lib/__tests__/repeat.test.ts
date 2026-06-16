@@ -3,6 +3,7 @@ import {
   isValidRepeatScale,
   repeatCaption,
   repeatMeal,
+  stripRepeatPrefix,
   REPEAT_SCALE_MIN,
   REPEAT_SCALE_MAX,
 } from "../repeat";
@@ -106,17 +107,36 @@ describe("isValidRepeatScale", () => {
   });
 });
 
-describe("repeatCaption — honest + searchable", () => {
-  it("prefers the source caption", () => {
-    expect(repeatCaption("10 cashews", "small nut snack")).toBe("repeat of 10 cashews");
+describe("stripRepeatPrefix", () => {
+  it("peels one or many legacy 'repeat of ' prefixes", () => {
+    expect(stripRepeatPrefix("organic india psyllium")).toBe("organic india psyllium");
+    expect(stripRepeatPrefix("repeat of organic india psyllium")).toBe("organic india psyllium");
+    expect(stripRepeatPrefix("repeat of repeat of organic india psyllium")).toBe(
+      "organic india psyllium"
+    );
+    expect(stripRepeatPrefix(null)).toBe("");
+    expect(stripRepeatPrefix("  Repeat Of  X ")).toBe("X");
   });
-  it("falls back to the vibe when there is no caption", () => {
-    expect(repeatCaption(null, "oat milk coffee")).toBe("repeat of oat milk coffee");
+});
+
+describe("repeatCaption — keeps identity, no 'repeat of' prefix", () => {
+  it("returns the source caption verbatim (no prefix, no compounding)", () => {
+    expect(repeatCaption("10 cashews", "small nut snack")).toBe("10 cashews");
+    expect(repeatCaption("organic india psyllium", null)).toBe("organic india psyllium");
   });
-  it("degrades to a bare 'repeat' when both are empty — never fabricates", () => {
-    expect(repeatCaption(null, null)).toBe("repeat");
-    expect(repeatCaption("   ", "")).toBe("repeat");
-    expect(repeatCaption(undefined, undefined)).toBe("repeat");
+  it("peels a legacy prefix so re-repeating cleans up instead of compounding", () => {
+    expect(repeatCaption("repeat of organic india psyllium", null)).toBe(
+      "organic india psyllium"
+    );
+    expect(repeatCaption("repeat of repeat of X", null)).toBe("X");
+  });
+  it("falls back to the (cleaned) vibe when there is no caption", () => {
+    expect(repeatCaption(null, "oat milk coffee")).toBe("oat milk coffee");
+  });
+  it("returns null when both are empty — the copied vibe still shows", () => {
+    expect(repeatCaption(null, null)).toBeNull();
+    expect(repeatCaption("   ", "")).toBeNull();
+    expect(repeatCaption(undefined, undefined)).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import { tzDayStart, todayYmd, addDaysYmd, APP_TZ } from "./tz";
+import { stripRepeatPrefix } from "./repeat";
 
 // Pure helpers for GET /api/meals/recent — kept I/O-free so the window +
 // clamp math is unit-tested. The route resolves the user, calls these,
@@ -39,4 +40,58 @@ export function recentSinceMs(
   const today = todayYmd(tz, nowTs);
   const firstDay = addDaysYmd(today, -(days - 1));
   return tzDayStart(firstDay, tz);
+}
+
+// ---- recents dedup (the capture-sheet "things you ate before" row) ----
+
+type RecentMealLike = {
+  id: string;
+  caption?: string | null;
+  meal_vibe?: string | null;
+  items_json?: string | null;
+};
+
+function norm(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Identity of a meal for dedup — the same food re-logged collapses to one
+// recents entry. Key off the user caption (legacy "repeat of " prefixes
+// peeled so an original and its repeats match), then the AI vibe, then the
+// item-name set. Unknown/empty meals fall back to their id so they never
+// merge with something else.
+export function mealIdentityKey(meal: RecentMealLike): string {
+  const cap = stripRepeatPrefix(meal.caption);
+  if (cap) return "cap:" + norm(cap);
+  const vibe = (meal.meal_vibe ?? "").trim();
+  if (vibe) return "vibe:" + norm(vibe);
+  try {
+    const items = JSON.parse(meal.items_json ?? "[]");
+    if (Array.isArray(items) && items.length) {
+      const names = items
+        .map((i) => norm(String((i as { name?: unknown })?.name ?? "")))
+        .filter(Boolean)
+        .sort();
+      if (names.length) return "items:" + names.join("|");
+    }
+  } catch {
+    // malformed items_json → fall through to the id fallback
+  }
+  return "id:" + meal.id;
+}
+
+// Collapse a NEWEST-FIRST list to one entry per food identity (keeping the
+// most-recent occurrence), then cap to `limit`. The caller fetches a wider
+// slice than `limit` so the dedup has candidates to fill from.
+export function dedupeRecentMeals<T extends RecentMealLike>(meals: T[], limit: number): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const m of meals) {
+    const k = mealIdentityKey(m);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(m);
+    if (out.length >= limit) break;
+  }
+  return out;
 }

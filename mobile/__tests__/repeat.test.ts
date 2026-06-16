@@ -66,16 +66,20 @@ describe("isValidRepeatScale", () => {
 });
 
 describe("repeatCaption", () => {
-  it("prefers the source caption", () => {
-    expect(repeatCaption("lunch bowl", "veg-heavy plate")).toBe("repeat of lunch bowl");
+  it("keeps the source caption verbatim (no 'repeat of' prefix)", () => {
+    expect(repeatCaption("lunch bowl", "veg-heavy plate")).toBe("lunch bowl");
+  });
+
+  it("peels a legacy prefix instead of compounding it", () => {
+    expect(repeatCaption("repeat of repeat of lunch bowl", null)).toBe("lunch bowl");
   });
 
   it("falls back to the vibe when there's no caption", () => {
-    expect(repeatCaption(null, "veg-heavy plate")).toBe("repeat of veg-heavy plate");
+    expect(repeatCaption(null, "veg-heavy plate")).toBe("veg-heavy plate");
   });
 
-  it("degrades to a bare repeat rather than fabricating", () => {
-    expect(repeatCaption(null, null)).toBe("repeat");
-    expect(repeatCaption("   ", "")).toBe("repeat");
+  it("returns null when both are empty", () => {
+    expect(repeatCaption(null, null)).toBeNull();
+    expect(repeatCaption("   ", "")).toBeNull();
   });
 });

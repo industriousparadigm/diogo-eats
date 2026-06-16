@@ -34,13 +34,28 @@ export function isValidRepeatScale(scale: unknown): scale is number {
 }
 
 // Honest + searchable caption for a repeated meal. Prefers the source
-// caption, falls back to its vibe, and degrades to a bare "repeat"
-// rather than fabricating a description. Shared by the route and tested
-// directly so the "keep it honest" rule can't silently regress.
+// caption, falls back to its vibe.
+//
+// Strip any leading "repeat of " prefix(es). Legacy repeats compounded them
+// ("repeat of repeat of organic india psyllium"), so peel every layer.
+export function stripRepeatPrefix(s: string | null | undefined): string {
+  let out = (s ?? "").trim();
+  while (/^repeat of\s+/i.test(out)) out = out.replace(/^repeat of\s+/i, "").trim();
+  return out;
+}
+
+// A repeated meal keeps its source's IDENTITY — NO "repeat of" prefix. The
+// prefix was wrong twice over: it compounded on re-repeat ("repeat of repeat
+// of X"), and it split the recents list into duplicates of the very same
+// food. Prefer the source caption, fall back to its vibe, peel any legacy
+// prefix, and return null when there's nothing to carry (the copied meal_vibe
+// still shows in the UI, and recents dedup keys off identity either way).
 export function repeatCaption(
   sourceCaption: string | null | undefined,
   sourceVibe: string | null | undefined
-): string {
-  const basis = (sourceCaption ?? sourceVibe ?? "").trim();
-  return basis ? `repeat of ${basis}` : "repeat";
+): string | null {
+  const cap = stripRepeatPrefix(sourceCaption);
+  if (cap) return cap;
+  const vibe = stripRepeatPrefix(sourceVibe);
+  return vibe || null;
 }
