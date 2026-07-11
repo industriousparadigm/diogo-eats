@@ -505,6 +505,29 @@ export async function syncWhoop(): Promise<void> {
   await request<unknown>("/api/whoop/sync", { method: "POST" }, 30_000);
 }
 
+// GET /api/garmin/status?date=YYYY-MM-DD — read-only daily Garmin rollup
+// (strain 0-21 + recovery + components). A Pi cron keeps the table fresh;
+// there's no sync-from-app path (Garmin blocks datacenter IPs). Per-day.
+export type GarminDay = {
+  day: string;
+  today: {
+    strain: number | null;
+    recovery: number | null;
+    resting_hr: number | null;
+    sleep_hours: number | null;
+    sleep_score: number | null;
+    intensity_moderate_min: number | null;
+    intensity_vigorous_min: number | null;
+    body_battery_drained: number | null;
+    body_battery_high: number | null;
+    body_battery_low: number | null;
+  } | null;
+};
+
+export async function fetchGarminStatus(day: string): Promise<GarminDay> {
+  return request<GarminDay>(`/api/garmin/status?date=${encodeURIComponent(day)}`, { method: "GET" }, 15_000);
+}
+
 // POST /api/whoop/import — sync Whoop, then fold workouts into the Movement
 // log: add new source='whoop' activities + enrich same-day manual rows with
 // strain. Idempotent (re-tap → added/enriched both 0). syncStatus "expired"

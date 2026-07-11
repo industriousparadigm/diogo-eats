@@ -42,6 +42,7 @@ import { DayTotalsStrip } from "@/components/DayTotalsStrip";
 import { PendingCard, type PendingState } from "@/components/PendingCard";
 import { CaptureSheet, type CaptureResult } from "@/components/CaptureSheet";
 import { WhoopChip } from "@/components/WhoopChip";
+import { GarminChip } from "@/components/GarminChip";
 import type { Meal } from "@/lib/types";
 
 export default function DayScreen() {
@@ -308,6 +309,7 @@ export default function DayScreen() {
   type ListItem =
     | { type: "header" }
     | { type: "whoop" }
+    | { type: "garmin" }
     | { type: "totals" }
     | { type: "pending"; item: PendingState }
     | { type: "meal"; item: Meal }
@@ -323,6 +325,7 @@ export default function DayScreen() {
   const listData: ListItem[] = [
     { type: "header" },
     ...(isToday ? [{ type: "whoop" } as ListItem] : []),
+    { type: "garmin" },
     ...(hasMeals ? [{ type: "totals" } as ListItem] : []),
     ...pending.map((p) => ({ type: "pending" as const, item: p })),
     ...meals.map((m) => ({ type: "meal" as const, item: m })),
@@ -366,6 +369,8 @@ export default function DayScreen() {
         );
       case "whoop":
         return <WhoopChip />;
+      case "garmin":
+        return <GarminChip day={day} />;
       case "totals":
         return (
           <View>
