@@ -5,7 +5,7 @@ import { uploadPhoto, deletePhoto } from "@/lib/storage";
 import { createdAtForTz } from "@/lib/tz";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
-import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
+import { getTrainingPromptBlock } from "@/lib/garminContextServer";
 import { normalizePhoto } from "@/lib/photo";
 import crypto from "crypto";
 import sharp from "sharp";

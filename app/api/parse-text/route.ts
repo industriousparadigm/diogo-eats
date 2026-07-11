@@ -4,7 +4,7 @@ import { insertMeal, topFoodMemory, getRecentMealsForContext } from "@/lib/db";
 import { createdAtForTz } from "@/lib/tz";
 import { requireUser } from "@/lib/user";
 import { getParseQuota, recordParseEvent } from "@/lib/quota";
-import { getTrainingPromptBlock } from "@/lib/whoopContextServer";
+import { getTrainingPromptBlock } from "@/lib/garminContextServer";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
