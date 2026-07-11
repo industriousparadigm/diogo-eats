@@ -12,6 +12,7 @@ import { HomeSkeleton } from "./components/Skeleton";
 import { Topbar } from "./components/Topbar";
 import { CopyDayButton } from "./components/CopyDayButton";
 import { WhoopHomeChip } from "./components/WhoopHomeChip";
+import { GarminHomeChip } from "./components/GarminHomeChip";
 import { todayStart, ymd, isSameDay, dayLabel } from "@/lib/date";
 import {
   deleteMeal as apiDeleteMeal,
@@ -243,12 +244,22 @@ function Home() {
           ›
         </button>
       </div>
-      {/* Whoop chip — only renders when connected AND today has data. */}
-      {isToday && (
-        <div style={{ display: "flex", justifyContent: "center", marginTop: -12, marginBottom: 18 }}>
-          <WhoopHomeChip />
-        </div>
-      )}
+      {/* Wearable chips under the date. Garmin (garmin_daily) for the viewed day;
+          Whoop only for today, and only while still connected. Both self-hide
+          on days with no data. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          marginTop: -12,
+          marginBottom: 18,
+        }}
+      >
+        <GarminHomeChip date={viewYmd} />
+        {isToday && <WhoopHomeChip />}
+      </div>
 
       {/* Three-state render:
           - meals === null: still loading → skeleton.
