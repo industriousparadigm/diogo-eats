@@ -37,6 +37,9 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     note: null,
     source: "manual",
     external_id: null,
+    rpe: null,
+    feel: null,
+    training_effect: null,
     created_at: Date.now(),
     ...overrides,
   };

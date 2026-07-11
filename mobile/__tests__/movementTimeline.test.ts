@@ -38,6 +38,9 @@ function activity(id: string, started_at: number, type = "padel"): Activity {
     note: null,
     source: "manual",
     external_id: null,
+    rpe: null,
+    feel: null,
+    training_effect: null,
     created_at: started_at,
   };
 }

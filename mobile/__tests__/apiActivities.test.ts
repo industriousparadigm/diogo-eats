@@ -47,6 +47,9 @@ const PADEL: Activity = {
   source: "manual",
   external_id: null,
   created_at: 1781263921532,
+  rpe: null,
+  feel: null,
+  training_effect: null,
 };
 
 describe("fetchActivities", () => {

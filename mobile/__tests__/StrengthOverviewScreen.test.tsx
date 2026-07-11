@@ -89,6 +89,9 @@ function padelActivity(strain: number | null = 12.4): Activity {
     note: null,
     source: strain == null ? "manual" : "whoop",
     external_id: null,
+    rpe: null,
+    feel: null,
+    training_effect: null,
     created_at: NOW,
   };
 }

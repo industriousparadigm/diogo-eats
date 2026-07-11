@@ -22,6 +22,7 @@ export default function AppLayout() {
       <Stack.Screen name="strength/exercise/[id]" />
       <Stack.Screen name="strength/exercises" />
       <Stack.Screen name="strength/type/[type]" />
+      <Stack.Screen name="garmin" />
     </Stack>
   );
 }

@@ -198,6 +198,44 @@ export function fmtElevation(m: number | null): string | null {
   return `${Math.round(m)} m`;
 }
 
+// ---- Garmin-measured post-workout numbers (11 Jul enrichment) ------------
+// Garmin's own RPE/feel/training-effect, read-only — only present when
+// Garmin measured the workout. Display-only formatting; there is no input
+// path for these (the app never lets a user set them).
+
+// Garmin's RPE is 0-100; the app shows it the way an athlete talks about
+// RPE, out of 10: 50 → "5/10".
+export function fmtGarminRpe(rpe: number): string {
+  return `${Math.round(rpe / 10)}/10`;
+}
+
+// Garmin's "feel" is 0-100 in practice landing near 25/50/75/100; map to
+// the nearest of Garmin's four labels rather than assuming an exact hit.
+const FEEL_BUCKETS: Array<{ at: number; label: string }> = [
+  { at: 25, label: "weak" },
+  { at: 50, label: "normal" },
+  { at: 75, label: "good" },
+  { at: 100, label: "strong" },
+];
+
+export function fmtGarminFeel(feel: number): string {
+  let nearest = FEEL_BUCKETS[0];
+  let bestDiff = Math.abs(feel - nearest.at);
+  for (const bucket of FEEL_BUCKETS.slice(1)) {
+    const diff = Math.abs(feel - bucket.at);
+    if (diff < bestDiff) {
+      nearest = bucket;
+      bestDiff = diff;
+    }
+  }
+  return nearest.label;
+}
+
+// "3.7 aerobic" — Garmin's aerobic training effect, 0-5.
+export function fmtTrainingEffect(te: number): string {
+  return `${te.toFixed(1)} aerobic`;
+}
+
 // The card's sub-line: "padel · class" (type name + label), or just the
 // type name when there's no label. Caller passes the resolved display name.
 export function fmtActivitySubtitle(typeName: string, label: string | null): string {

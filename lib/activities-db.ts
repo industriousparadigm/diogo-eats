@@ -11,7 +11,7 @@ import { tzDayStart, todayYmd, addDaysYmd } from "./tz";
 import type { Activity, CreatePayload, PatchPayload } from "./activities";
 
 const COLUMNS =
-  "id, type, label, started_at, duration_min, effort, distance_km, note, strain, surface, elevation_m, photo_filename, source, external_id, created_at";
+  "id, type, label, started_at, duration_min, effort, distance_km, note, strain, surface, elevation_m, photo_filename, source, external_id, created_at, rpe, feel, training_effect";
 
 // Insert a manual activity (source pinned to 'manual', external_id NULL —
 // only the future feed sets those). created_at defaults in the DB.

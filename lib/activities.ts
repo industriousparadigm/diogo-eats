@@ -77,6 +77,11 @@ export type Activity = {
   source: Source;
   external_id: string | null;
   created_at: number; // ms epoch
+  // Garmin-measured post-workout numbers (11 Jul enrichment). Read-only —
+  // only a Garmin sync populates these, never the manual create/patch path.
+  rpe: number | null; // Garmin directWorkoutRpe, 0-100
+  feel: number | null; // Garmin directWorkoutFeel, 0-100
+  training_effect: number | null; // Garmin aerobic training effect, 0-5
 };
 
 // ---- create (POST) ----

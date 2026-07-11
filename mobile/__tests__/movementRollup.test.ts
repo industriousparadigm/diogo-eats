@@ -45,6 +45,9 @@ function activity(
     note: null,
     source: strain == null ? "manual" : "whoop",
     external_id: null,
+    rpe: null,
+    feel: null,
+    training_effect: null,
     created_at: started_at,
   };
 }

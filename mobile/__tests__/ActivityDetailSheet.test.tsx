@@ -48,6 +48,9 @@ function padel(overrides: Partial<Activity> = {}): Activity {
     source: "manual",
     external_id: null,
     created_at: Date.now(),
+    rpe: null,
+    feel: null,
+    training_effect: null,
     ...overrides,
   };
 }

@@ -20,6 +20,7 @@ import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { palette, radii, borders, fontSize, spacing, condensedFamily } from "@/lib/theme";
 import {
+  Card,
   Chip,
   SectionHeader,
   Button,
@@ -37,6 +38,9 @@ import {
   fmtDaysBack,
   fmtClock,
   fmtPace,
+  fmtGarminRpe,
+  fmtGarminFeel,
+  fmtTrainingEffect,
   surfaceOptions,
   type QuickLogDraft,
   type Surface,
@@ -258,6 +262,25 @@ function Editor({
         <ScanScreenshotButton onParsed={applyParsed} accent={id.accent} label="📷 Scan a screenshot" />
         {scanSummary ? <Text style={styles.scanSummary}>read: {scanSummary}</Text> : null}
 
+        {/* Garmin-measured readout — read-only, only present when Garmin (not
+            manual logging) measured this workout. Never part of the edit form. */}
+        {activity.rpe != null || activity.feel != null || activity.training_effect != null ? (
+          <Card tone="recessed" flat style={styles.garminCard}>
+            <Text style={[styles.garminLabel, { color: id.bright }]}>GARMIN</Text>
+            <View style={styles.garminRow}>
+              {activity.rpe != null ? (
+                <Chip label={`RPE ${fmtGarminRpe(activity.rpe)}`} tone="outline" identity={id.bright} />
+              ) : null}
+              {activity.feel != null ? (
+                <Chip label={`felt ${fmtGarminFeel(activity.feel)}`} tone="outline" identity={id.bright} />
+              ) : null}
+              {activity.training_effect != null ? (
+                <Chip label={fmtTrainingEffect(activity.training_effect)} tone="outline" identity={id.bright} />
+              ) : null}
+            </View>
+          </Card>
+        ) : null}
+
         <SectionHeader color={id.accent} style={styles.section}>
           HOW LONG?
         </SectionHeader>
@@ -429,6 +452,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.xs,
   },
+  garminCard: { padding: spacing.md, gap: spacing.xs },
+  garminLabel: {
+    fontSize: fontSize.tiny,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+  },
+  garminRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   noteField: { marginTop: spacing.sm },
   scanSummary: {
     fontSize: fontSize.caption,

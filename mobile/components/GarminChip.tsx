@@ -1,18 +1,20 @@
 // Garmin chip on the Today header — the mobile twin of the web GarminHomeChip.
 // Read-only: a Pi cron keeps garmin_daily fresh (Garmin blocks datacenter IPs,
-// so there's no sync-from-app path). Per viewed day. Tap to expand the
-// components behind strain/recovery. Hidden entirely on days with no data.
+// so there's no sync-from-app path). Per viewed day. Tap to open the full
+// Body screen (strain/recovery detail, 7-day trend, recent activities).
+// Hidden entirely on days with no data.
 
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 import { palette, radii, borders, fontSize } from "@/lib/theme";
 import { SkeletonBlock } from "@/components/ui";
 import { fetchGarminStatus, type GarminDay } from "@/lib/api";
 
 export function GarminChip({ day }: { day: string }) {
+  const router = useRouter();
   const [data, setData] = useState<GarminDay["today"] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -56,13 +58,11 @@ export function GarminChip({ day }: { day: string }) {
           ? palette.warn
           : palette.food.accentBright;
 
-  const intensity = (data.intensity_moderate_min ?? 0) + (data.intensity_vigorous_min ?? 0);
-
   return (
     <View style={styles.row}>
       <TouchableOpacity
         style={styles.chip}
-        onPress={() => setOpen((o) => !o)}
+        onPress={() => router.push(`/(app)/garmin?day=${day}`)}
         activeOpacity={0.7}
         accessibilityLabel="garmin day summary"
       >
@@ -77,39 +77,8 @@ export function GarminChip({ day }: { day: string }) {
             RECOVERY <Text style={[styles.recValue, { color: recColor }]}>{recovery}%</Text>
           </Text>
         )}
-        <Text style={styles.caret}>{open ? "▲" : "▼"}</Text>
+        <Text style={styles.caret}>›</Text>
       </TouchableOpacity>
-
-      {open && (
-        <View style={styles.detail}>
-          <Stat
-            label="Sleep"
-            value={data.sleep_hours != null ? `${data.sleep_hours.toFixed(1)}h` : "—"}
-            sub={data.sleep_score != null ? `score ${data.sleep_score}` : undefined}
-          />
-          <Stat label="Resting HR" value={data.resting_hr != null ? `${data.resting_hr}` : "—"} sub="bpm" />
-          <Stat label="Intensity" value={`${intensity}m`} sub={`${data.intensity_vigorous_min ?? 0} vigorous`} />
-          <Stat
-            label="Body battery"
-            value={
-              data.body_battery_low != null && data.body_battery_high != null
-                ? `${data.body_battery_low}→${data.body_battery_high}`
-                : "—"
-            }
-            sub={data.body_battery_drained != null ? `drained ${data.body_battery_drained}` : undefined}
-          />
-        </View>
-      )}
-    </View>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
     </View>
   );
 }
@@ -150,36 +119,7 @@ const styles = StyleSheet.create({
   },
   caret: {
     color: palette.textFaint,
-    fontSize: fontSize.micro,
-  },
-  detail: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 18,
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: palette.surface,
-    borderWidth: borders.hairline,
-    borderColor: palette.hairline,
-    borderRadius: radii.md,
-  },
-  stat: {
-    minWidth: 92,
-  },
-  statLabel: {
-    fontSize: fontSize.micro,
-    letterSpacing: 0.5,
-    color: palette.textFaint,
-  },
-  statValue: {
     fontSize: fontSize.body,
     fontWeight: "700",
-    color: palette.text,
-  },
-  statSub: {
-    fontSize: fontSize.micro,
-    color: palette.textFaint,
   },
 });

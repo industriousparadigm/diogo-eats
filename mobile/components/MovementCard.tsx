@@ -120,6 +120,9 @@ export function ActivityCard({
           {effort ? (
             <Chip label={effort} tone="outline" identity={id.bright} />
           ) : null}
+          {activity.strain != null ? (
+            <Chip label={`strain ${activity.strain.toFixed(1)}`} tone="outline" identity={id.bright} />
+          ) : null}
         </View>
       </View>
     </Card>

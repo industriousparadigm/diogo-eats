@@ -72,6 +72,9 @@ function runActivity(): Activity {
     note: null,
     source: "whoop",
     external_id: null,
+    rpe: null,
+    feel: null,
+    training_effect: null,
     created_at: NOW,
   };
 }

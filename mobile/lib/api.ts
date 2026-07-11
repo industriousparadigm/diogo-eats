@@ -491,24 +491,45 @@ export async function saveTargets(targets: Targets): Promise<void> {
 // GET /api/garmin/status?date=YYYY-MM-DD — read-only daily Garmin rollup
 // (strain 0-21 + recovery + components). A Pi cron keeps the table fresh;
 // there's no sync-from-app path (Garmin blocks datacenter IPs). Per-day.
+// The full garmin_daily row shape — one row per day. Shared by both the
+// single-day status fetch and the multi-day history fetch (the Body screen).
+export type GarminDailyRow = {
+  day: string;
+  strain: number | null;
+  recovery: number | null;
+  resting_hr: number | null;
+  sleep_hours: number | null;
+  sleep_score: number | null;
+  intensity_moderate_min: number | null;
+  intensity_vigorous_min: number | null;
+  intensity_load: number | null;
+  body_battery_drained: number | null;
+  body_battery_high: number | null;
+  body_battery_low: number | null;
+  steps: number | null;
+  active_kcal: number | null;
+  max_hr: number | null;
+  updated_at: string;
+};
+
 export type GarminDay = {
   day: string;
-  today: {
-    strain: number | null;
-    recovery: number | null;
-    resting_hr: number | null;
-    sleep_hours: number | null;
-    sleep_score: number | null;
-    intensity_moderate_min: number | null;
-    intensity_vigorous_min: number | null;
-    body_battery_drained: number | null;
-    body_battery_high: number | null;
-    body_battery_low: number | null;
-  } | null;
+  today: GarminDailyRow | null;
 };
 
 export async function fetchGarminStatus(day: string): Promise<GarminDay> {
   return request<GarminDay>(`/api/garmin/status?date=${encodeURIComponent(day)}`, { method: "GET" }, 15_000);
+}
+
+// GET /api/garmin/history?days=N — the last N garmin_daily rows, oldest
+// first. Powers the Body screen's 7-day strain/recovery trend strip.
+export async function fetchGarminHistory(days = 7): Promise<GarminDailyRow[]> {
+  const data = await request<{ days: GarminDailyRow[] }>(
+    `/api/garmin/history?days=${days}`,
+    { method: "GET" },
+    15_000
+  );
+  return data.days ?? [];
 }
 
 // GET /api/strength/overview — the strength feature's home payload.

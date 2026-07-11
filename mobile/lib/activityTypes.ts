@@ -35,6 +35,11 @@ export type Activity = {
   source: string; // "manual" | an importer name
   external_id: string | null;
   created_at: number; // ms epoch
+  // Garmin-measured post-workout numbers (11 Jul enrichment), read-only —
+  // only populated when Garmin measured the workout, null on manual rows.
+  rpe: number | null; // Garmin directWorkoutRpe, 0-100 (display as rpe/10)
+  feel: number | null; // Garmin directWorkoutFeel, 0-100 (25/50/75/100 → weak/normal/good/strong)
+  training_effect: number | null; // Garmin aerobic training effect, 0-5
 };
 
 // POST /api/activities body. duration_min is the only required field besides
