@@ -1,14 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { Meal } from "@/lib/types";
 import { useTargets } from "@/lib/targets";
-import {
-  buildTrainingSummary,
-  trainingHeadlineSuffix,
-  type CycleRow,
-  type WorkoutRow,
-} from "@/lib/whoopContext";
 
 // One-liner above the pulse showing what kind of day it is.
 //
@@ -34,7 +27,6 @@ export function DailyHeadline({
   viewDate: Date;
 }) {
   const targets = useTargets();
-  const trainingSuffix = useTrainingSuffix(isToday, viewDate);
   if (meals.length === 0) {
     return (
       <div
@@ -102,18 +94,6 @@ export function DailyHeadline({
         {wins.join(". ")}
         {wins.length ? "." : ""}
       </div>
-      {trainingSuffix && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "#a1a1aa",
-            marginTop: 6,
-            fontStyle: "italic",
-          }}
-        >
-          {trainingSuffix}.
-        </div>
-      )}
       {fatNote && (
         <div style={{ fontSize: 13, color: "#fcd34d", marginTop: 6 }}>{fatNote}</div>
       )}
@@ -122,51 +102,4 @@ export function DailyHeadline({
       </div>
     </div>
   );
-}
-
-// Pulls today's Whoop summary (via /api/whoop/status which is already
-// being hit by the home chip) and computes the rule-based suffix.
-// Only fetches when viewing today; older days don't get the nudge to
-// keep the data shown faithful to that specific day's logs.
-function useTrainingSuffix(isToday: boolean, viewDate: Date): string | null {
-  const [suffix, setSuffix] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isToday) {
-      setSuffix(null);
-      return;
-    }
-    let alive = true;
-    (async () => {
-      try {
-        const r = await fetch("/api/whoop/status");
-        if (!r.ok) return;
-        const j = await r.json();
-        if (!alive || !j.connected) return;
-        const day = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "Europe/Lisbon",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(viewDate);
-        const yest = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "Europe/Lisbon",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(new Date(viewDate.getTime() - 86400_000));
-        const cycles: CycleRow[] = j.today
-          ? [{ day, ...j.today, hrv_ms: null, rhr_bpm: null }]
-          : [];
-        const workouts: WorkoutRow[] = (j.today_workouts ?? []) as WorkoutRow[];
-        const summary = buildTrainingSummary(day, yest, cycles, workouts);
-        if (alive) setSuffix(trainingHeadlineSuffix(summary));
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [isToday, viewDate]);
-  return suffix;
 }

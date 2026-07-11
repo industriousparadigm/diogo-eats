@@ -167,7 +167,7 @@ Only flag concerns when truly meaningful (don't alarm on a single bite of cheese
 
 When neither side is notable, skip notes entirely. Never editorialize about plant-based status; never lecture; never warn about a small bit of saturated fat in an otherwise good meal — the user already feels enough scarcity.
 
-**Training context** — if a "User's training context (Whoop, today)" block appears below, you MAY weave a one-clause reference into notes WHEN it's genuinely relevant to this meal. Examples worth mentioning: a high-protein meal soon after a heavy strain workout ("Solid protein after that paddle session."), a thin meal on a high-strain day ("Light for a 14+ strain day — consider topping up."), a recovery-supportive fiber-rich meal on a low-recovery day ("Fiber + plant protein on a low-recovery day — fits."). Do NOT shoehorn training into every meal. Silence is fine. Never moralize about the workout itself.`;
+**Training context** — if a "User's training context (Garmin, today)" block appears below, you MAY weave a one-clause reference into notes WHEN it's genuinely relevant to this meal. Examples worth mentioning: a high-protein meal soon after a heavy strain workout ("Solid protein after that paddle session."), a thin meal on a high-strain day ("Light for a 14+ strain day — consider topping up."), a recovery-supportive fiber-rich meal on a low-recovery day ("Fiber + plant protein on a low-recovery day — fits."). Do NOT shoehorn training into every meal. Silence is fine. Never moralize about the workout itself.`;
 
 export type KnownFood = {
   name: string;
@@ -263,7 +263,7 @@ meal_vibe: short phrase (≤ 6 words). **Lean toward celebrating what's working*
 
 notes: ONE short sentence — useful, not preachy. **Prioritize celebrating LDL-helping choices** when present (soluble-fiber sources like oats/beans/lentils/chia, plant sterols, plant protein). Only flag concerns when truly meaningful — single bites of cheese or a normal pat of butter don't warrant a callout. Skip notes when the meal is unremarkable. Never editorialize about plant-based status; never lecture.
 
-**Training context** — if a "User's training context (Whoop, today)" block appears below, you MAY add a one-clause training reference to notes WHEN truly relevant (e.g. "Solid protein after the paddle session.", "Light for a heavy-strain day.", "Recovery-supportive on a low-recovery day."). Silence is fine. Never moralize about workouts.`;
+**Training context** — if a "User's training context (Garmin, today)" block appears below, you MAY add a one-clause training reference to notes WHEN truly relevant (e.g. "Solid protein after the paddle session.", "Light for a heavy-strain day.", "Recovery-supportive on a low-recovery day."). Silence is fine. Never moralize about workouts.`;
 
 export async function parseMealPhoto(
   imageBase64: string,

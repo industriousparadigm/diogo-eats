@@ -19,7 +19,7 @@ const RED_UNDER = 0.25;
 // Per-day bar chart with a labeled Y-axis and target reference line.
 //
 // Optional `secondaryAccessor` renders a horizontal tick mark per bar
-// at the secondary value's height — used to overlay Whoop kcal burn
+// at the secondary value's height — used to overlay Garmin kcal burn
 // on the calories chart so the user can compare consumed vs burned at
 // a glance. The chart's Y-max grows to include the secondary peak so
 // nothing gets clipped.
@@ -265,7 +265,7 @@ export function DayBarChart({
             })}
             {/* Secondary series: small horizontal tick per bar at the
                 burn value's y position. Rendered AFTER bars so it sits
-                on top. Skip when null (no Whoop data that day). */}
+                on top. Skip when null (no burn data that day). */}
             {secondaryValues &&
               prepped.bars.map((b, i) => {
                 const v = secondaryValues[i];

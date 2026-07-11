@@ -12,7 +12,7 @@ Native mobile client for the Eats food-logging app + the strength-training score
 
 **Surfaces** (4 tabs + pushed screens):
 
-- **Today** (default) — the daily food loop. Day navigation (chevrons walk back, label taps home to today), totals strip, Whoop chip, meal cards, capture FAB. Viewing a past day makes the FAB backfill INTO that day (`for_date`).
+- **Today** (default) — the daily food loop. Day navigation (chevrons walk back, label taps home to today), totals strip, Garmin chip, meal cards, capture FAB. Viewing a past day makes the FAB backfill INTO that day (`for_date`).
 - **Meal detail/edit** (tap a card) — mirrors the web edit page: confidence dots, gram/name tweaks with live totals, add item via `/api/lookup`, remove, talk-to-fix via `/api/meals/[id]/talk` (rewrite lands for review; only `save` persists).
 - **Looking back** — rolling headline (rule-based, ported from the web's `lib/rolling-headline.ts`), calendar heatmap (single-hue plant scale, tap a day to jump the food tab there), coverage-honest averages (logged days only, says so), fiber + sat fat 7-day trends.
 - **Strength** — the scoreboard. Per-exercise last/best, session history with beats counts, Start/Resume session. Deliberately a different emotional contract from food (amber, bold color-per-exercise cards, beats language) in the same design system.
@@ -109,7 +109,7 @@ mobile/
     PendingCard.tsx          # Optimistic card shown during parse
     DayTotalsStrip.tsx       # kcal, protein, sat fat, fiber, plant%
     CaptureSheet.tsx         # Photo/text capture; shows backfill day when not today
-    WhoopChip.tsx            # Strain + recovery chip (hidden when not connected)
+    GarminChip.tsx           # Strain + recovery chip (hidden when not connected)
     EditItemRow.tsx          # Item row in the meal editor (confidence dot, grams)
     Heatmap.tsx              # Calendar heatmap (grid math in lib/heatmap.ts)
     TrendChart.tsx           # 7-day rolling trend (react-native-svg)

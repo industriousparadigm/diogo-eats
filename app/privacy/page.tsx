@@ -59,11 +59,11 @@ export default function PrivacyPage() {
             protein, fat, carbs, fiber, alcohol).
           </li>
           <li>
-            <strong>Whoop data (optional, only if you connect)</strong>:
-            daily strain, recovery, HRV, resting heart rate, sleep
-            summary, and per-workout sport / strain / calories /
-            heart-rate zones. We do <em>not</em> store minute-by-minute
-            heart-rate streams.
+            <strong>Garmin health data</strong>: a daily rollup (a
+            derived strain score, recovery/sleep summary, resting heart
+            rate, body battery, steps) and recorded activities (sport,
+            duration, distance, average/max heart rate, calories). We do{" "}
+            <em>not</em> store minute-by-minute heart-rate streams.
           </li>
         </ul>
       </Section>
@@ -106,7 +106,7 @@ export default function PrivacyPage() {
             sign up so it can compute your starter targets.
           </li>
           <li>
-            <strong>Supabase</strong>: stores meals, profile, and Whoop
+            <strong>Supabase</strong>: stores meals, profile, and Garmin
             data on your behalf — see{" "}
             <a
               href="https://supabase.com/privacy"
@@ -132,19 +132,11 @@ export default function PrivacyPage() {
             .
           </li>
           <li>
-            <strong>Whoop</strong>: if you connect Whoop, the app uses
-            their OAuth-based developer API to read your training data.
-            We follow{" "}
-            <a
-              href="https://developer.whoop.com/api-terms-of-use/"
-              style={linkStyle}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Whoop's developer terms
-            </a>{" "}
-            — your Whoop data is cached for the app's use only, never
-            resold or shared, and you can disconnect at any time.
+            <strong>Garmin</strong>: training and health data is read
+            from Garmin Connect using the account holder's own
+            credentials, on a personal machine, and pushed into the
+            app's database. It is cached for the app's use only, never
+            resold or shared.
           </li>
         </ul>
         <p>
@@ -164,14 +156,8 @@ export default function PrivacyPage() {
           <li>
             <strong>Deletion</strong>: tap a meal → delete to remove it.
             To delete your entire account, email Diogo and he'll cascade
-            it (this removes meals, profile, Whoop data, photos, and
+            it (this removes meals, profile, Garmin data, photos, and
             the auth row).
-          </li>
-          <li>
-            <strong>Disconnect Whoop</strong>: Settings → Integrations →
-            Disconnect. This revokes the OAuth token and stops
-            future syncs. Cached cycles/workouts remain unless you also
-            ask for full deletion.
           </li>
         </ul>
       </Section>

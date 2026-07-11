@@ -526,18 +526,17 @@ export async function getDailyAggregates(
     .order("created_at", { ascending: true });
   if (error) throw new Error(`getDailyAggregates: ${error.message}`);
 
-  // Whoop kcal burn per day (when the user has a connection + a synced
-  // cycle for that day). NULL when missing so the chart can render the
-  // day's bar without a misleading 0-burn line.
-  const { data: whoopRows } = await getSupabase()
-    .from("whoop_cycles")
-    .select("day, kcal")
+  // Active kcal burn per day from Garmin (garmin_daily). NULL when missing
+  // so the chart renders the day's bar without a misleading 0-burn line.
+  const { data: garminRows } = await getSupabase()
+    .from("garmin_daily")
+    .select("day, active_kcal")
     .eq("user_id", userId)
     .gte("day", startYmd);
   const burnByDay = new Map<string, number | null>();
-  for (const r of whoopRows ?? []) {
-    const row = r as { day: string; kcal: number | null };
-    burnByDay.set(row.day, row.kcal);
+  for (const r of garminRows ?? []) {
+    const row = r as { day: string; active_kcal: number | null };
+    burnByDay.set(row.day, row.active_kcal);
   }
 
   // Initialize every day in the range with zeros.

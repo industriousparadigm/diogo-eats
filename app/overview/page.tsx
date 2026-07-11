@@ -156,7 +156,7 @@ export default function OverviewPage() {
                 direction="below_good"
                 format={(v) => `${Math.round(v)}`}
                 secondaryAccessor={(a) => a.kcal_burn}
-                secondaryLabel="Whoop kcal burn (when connected)"
+                secondaryLabel="kcal burn (Garmin)"
               />
               <DayBarChart
                 aggregates={visible}

@@ -54,7 +54,7 @@ export type DayAggregate = {
   protein_g: number;
   carbs_g: number;
   alcohol_g: number;
-  // Whoop-estimated daily kcal burn. null when no Whoop data for that day.
+  // Garmin active kcal burn for the day. null when no Garmin data that day.
   kcal_burn: number | null;
 };
 
