@@ -41,7 +41,6 @@ import { CopyDayButton } from "@/components/CopyDayButton";
 import { DayTotalsStrip } from "@/components/DayTotalsStrip";
 import { PendingCard, type PendingState } from "@/components/PendingCard";
 import { CaptureSheet, type CaptureResult } from "@/components/CaptureSheet";
-import { WhoopChip } from "@/components/WhoopChip";
 import { GarminChip } from "@/components/GarminChip";
 import type { Meal } from "@/lib/types";
 
@@ -308,7 +307,6 @@ export default function DayScreen() {
 
   type ListItem =
     | { type: "header" }
-    | { type: "whoop" }
     | { type: "garmin" }
     | { type: "totals" }
     | { type: "pending"; item: PendingState }
@@ -324,7 +322,6 @@ export default function DayScreen() {
   //   empty (confirmed)    → the friendly copy, only once loading is done
   const listData: ListItem[] = [
     { type: "header" },
-    ...(isToday ? [{ type: "whoop" } as ListItem] : []),
     { type: "garmin" },
     ...(hasMeals ? [{ type: "totals" } as ListItem] : []),
     ...pending.map((p) => ({ type: "pending" as const, item: p })),
@@ -367,8 +364,6 @@ export default function DayScreen() {
             </TouchableOpacity>
           </View>
         );
-      case "whoop":
-        return <WhoopChip />;
       case "garmin":
         return <GarminChip day={day} />;
       case "totals":

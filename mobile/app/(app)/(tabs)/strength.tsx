@@ -31,7 +31,6 @@ import { buildConsistency, countsAsMovement } from "@/lib/movementConsistency";
 import { PeriodSelector, DEFAULT_PERIOD_DAYS } from "@/components/PeriodSelector";
 import { MovementConsistency } from "@/components/MovementConsistency";
 import { MovementByActivity } from "@/components/MovementByActivity";
-import { WhoopPullButton } from "@/components/WhoopPullButton";
 import { SessionCard, ActivityCard } from "@/components/MovementCard";
 import { QuickLogSheet } from "@/components/QuickLogSheet";
 import { ActivityDetailSheet } from "@/components/ActivityDetailSheet";
@@ -254,8 +253,6 @@ export default function MovementScreen() {
               <MovementByActivity rollups={rollups} onPressType={openType} />
             )}
 
-            {/* Self-serve Whoop sync: pull new workouts + enrich manual ones. */}
-            <WhoopPullButton onPulled={load} />
           </>
         )}
       </ScrollView>

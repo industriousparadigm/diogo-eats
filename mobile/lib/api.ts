@@ -488,23 +488,6 @@ export async function saveTargets(targets: Targets): Promise<void> {
   );
 }
 
-// GET /api/whoop/status — connection state + today's strain/recovery.
-export type WhoopToday = {
-  connected: boolean;
-  last_sync_at?: number | null;
-  today?: { strain: number | null; recovery_pct: number | null } | null;
-};
-
-export async function fetchWhoopToday(): Promise<WhoopToday> {
-  return request<WhoopToday>("/api/whoop/status", { method: "GET" }, 15_000);
-}
-
-// POST /api/whoop/sync — fire-and-forget freshness sync. Failures are
-// the caller's problem to ignore (the chip shows last-known data).
-export async function syncWhoop(): Promise<void> {
-  await request<unknown>("/api/whoop/sync", { method: "POST" }, 30_000);
-}
-
 // GET /api/garmin/status?date=YYYY-MM-DD — read-only daily Garmin rollup
 // (strain 0-21 + recovery + components). A Pi cron keeps the table fresh;
 // there's no sync-from-app path (Garmin blocks datacenter IPs). Per-day.
@@ -526,25 +509,6 @@ export type GarminDay = {
 
 export async function fetchGarminStatus(day: string): Promise<GarminDay> {
   return request<GarminDay>(`/api/garmin/status?date=${encodeURIComponent(day)}`, { method: "GET" }, 15_000);
-}
-
-// POST /api/whoop/import — sync Whoop, then fold workouts into the Movement
-// log: add new source='whoop' activities + enrich same-day manual rows with
-// strain. Idempotent (re-tap → added/enriched both 0). syncStatus "expired"
-// means the import ran over already-synced data but the token needs a
-// reconnect for fresh days.
-export async function pullFromWhoop(): Promise<{
-  syncStatus: string;
-  workouts_upserted: number;
-  added: number;
-  enriched: number;
-}> {
-  return request<{
-    syncStatus: string;
-    workouts_upserted: number;
-    added: number;
-    enriched: number;
-  }>("/api/whoop/import", { method: "POST" }, 60_000);
 }
 
 // GET /api/strength/overview — the strength feature's home payload.
